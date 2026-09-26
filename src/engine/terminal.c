@@ -542,41 +542,58 @@ static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_heig
     *out_height = height;
 }
 
-const char *terminal_get_formatted_output_string(Terminal *t) {
+static void serialize_row(const Terminal *t, size_t row_index, size_t width, uint32_t epoch, StrBuf *dst) {
     static const char SPACES[] = "                                                                ";  // 64 spaces
     const size_t BLOCK = sizeof(SPACES) - 1;
+    const uint32_t *row = &t->render_cells[row_index * width];
+    const uint32_t *stamp = &t->cell_epoch[row_index * width];
+    size_t col = 0;
+    while (col < width) {
+        if (stamp[col] != epoch) {
+            size_t run = 1;
+            while (col + run < width && stamp[col + run] != epoch) {
+                run++;
+            }
+            size_t remaining = run;
+            while (remaining > 0) {
+                size_t take = remaining > BLOCK ? BLOCK : remaining;
+                sb_append(dst, SPACES, take);
+                remaining -= take;
+            }
+            col += run;
+        } else {
+            const CharacterVisual *vis = t->arena.items[row[col]].animation.current_visual;
+            if (vis->formatted_heap) {
+                sb_append(dst, vis->formatted_heap, vis->formatted_len);
+            } else {
+                // Copy the whole fixed inline block in one move and publish only
+                // the real length, avoiding a variable-length memcpy call.
+                if (dst->len + VIS_INLINE_FMT_CAP + 1 > dst->cap) {
+                    sb_grow(dst, dst->len + VIS_INLINE_FMT_CAP);
+                }
+                memcpy(dst->data + dst->len, vis->formatted_inline, VIS_INLINE_FMT_CAP);
+                dst->len += vis->formatted_len;
+                dst->data[dst->len] = '\0';
+            }
+            col++;
+        }
+    }
+}
+
+const char *terminal_get_formatted_output_string(Terminal *t) {
+    static const char SPACES[] = "                                                                ";  // 64 spaces
+    (void)SPACES;
     size_t width = 0;
     size_t height = 0;
     update_render_cells(t, &width, &height);
+    uint32_t epoch = t->render_epoch;
     StrBuf *sb = &t->output_buffer;
     sb_clear(sb);
-    uint32_t epoch = t->render_epoch;
     for (size_t row_index = height; row_index-- > 0;) {
         if (row_index + 1 < height) {
             sb_push(sb, '\n');
         }
-        const uint32_t *row = &t->render_cells[row_index * width];
-        const uint32_t *stamp = &t->cell_epoch[row_index * width];
-        size_t col = 0;
-        while (col < width) {
-            if (stamp[col] != epoch) {
-                size_t run = 1;
-                while (col + run < width && stamp[col + run] != epoch) {
-                    run++;
-                }
-                size_t remaining = run;
-                while (remaining > 0) {
-                    size_t take = remaining > BLOCK ? BLOCK : remaining;
-                    sb_append(sb, SPACES, take);
-                    remaining -= take;
-                }
-                col += run;
-            } else {
-                const CharacterVisual *vis = t->arena.items[row[col]].animation.current_visual;
-                sb_append(sb, vis->formatted, vis->formatted_len);
-                col++;
-            }
-        }
+        serialize_row(t, row_index, width, epoch, sb);
     }
     return sb->data ? sb->data : "";
 }

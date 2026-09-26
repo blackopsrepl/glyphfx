@@ -33,9 +33,15 @@ static bool resolve_color_code(bool has_color, const Color *color, bool no_color
 
 // --- CharacterVisual ------------------------------------------------------
 
+// Retained across vis_format calls so restyling does not allocate; freed with
+// the pool at exit.
+static StrBuf g_fmt_scratch;
+
 void vis_format(CharacterVisual *vis) {
-    StrBuf sb;
-    sb_init(&sb);
+    // Effects restyle characters constantly, so the SGR string is assembled in a
+    // buffer retained across calls instead of allocating one per visual.
+    StrBuf sb = g_fmt_scratch;
+    sb_clear(&sb);
     // Worst case is several attributes plus 24-bit fg and bg; reserve once so
     // the appends below never grow.
     sb_reserve(&sb, 96);
@@ -71,9 +77,18 @@ void vis_format(CharacterVisual *vis) {
     if (sb.len != symbol_len) {
         sb_puts(&sb, ANSI_RESET_ALL);
     }
-    free(vis->formatted);
-    vis->formatted = sb_take(&sb);
-    vis->formatted_len = strlen(vis->formatted);
+    size_t len = sb.len;
+    free(vis->formatted_heap);
+    vis->formatted_heap = NULL;
+    if (len <= VIS_INLINE_FMT_CAP) {
+        memcpy(vis->formatted_inline, sb.data, len);
+        vis->formatted_inline[len < VIS_INLINE_FMT_CAP ? len : VIS_INLINE_FMT_CAP - 1] = '\0';
+        g_fmt_scratch = sb;  // keep the assembly buffer for the next visual
+    } else {
+        vis->formatted_heap = sb_take(&sb);  // moves the buffer out of the scratch
+        g_fmt_scratch = sb;                  // now empty; next call reallocates
+    }
+    vis->formatted_len = len;
 }
 
 static CharacterVisual *vis_alloc(const char *symbol, const VisualParams *params) {
@@ -110,7 +125,7 @@ CharacterVisual *vis_new_plain(const char *symbol) {
 
 static void vis_destroy(CharacterVisual *vis) {
     free(vis->symbol);
-    free(vis->formatted);
+    free(vis->formatted_heap);
     free(vis);
 }
 
@@ -218,6 +233,7 @@ void vis_pool_reset(void) {
         }
     }
     free(g_pool);
+    sb_free(&g_fmt_scratch);
     g_pool = NULL;
     g_pool_cap = 0;
     g_pool_live = 0;

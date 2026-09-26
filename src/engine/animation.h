@@ -41,6 +41,12 @@ typedef struct {
     ColorCode bg_code;
 } VisualParams;
 
+// Inline capacity for a formatted symbol. A 24-bit foreground and background
+// pair plus a reset is 42 bytes, so all but pathological styling fits. The
+// frame writer copies the whole fixed block and then advances by formatted_len,
+// which avoids a variable-length memcpy call per cell.
+#define VIS_INLINE_FMT_CAP 64
+
 typedef struct CharacterVisual {
     int refcount;
     size_t pool_slot;  // index in the visual pool while interned
@@ -59,9 +65,14 @@ typedef struct CharacterVisual {
     ColorCode fg_code;
     bool has_bg_code;
     ColorCode bg_code;
-    char *formatted;  // owned
+    char formatted_inline[VIS_INLINE_FMT_CAP];
+    char *formatted_heap;  // owned; non-NULL only when the bytes don't fit inline
     size_t formatted_len;
 } CharacterVisual;
+
+static inline const char *vis_formatted(const CharacterVisual *v) {
+    return v->formatted_heap ? v->formatted_heap : v->formatted_inline;
+}
 
 // Visuals are interned by appearance in a process-wide pool so identical looks
 // share one instance, and reference-counted so the pool evicts a visual as soon
