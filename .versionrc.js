@@ -4,6 +4,7 @@
 module.exports = {
   tagPrefix: 'v',
   releaseCommitMessageFormat: 'chore(release): {{currentTag}}',
+  packageFiles: [{ filename: 'VERSION', type: 'plain-text' }],
   bumpFiles: [{ filename: 'VERSION', type: 'plain-text' }],
   commitUrlFormat: 'https://github.com/blackopsrepl/glyphfx/commit/{{hash}}',
   compareUrlFormat: 'https://github.com/blackopsrepl/glyphfx/compare/{{previousTag}}...{{currentTag}}',
