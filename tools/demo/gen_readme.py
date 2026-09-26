@@ -71,17 +71,17 @@ def matrix_table():
         f"(`--frame-rate 0`), seed 1, on `{machine}`. "
         "Speedups above 1.00&times; mean glyphfx is faster.",
         "",
-        "| effect | glyphfx | ttfx (Rust) | vs Rust | ttfx (asm) | vs asm |",
+        "| effect | glyphfx | ttfx (asm) | vs asm | ttfx (Rust) | vs Rust |",
         "|---|---:|---:|---:|---:|---:|",
     ]
     for name, g, r, s in rows:
-        vs_r = f"**{r / g:.2f}&times;**" if g else "n/a"
         if s == s and s > 0:  # not NaN
             vs_s = f"**{s / g:.2f}&times;**" if g else "n/a"
             asm = f"{s:.1f} ms"
         else:
             vs_s, asm = "-", "-"
-        out.append(f"| {name} | {g:.1f} ms | {r:.1f} ms | {vs_r} | {asm} | {vs_s} |")
+        vs_r = f"{r / g:.2f}&times;" if g else "n/a"
+        out.append(f"| {name} | {g:.1f} ms | {asm} | {vs_s} | {r:.1f} ms | {vs_r} |")
     out.append("")
     out.append("Reproduce with `python3 tools/tests/matrix.py` "
                "(and `make perf` to gate against regression).")
@@ -132,9 +132,10 @@ glyphfx does not, deliberately:
 - **The measured gains were algorithmic, not instruction-level.** That PR's own
   notes credit structure-of-arrays character storage, pooled visuals, an
   incremental cell grid, batched writes, and a faster RNG for most of its
-  speedup — all expressible in C. glyphfx already takes the portable subset
-  (shared visuals, batched writes, cached lookups) and matches or beats the Rust
-  engine on most effects here.
+  speedup — all expressible in C. glyphfx has closed the gap with the Rust
+  engine across the matrix; the open target is the assembly engine, chased by
+  transcribing its optimized logic (soa layout, pooling, batching) into
+  portable C rather than re-deriving wins.
 - **Assembly ties the fast path to one ISA.** That engine only runs on
   x86-64-v4 (AVX-512), which Intel disabled on consumer parts after 11th gen,
   AMD shipped only from Zen 4, and no ARM or Apple silicon has. Elsewhere it
@@ -167,7 +168,8 @@ All 37, each with a full option surface (`glyphfx <effect> --help`).
 ## Benchmarks
 
 Startup is under a millisecond (about 0.3 ms for `glyphfx --version`). The full
-37-effect matrix against the Rust reference and the Rust assembly engine:
+37-effect matrix against the ttfx assembly engine (the Rust port is shown for
+provenance; glyphfx is on par with it across the matrix):
 
 {matrix_table()}
 

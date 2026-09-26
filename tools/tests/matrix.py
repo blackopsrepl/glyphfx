@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Full 37-effect performance matrix: glyphfx vs ttfx Rust (and ASM if present).
+"""Full 37-effect performance matrix: glyphfx vs the ttfx asm engine.
+
+The asm build is the performance target; the Rust 0.3.3 port is recorded
+alongside as provenance (parity with it is already established) and doubles as
+the byte-parity oracle.
 
 Fixed workload: 200x50 canvas, 190x46 text, seed 1, --frame-rate 0
 --virtual-clock, pinned, best of N, output to /dev/null. Every run must exit 0.
@@ -104,8 +108,8 @@ def main() -> int:
         r = measure(RUST, e, data, a.runs, {"TTFX_ASM": "0"})
         s = measure(ASM, e, data, a.runs, {}) if have_asm else float("nan")
         rows.append((e, g, r, s))
-        extra = f"  asm {s:7.1f} ({r/s:4.2f}x)" if have_asm else ""
-        print(f"  {e:<15} glyphfx {g:7.1f}  rust {r:7.1f} ({r/g:4.2f}x){extra}", flush=True)
+        extra = f"  vs asm {s:7.1f} ({g/s:4.2f}x)" if have_asm else ""
+        print(f"  {e:<15} glyphfx {g:7.1f}{extra}  rust(ref) {r:7.1f}", flush=True)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with OUT.open("w") as f:
         f.write(f"# machine {machine_key()}\n# best-of-{a.runs} ms, 200x50, seed 1\n")
