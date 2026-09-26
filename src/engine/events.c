@@ -86,9 +86,12 @@ bool caller_key_matches(const CallerKey *a, const CallerKey *b) {
 // pointers are borrowed, not owned.
 static void caller_key_hashed(const CallerKey *in, CallerKey *out) {
     *out = *in;
-    out->id_hash = in->id ? str_hash64(in->id) : 0;
-    out->waypoint.waypoint_id_hash =
-        in->waypoint.waypoint_id ? str_hash64(in->waypoint.waypoint_id) : 0;
+    if (!out->id_hash && in->id) {
+        out->id_hash = str_hash64(in->id);
+    }
+    if (!out->waypoint.waypoint_id_hash && in->waypoint.waypoint_id) {
+        out->waypoint.waypoint_id_hash = str_hash64(in->waypoint.waypoint_id);
+    }
 }
 
 void effect_callback_free(EffectCallback *cb) {
