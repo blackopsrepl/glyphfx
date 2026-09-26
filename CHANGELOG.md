@@ -2,6 +2,40 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
 
+## [0.1.2](https://github.com/blackopsrepl/glyphfx/compare/v0.1.1...v0.1.2) (2026-09-26)
+
+### Bug Fixes
+
+* **demo:** cap the frame budget to the reference gallery's pace ([fbc3128](https://github.com/blackopsrepl/glyphfx/commit/fbc31287be9b38e1aabe19be45568de0350f3eb3))
+* **demo:** render block glyphs as rectangles ([f5fef8b](https://github.com/blackopsrepl/glyphfx/commit/f5fef8b0deefdfdd7e6f43bce5020d3134cbe390))
+* **demo:** sample the whole effect animation ([05e6e4f](https://github.com/blackopsrepl/glyphfx/commit/05e6e4feccfa8feced19311110c92a7c1151accb))
+* **demo:** tighten canvas, type, and palette ([d037020](https://github.com/blackopsrepl/glyphfx/commit/d037020145953f571f0ae379e577b6d898acf493))
+
+### Performance
+
+* **animation:** evict pooled visuals and stop pooling appearances ([db25e57](https://github.com/blackopsrepl/glyphfx/commit/db25e57b645a703ad6ebbdb7355d167febd55fe3))
+* **animation:** intern visuals in a process-wide pool ([a8e1ae5](https://github.com/blackopsrepl/glyphfx/commit/a8e1ae50837036c92e0ae31e2ed1b9c6098b7ca6))
+* **animation:** keep a borrowed active-scene pointer ([e980398](https://github.com/blackopsrepl/glyphfx/commit/e9803988275d203d6c9dbe8d2587464519009d6f))
+* **engine:** resolve the event entry once and reuse the tick snapshot ([ed7b94f](https://github.com/blackopsrepl/glyphfx/commit/ed7b94f550e73c3dcb2eb28465f08f8dc5dc6978))
+* **engine:** use a packed bitmap for the active-character set ([d7a81db](https://github.com/blackopsrepl/glyphfx/commit/d7a81db68325e150b3cb43bb9241e1c01c370fa5))
+* **events:** hash caller keys before strcmp ([6d9bc11](https://github.com/blackopsrepl/glyphfx/commit/6d9bc11859ffe15e411bb01368195388d4c00dd7))
+* **ordmap:** compare a cached key hash before strcmp ([f698322](https://github.com/blackopsrepl/glyphfx/commit/f69832267279264557f3d35f9367a2ca415be7fe))
+* **ordmap:** keep small maps inline ([35be174](https://github.com/blackopsrepl/glyphfx/commit/35be174c9afdbd44df70bf46a2b490653f7c5476))
+
+### Build
+
+* compile at -O3 ([2e92a7e](https://github.com/blackopsrepl/glyphfx/commit/2e92a7eb034cd552ea91e27e8ea2d852dbdbc351))
+* give the Makefile the SolverForge treatment ([4d38c6a](https://github.com/blackopsrepl/glyphfx/commit/4d38c6ab175854c287de0b495c88f5f272832553))
+
+### Documentation
+
+* **readme:** add a why-not-assembly note ([dd544dc](https://github.com/blackopsrepl/glyphfx/commit/dd544dc00360d3c0a6f8585a506cb2fe7d7401ee))
+* **readme:** introduce the GlyphFX mascot ([12a516a](https://github.com/blackopsrepl/glyphfx/commit/12a516a3e4f9d7e5e438ad2d920c6a1f559e2cd8))
+* **readme:** regenerate the effect gifs ([ced9a19](https://github.com/blackopsrepl/glyphfx/commit/ced9a19c78d5d85a84a2421bc634c466b919cd97))
+* **readme:** regenerate the effect gifs on the reference pace ([6fe056f](https://github.com/blackopsrepl/glyphfx/commit/6fe056fd113a02f4bf8673b2b4e57754f014219a))
+* tighten README attribution, links, and layout ([5a1cfef](https://github.com/blackopsrepl/glyphfx/commit/5a1cfefedcd9e9a82034d49fe71b6de588fa8fea))
+* use a legible block banner and make wipe the hero ([0d5f32d](https://github.com/blackopsrepl/glyphfx/commit/0d5f32db94c69b86672db88e9b72c569aee1e4fd))
+
 ## [0.1.1](https://github.com/blackopsrepl/glyphfx/compare/v0.1.0...v0.1.1) (2026-09-26)
 
 ### Bug Fixes
