@@ -43,6 +43,6 @@ int engine_register_event(EngineCtx *ctx, CharId id, Event event, const CallerKe
 int engine_chain_paths(EngineCtx *ctx, CharId id, const char *const *paths, size_t n_paths, bool loop);
 
 int effect_dump(Effect *effect, EngineCtx *ctx, bool has_max_frames, uint64_t max_frames);
-int effect_run(Effect *effect, EngineCtx *ctx, bool tty_output);
+int effect_run(Effect *effect, EngineCtx *ctx, bool tty_output, RunOutcome *out_outcome);
 
 #endif

@@ -146,6 +146,8 @@ struct Terminal {
     int64_t frame_rate;
     double last_time_printed;
     Clock clock;
+    bool resize_seen;
+    double resize_seen_time;
 };
 
 // Builds the terminal (preprocess + canvas + fill + neighbors). Returns 0 on
@@ -167,6 +169,8 @@ void terminal_restore_cursor(Terminal *t, FILE *out, const char *end_symbol);
 void terminal_print_frame(Terminal *t, FILE *out, const char *output_string);
 void terminal_enforce_framerate(Terminal *t);
 void terminal_reset_canvas_area(Terminal *t, FILE *out);
+// True when a resize has settled and would move the layout (tty-only callers).
+bool terminal_resize_settled(Terminal *t);
 
 // shutil.get_terminal_size semantics: COLUMNS/LINES win; else the tty; else 80x24.
 void terminal_get_dimensions(int64_t *width, int64_t *height);

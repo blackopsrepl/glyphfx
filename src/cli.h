@@ -11,8 +11,33 @@
 
 #include "engine/terminal.h"
 
+// List types shared by root and effect option tables.
+typedef struct {
+    Color *items;
+    size_t len;
+    size_t cap;
+    bool provided;
+} ColorList;
+
+typedef struct {
+    int64_t *items;
+    size_t len;
+    size_t cap;
+    bool provided;
+} IntList;
+
+// A list of single-codepoint symbols (reference Vec<String> parse_symbol).
+typedef struct {
+    char **items;
+    size_t len;
+    size_t cap;
+    bool provided;
+} StringList;
+
 typedef struct {
     bool version;
+    bool help;
+    bool help_effect;
     const char *input_file;
     bool random_effect;
     const char *effect_name;
@@ -25,6 +50,8 @@ typedef struct {
     uint64_t max_frames;
     bool virtual_clock;
     TerminalConfig tc;
+    StringList include_effects;
+    StringList exclude_effects;
     // Resolved effect: its registry entry and parsed config (owned).
     const void *effect_entry;
     void *effect_config;
@@ -79,32 +106,14 @@ typedef struct {
 #define EF_SPEC(n, sc, k, o) \
     { .name = (n), .short_name = (sc), .kind = (k), .offset = (o), .custom = NULL }
 
-typedef struct {
-    Color *items;
-    size_t len;
-    size_t cap;
-    bool provided;
-} ColorList;
-
-typedef struct {
-    int64_t *items;
-    size_t len;
-    size_t cap;
-    bool provided;
-} IntList;
-
-// A list of single-codepoint symbols (reference Vec<String> parse_symbol).
-typedef struct {
-    char **items;
-    size_t len;
-    size_t cap;
-    bool provided;
-} StringList;
-
 // Returns 0 on success, 2 on usage error (message already written to stderr),
 // or 1 for a runtime error that terminates before any input handling.
 int cli_parse(int argc, char **argv, CliConfig *cfg);
 
 void cli_print_version(void);
+void cli_print_help(void);
+void cli_print_effect_help(const void *effect_entry);
+void cli_print_completion(const char *shell);
+const char *cli_effect_name(const void *effect_entry);
 
 #endif

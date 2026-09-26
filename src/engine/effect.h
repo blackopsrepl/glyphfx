@@ -22,4 +22,12 @@ struct Effect {
     void *state;
 };
 
+typedef enum {
+    RUN_COMPLETE,
+    RUN_INTERRUPTED,
+    RUN_TERMINATED,
+    RUN_RESIZED,
+    RUN_OUTPUT_CLOSED,
+} RunOutcome;
+
 #endif

@@ -22,6 +22,7 @@ typedef enum {
     OPT_ANCHOR,
     OPT_EXISTING,
     OPT_STR,
+    OPT_STR_LIST,
     OPT_COMPLETION,
 } OptKind;
 
@@ -38,6 +39,7 @@ typedef struct {
 
 static const OptSpec ROOT_OPTS[] = {
     {"version", 'v', OPT_FLAG, OFF(version), false},
+    {"help", 'h', OPT_FLAG, OFF(help), false},
     {"input-file", 'i', OPT_STR, OFF(input_file), false},
     {"tab-width", 0, OPT_INT_POS, OFF_TC(tab_width), false},
     {"xterm-colors", 0, OPT_FLAG, OFF_TC(xterm_colors), false},
@@ -57,6 +59,8 @@ static const OptSpec ROOT_OPTS[] = {
     {"seed", 0, OPT_UINT, OFF(seed), false},
     {"print-completion", 0, OPT_COMPLETION, OFF(print_completion), false},
     {"random-effect", 'R', OPT_FLAG, OFF(random_effect), false},
+    {"include-effects", 0, OPT_STR_LIST, OFF(include_effects), false},
+    {"exclude-effects", 0, OPT_STR_LIST, OFF(exclude_effects), false},
     {"m0-dump", 0, OPT_FLAG, OFF(m0_dump), true},
     {"parity-dump", 0, OPT_FLAG, OFF(parity_dump), true},
     {"max-frames", 0, OPT_UINT, OFF(max_frames), true},
@@ -160,6 +164,25 @@ static int assign_option(CliConfig *cfg, const OptSpec *spec, const char *value)
         case OPT_STR:
             *(const char **)(base + spec->offset) = value;
             return 0;
+        case OPT_STR_LIST: {
+            StringList *list = (StringList *)(base + spec->offset);
+            if (!list->provided) {
+                for (size_t i = 0; i < list->len; i++) {
+                    free(list->items[i]);
+                }
+                list->len = 0;
+                list->provided = true;
+            }
+            if (list->len == list->cap) {
+                size_t cap = list->cap ? list->cap * 2 : 4;
+                list->items = realloc(list->items, cap * sizeof(char *));
+                list->cap = cap;
+            }
+            list->items[list->len] = malloc(strlen(value) + 1);
+            strcpy(list->items[list->len], value);
+            list->len++;
+            return 0;
+        }
         case OPT_COMPLETION:
             *(const char **)(base + spec->offset) = value;
             return 0;
@@ -668,6 +691,26 @@ int cli_parse(int argc, char **argv, CliConfig *cfg) {
                     return 2;
                 }
                 set_flag(cfg, spec);
+            } else if (spec->kind == OPT_STR_LIST) {
+                int consumed = 0;
+                if (value) {
+                    int rc = assign_option(cfg, spec, value);
+                    if (rc != 0) {
+                        return rc;
+                    }
+                    consumed++;
+                }
+                while (i + 1 < argc && argv[i + 1][0] != '-' ) {
+                    int rc = assign_option(cfg, spec, argv[++i]);
+                    if (rc != 0) {
+                        return rc;
+                    }
+                    consumed++;
+                }
+                if (consumed == 0) {
+                    usage_error("option '--%s' requires at least one value", spec->name);
+                    return 2;
+                }
             } else {
                 if (!value) {
                     if (i + 1 >= argc) {
@@ -716,6 +759,12 @@ int cli_parse(int argc, char **argv, CliConfig *cfg) {
             return 2;
         }
         cfg->effect_entry = entry;
+        for (int k = i + 1; k < argc; k++) {
+            if (strcmp(argv[k], "--help") == 0 || strcmp(argv[k], "-h") == 0) {
+                cfg->help_effect = true;
+                return 0;
+            }
+        }
         cfg->effect_config = calloc(1, entry->config_size);
         if (!cfg->effect_config) {
             return 1;
@@ -727,9 +776,97 @@ int cli_parse(int argc, char **argv, CliConfig *cfg) {
         }
         break;
     }
+
+    if (cfg->include_effects.provided && cfg->exclude_effects.provided) {
+        usage_error("options '--include-effects' and '--exclude-effects' cannot be used together");
+        return 2;
+    }
     return 0;
 }
 
 void cli_print_version(void) {
     printf("glyphfx %s\n", GLYPHFX_VERSION);
+}
+
+const char *cli_effect_name(const void *effect_entry) {
+    const EffectEntry *entry = effect_entry;
+    return entry ? entry->name : "";
+}
+
+void cli_print_help(void) {
+    printf("glyphfx %s\n", GLYPHFX_VERSION);
+    printf("Terminal text effects.\n\n");
+    printf("Usage: <producer> | glyphfx [OPTIONS] <effect> [effect options]\n\n");
+    printf("Options:\n");
+    for (size_t i = 0; i < ROOT_OPTS_COUNT; i++) {
+        if (ROOT_OPTS[i].hidden) {
+            continue;
+        }
+        char shortbuf[8] = "";
+        if (ROOT_OPTS[i].short_name) {
+            snprintf(shortbuf, sizeof(shortbuf), "-%c, ", ROOT_OPTS[i].short_name);
+        }
+        printf("  %s--%s\n", shortbuf, ROOT_OPTS[i].name);
+    }
+    printf("\nEffects:\n  ");
+    size_t count = effect_entry_count();
+    int col = 0;
+    for (size_t i = 0; i < count; i++) {
+        const EffectEntry *entry = effect_entry_at(i);
+        if (!entry) {
+            continue;
+        }
+        printf("%s", entry->name);
+        col++;
+        if (col % 5 == 0) {
+            printf("\n  ");
+        } else {
+            printf(" ");
+        }
+    }
+    printf("\n\nUse 'glyphfx <effect> --help' for options of a specific effect.\n");
+}
+
+void cli_print_effect_help(const void *effect_entry) {
+    const EffectEntry *entry = effect_entry;
+    if (!entry) {
+        return;
+    }
+    printf("Usage: glyphfx %s [OPTIONS]\n\nOptions:\n", entry->name);
+    for (size_t i = 0; i < entry->n_specs; i++) {
+        const EffOptSpec *spec = &entry->specs[i];
+        char shortbuf[8] = "";
+        if (spec->short_name) {
+            snprintf(shortbuf, sizeof(shortbuf), "-%c, ", spec->short_name);
+        }
+        printf("  %s--%s\n", shortbuf, spec->name);
+    }
+}
+
+void cli_print_completion(const char *shell) {
+    bool zsh = shell && strcmp(shell, "zsh") == 0;
+    if (zsh) {
+        printf("#compdef glyphfx\n");
+    }
+    printf("_glyphfx() {\n");
+    printf("  local -a effects\n  effects=(\n");
+    size_t count = effect_entry_count();
+    for (size_t i = 0; i < count; i++) {
+        const EffectEntry *entry = effect_entry_at(i);
+        if (entry) {
+            printf("    '%s'\n", entry->name);
+        }
+    }
+    printf("  )\n");
+    if (zsh) {
+        printf("  _arguments '*: :($effects)'\n");
+    } else {
+        printf("  COMPREPLY=( $(compgen -W \"${effects[*]}\" -- \"${COMP_WORDS[COMP_CWORD]}\") )\n");
+    }
+    printf("}\n");
+    if (zsh) {
+        printf("compdef _glyphfx glyphfx\n");
+    } else {
+        printf("complete -F _glyphfx glyphfx\n");
+    }
 }

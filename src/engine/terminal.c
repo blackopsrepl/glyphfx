@@ -11,6 +11,7 @@
 #endif
 
 #include "utils/pycompat.h"
+#include "utils/signals.h"
 
 #define EMPTY_RENDER_CELL UINT32_MAX
 #define NOT_VISIBLE SIZE_MAX
@@ -937,4 +938,34 @@ Color *terminal_get_input_colors(const Terminal *t, Rng *rng, ColorSort sort, si
     free(entries);
     *out_len = n;
     return out;
+}
+
+bool terminal_resize_settled(Terminal *t) {
+    const double QUIET = 0.05;
+    if (take_terminal_resize()) {
+        t->resize_seen = true;
+        t->resize_seen_time = monotonic_seconds();
+    }
+    if (!t->resize_seen) {
+        return false;
+    }
+    if (monotonic_seconds() - t->resize_seen_time >= QUIET) {
+        t->resize_seen = false;
+    } else {
+        return false;
+    }
+    if (t->config.ignore_terminal_dimensions) {
+        return false;
+    }
+    int64_t width = 0;
+    int64_t height = 0;
+    terminal_get_dimensions(&width, &height);
+    if (width == t->terminal_width && height == t->terminal_height) {
+        return false;
+    }
+    Layout next = compute_layout(&t->config, t->input_line_lengths, t->input_line_lengths_len, width, height);
+    return next.canvas_height != t->layout.canvas_height || next.canvas_width != t->layout.canvas_width ||
+           next.column_offset != t->layout.column_offset || next.row_offset != t->layout.row_offset ||
+           next.visible_top != t->layout.visible_top || next.visible_bottom != t->layout.visible_bottom ||
+           next.visible_right != t->layout.visible_right || next.visible_left != t->layout.visible_left;
 }

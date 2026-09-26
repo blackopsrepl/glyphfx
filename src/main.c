@@ -13,6 +13,7 @@
 #include "engine/terminal.h"
 #include "utils/clock.h"
 #include "utils/rng.h"
+#include "utils/signals.h"
 #include "utils/utf8.h"
 
 static char *read_all(FILE *f, size_t *out_len) {
@@ -104,7 +105,7 @@ static int run_m0_dump(const char *input, const CliConfig *cfg) {
 }
 
 int main(int argc, char **argv) {
-    signal(SIGPIPE, SIG_DFL);
+    restore_sigpipe();
 
     CliConfig cfg;
     int rc = cli_parse(argc, argv, &cfg);
@@ -115,9 +116,17 @@ int main(int argc, char **argv) {
         cli_print_version();
         return 0;
     }
+    if (cfg.help) {
+        cli_print_help();
+        return 0;
+    }
+    if (cfg.help_effect) {
+        cli_print_effect_help(cfg.effect_entry);
+        return 0;
+    }
     if (cfg.print_completion) {
-        fputs("Error: completion generation is not yet implemented.\n", stderr);
-        return 1;
+        cli_print_completion(cfg.print_completion);
+        return 0;
     }
 
     char *input = NULL;
@@ -171,55 +180,140 @@ int main(int argc, char **argv) {
         return m0;
     }
 
-    if (!cfg.effect_entry) {
+    if (!cfg.effect_entry && !cfg.random_effect) {
         fputs("Error: No effect specified.\n", stderr);
         free(input);
         return 1;
     }
 
-    const EffectEntry *entry = (const EffectEntry *)cfg.effect_entry;
-    Effect *effect = entry->make(cfg.effect_config);
-    if (!effect) {
-        fputs("Error: failed to build effect.\n", stderr);
-        entry->free_config(cfg.effect_config);
-        free(cfg.effect_config);
-        free(input);
-        return 1;
-    }
     Rng rng = cfg.has_seed ? rng_seeded(cfg.seed) : rng_from_entropy();
-    Clock clock = (cfg.parity_dump || cfg.virtual_clock) ? clock_virtual_with_frame_rate(cfg.tc.frame_rate)
-                                                          : clock_real();
-    EngineCtx ctx;
-    PreprocessError pp_err;
-    memset(&pp_err, 0, sizeof(pp_err));
-    if (engine_ctx_init(&ctx, input, &cfg.tc, rng, clock, &pp_err) != 0) {
-        if (pp_err.status == PREPROCESS_UNSUPPORTED_ANSI) {
-            fprintf(stderr, "Error: Unsupported ANSI sequence in input data: \"%s\"\n", pp_err.sequence);
-        } else {
-            fprintf(stderr, "Error: %s\n", pp_err.message[0] ? pp_err.message : "failed to build canvas");
+
+    if (cfg.random_effect) {
+        const EffectEntry *names[128];
+        size_t name_count = 0;
+        for (size_t i = 0; i < effect_entry_count(); i++) {
+            const EffectEntry *entry = effect_entry_at(i);
+            if (!entry) {
+                continue;
+            }
+            if (cfg.include_effects.provided) {
+                bool included = false;
+                for (size_t k = 0; k < cfg.include_effects.len; k++) {
+                    if (strcmp(cfg.include_effects.items[k], entry->name) == 0) {
+                        included = true;
+                        break;
+                    }
+                }
+                if (!included) {
+                    continue;
+                }
+            }
+            bool excluded = false;
+            for (size_t k = 0; k < cfg.exclude_effects.len; k++) {
+                if (strcmp(cfg.exclude_effects.items[k], entry->name) == 0) {
+                    excluded = true;
+                    break;
+                }
+            }
+            if (excluded) {
+                continue;
+            }
+            if (name_count < 128) {
+                names[name_count++] = entry;
+            }
         }
-        effect->ops->destroy(effect);
-        engine_ctx_free(&ctx);
-        entry->free_config(cfg.effect_config);
-        free(cfg.effect_config);
-        free(input);
-        return 1;
+        if (name_count == 0) {
+            fputs("Error: No effects available after filtering.\n", stderr);
+            free(input);
+            return 1;
+        }
+        const EffectEntry *picked = names[rng_choice_index(&rng, name_count)];
+        cfg.effect_entry = picked;
+        if (cfg.effect_config) {
+            picked->free_config(cfg.effect_config);
+            free(cfg.effect_config);
+        }
+        cfg.effect_config = calloc(1, picked->config_size);
+        if (!cfg.effect_config) {
+            free(input);
+            return 1;
+        }
+        picked->defaults(cfg.effect_config);
     }
 
-    int run_rc;
-    if (cfg.parity_dump) {
-        run_rc = effect_dump(effect, &ctx, cfg.has_max_frames, cfg.max_frames);
-    } else {
-        run_rc = effect_run(effect, &ctx, isatty(STDOUT_FILENO) != 0);
+    const EffectEntry *entry = (const EffectEntry *)cfg.effect_entry;
+
+    bool tty_output = !cfg.parity_dump && isatty(STDOUT_FILENO) != 0;
+    if (!cfg.parity_dump) {
+        install_sigint_handler();
     }
-    effect->ops->destroy(effect);
-    engine_ctx_free(&ctx);
+    if (tty_output) {
+        install_sigterm_handler();
+        install_sigwinch_handler();
+    }
+
+    TerminalConfig config = cfg.tc;
+    int exit_code = 0;
+    for (;;) {
+        Effect *effect = entry->make(cfg.effect_config);
+        if (!effect) {
+            fputs("Error: failed to build effect.\n", stderr);
+            exit_code = 1;
+            break;
+        }
+        Clock clock = (cfg.parity_dump || cfg.virtual_clock) ? clock_virtual_with_frame_rate(config.frame_rate)
+                                                             : clock_real();
+        EngineCtx ctx;
+        PreprocessError pp_err;
+        memset(&pp_err, 0, sizeof(pp_err));
+        if (engine_ctx_init(&ctx, input, &config, rng, clock, &pp_err) != 0) {
+            if (pp_err.status == PREPROCESS_UNSUPPORTED_ANSI) {
+                fprintf(stderr, "Error: Unsupported ANSI sequence in input data: \"%s\"\n", pp_err.sequence);
+            } else {
+                fprintf(stderr, "Error: %s\n", pp_err.message[0] ? pp_err.message : "failed to build canvas");
+            }
+            effect->ops->destroy(effect);
+            exit_code = 1;
+            break;
+        }
+        if (cfg.parity_dump) {
+            int run_rc = effect_dump(effect, &ctx, cfg.has_max_frames, cfg.max_frames);
+            effect->ops->destroy(effect);
+            engine_ctx_free(&ctx);
+            if (run_rc != 0) {
+                fputs("Error: effect execution failed.\n", stderr);
+                exit_code = 1;
+            }
+            break;
+        }
+        RunOutcome outcome = RUN_COMPLETE;
+        int run_rc = effect_run(effect, &ctx, tty_output, &outcome);
+        rng = ctx.rng;
+        effect->ops->destroy(effect);
+        engine_ctx_free(&ctx);
+        if (run_rc != 0) {
+            fputs("Error: effect execution failed.\n", stderr);
+            exit_code = 1;
+            break;
+        }
+        if (outcome == RUN_RESIZED) {
+            config.reuse_canvas = false;
+            continue;
+        }
+        if (outcome == RUN_INTERRUPTED) {
+            exit_code = 1;
+        }
+        break;
+    }
+
     entry->free_config(cfg.effect_config);
     free(cfg.effect_config);
     free(input);
-    if (run_rc != 0) {
-        fputs("Error: effect execution failed.\n", stderr);
-        return 1;
+    if (terminated()) {
+        die_from_sigterm();
     }
-    return 0;
+    if (interrupted() && exit_code == 0) {
+        exit_code = 1;
+    }
+    return exit_code;
 }
