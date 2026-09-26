@@ -35,28 +35,6 @@ Rng rng_from_entropy(void) {
     return rng_seeded(seed);
 }
 
-static uint64_t rotl64(uint64_t x, int k) {
-    return (x << k) | (x >> (64 - k));
-}
-
-uint64_t rng_next_u64(Rng *rng) {
-    uint64_t *s = rng->s;
-    uint64_t result = rotl64(s[0] + s[3], 23) + s[0];
-    uint64_t t = s[1] << 17;
-    s[2] ^= s[0];
-    s[3] ^= s[1];
-    s[1] ^= s[2];
-    s[0] ^= s[3];
-    s[2] ^= t;
-    s[3] = rotl64(s[3], 45);
-    return result;
-}
-
-double rng_random(Rng *rng) {
-    uint64_t v = rng_next_u64(rng) >> 11;
-    return (double)v * (1.0 / 9007199254740992.0); // 1 / 2^53
-}
-
 static int leading_zeros64(uint64_t x) {
     if (x == 0) {
         return 64;
