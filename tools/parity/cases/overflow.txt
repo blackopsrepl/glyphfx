@@ -2,9 +2,11 @@
 # format: <seed> | <terminal options> | <effect options>
 42  |      |
 7   |      |
+999 |      |
 123 |      | --overflow-speed 1 --overflow-cycles-range 1-1
 42  |      | --overflow-gradient-stops FF0000 00FF00 0000FF --overflow-speed 2
 42  |      | --overflow-cycles-range 2-3 --final-gradient-steps 5
 42  | --existing-color-handling dynamic |
+7   | --existing-color-handling dynamic --xterm-colors | --overflow-speed 2
 42  | --xterm-colors |
 42  | --canvas-width 20 --canvas-height 8 | --overflow-speed 2

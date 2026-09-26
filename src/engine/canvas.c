@@ -88,8 +88,9 @@ Coord canvas_random_coord(const Canvas *c, Rng *rng, bool outside_scope, bool wi
         Coord options[4] = {above, below, left, right};
         return options[rng_choice_index(rng, 4)];
     }
-    return coord_new(canvas_random_column(c, rng, within_text_boundary),
-                     canvas_random_row(c, rng, within_text_boundary));
+    int64_t column = canvas_random_column(c, rng, within_text_boundary);
+    int64_t row = canvas_random_row(c, rng, within_text_boundary);
+    return coord_new(column, row);
 }
 
 int canvas_anchor_text(Canvas *canvas, Arena *arena, CharId *chars, size_t n, Anchor anchor, CharId **out_kept,

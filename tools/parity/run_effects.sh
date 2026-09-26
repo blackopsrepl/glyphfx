@@ -34,7 +34,18 @@ pass=0
 fail=0
 first=""
 
-while IFS='|' read -r seed termopts effopts; do
+# Strip surrounding whitespace from a field.
+trim() {
+    local s="$1"
+    s="${s#"${s%%[![:space:]]*}"}"
+    s="${s%"${s##*[![:space:]]}"}"
+    printf '%s' "$s"
+}
+
+while IFS='|' read -r raw_seed raw_term raw_eff; do
+    seed="$(trim "$raw_seed")"
+    termopts="$(trim "$raw_term")"
+    effopts="$(trim "$raw_eff")"
     case "$seed" in ''|\#*) continue ;; esac
     # shellcheck disable=SC2086
     for input in "${INPUTS[@]}"; do
@@ -46,9 +57,10 @@ while IFS='|' read -r seed termopts effopts; do
         "$SUBJECT" --seed "$seed" --parity-dump --max-frames "$MAX_FRAMES" --virtual-clock $termopts "$EFFECT" $effopts \
             < "$INPUTS_DIR/$input" > "$TMP/subject.out" 2> "$TMP/subject.err"
         src=$?
-        if [ "$orc" -ne "$src" ]; then
+        if [ "$orc" -ne 0 ] || [ "$src" -ne 0 ]; then
             fail=$((fail + 1))
-            echo "FAIL seed=$seed input=$input term='$termopts' eff='$effopts' exit oracle=$orc subject=$src"
+            echo "FAIL (nonzero exit) seed=$seed input=$input term='$termopts' eff='$effopts' oracle=$orc subject=$src"
+            [ -z "$first" ] && first="nonzero exit seed=$seed input=$input"
             continue
         fi
         if ! cmp -s "$TMP/oracle.out" "$TMP/subject.out"; then

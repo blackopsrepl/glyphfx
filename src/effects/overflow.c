@@ -282,7 +282,12 @@ static int overflow_build(Effect *self, EngineCtx *ctx) {
         for (size_t k = 0; k < row->len; k++) {
             CharId id = row->items[k];
             EffectCharacter *ch = &ctx->terminal.arena.items[id];
+            // The reference clones current_character_visual.symbol before the
+            // call; set_appearance frees current_visual.symbol, so an alias
+            // would be a use-after-free.
             const char *current_symbol = ch->animation.current_visual.symbol;
+            char *current_symbol_copy = malloc(strlen(current_symbol) + 1);
+            strcpy(current_symbol_copy, current_symbol);
             bool uses_pre = ch->uses_input_preexisting_colors;
             ColorPair colors;
             memset(&colors, 0, sizeof(colors));
@@ -293,7 +298,7 @@ static int overflow_build(Effect *self, EngineCtx *ctx) {
                     colors.has_bg = ch->animation.has_input_bg;
                     colors.bg = ch->animation.input_bg_color;
                 }
-                animation_set_appearance(&ch->animation, uses_pre, current_symbol, &colors);
+                animation_set_appearance(&ch->animation, uses_pre, current_symbol_copy, &colors);
             } else {
                 Color final_color = fallback;
                 if ((size_t)id < st->character_final_color_len &&
@@ -302,8 +307,9 @@ static int overflow_build(Effect *self, EngineCtx *ctx) {
                 }
                 colors.has_fg = true;
                 colors.fg = final_color;
-                animation_set_appearance(&ch->animation, uses_pre, current_symbol, &colors);
+                animation_set_appearance(&ch->animation, uses_pre, current_symbol_copy, &colors);
             }
+            free(current_symbol_copy);
         }
         OverflowRow final_row;
         memset(&final_row, 0, sizeof(final_row));
