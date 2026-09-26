@@ -2,6 +2,23 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
 
+## [0.1.1](https://github.com/blackopsrepl/glyphfx/compare/v0.1.0...v0.1.1) (2026-09-26)
+
+### Bug Fixes
+
+* **ci:** define SIGWINCH for macOS and update the oracle toolchain ([47c88f9](https://github.com/blackopsrepl/glyphfx/commit/47c88f9008cff01bf3494e46c5661596da0042fd))
+
+### Performance
+
+* share visuals, reuse frame buffers, and skip exit teardown ([f47c25b](https://github.com/blackopsrepl/glyphfx/commit/f47c25b15a15f564400d7fcf5e0276f53060dd9c))
+
+### Documentation
+
+* add rendered effect GIFs and a README at ttfx's bar ([76d9e6c](https://github.com/blackopsrepl/glyphfx/commit/76d9e6c0e3dbb8ff6aea6d32a0d1e7286c7cd5c2))
+* describe glyphfx on its own terms ([c2ebc02](https://github.com/blackopsrepl/glyphfx/commit/c2ebc02ede9a00fa382624fd6d958679248f89d8))
+* explain why glyphfx stays in portable C ([f40a532](https://github.com/blackopsrepl/glyphfx/commit/f40a5324928d67083173e698998050039590f7cc))
+* restructure README to ttfx's layout ([01de6d5](https://github.com/blackopsrepl/glyphfx/commit/01de6d51c09ac0804f4db42c81f3943002dc75f8))
+
 ## 0.1.0 (2026-09-26)
 
 ### Features
