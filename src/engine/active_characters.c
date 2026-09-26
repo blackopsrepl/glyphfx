@@ -102,3 +102,9 @@ void ac_snapshot(const ActiveCharacters *ac, CharId **out, size_t *out_len) {
     *out = copy;
     *out_len = ac->len;
 }
+
+void ac_extend(ActiveCharacters *ac, const CharId *ids, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        ac_insert(ac, ids[i]);
+    }
+}

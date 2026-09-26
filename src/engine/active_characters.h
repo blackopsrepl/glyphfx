@@ -27,5 +27,6 @@ bool ac_remove(ActiveCharacters *ac, CharId id);
 void ac_retain(ActiveCharacters *ac, bool (*keep)(CharId id, void *ctx), void *ctx);
 // Ascending snapshot.
 void ac_snapshot(const ActiveCharacters *ac, CharId **out, size_t *out_len);
+void ac_extend(ActiveCharacters *ac, const CharId *ids, size_t n);
 
 #endif

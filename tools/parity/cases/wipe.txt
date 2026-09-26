@@ -1,0 +1,9 @@
+# wipe parity cases.
+42  |      | 
+42  |      | --wipe-direction diagonal_bottom_left_to_top_right
+42  |      | --wipe-ease out_bounce
+42  |      | --wipe-delay 3
+7   |      |
+123 |      |
+42  | --existing-color-handling dynamic |
+42  | --xterm-colors |
