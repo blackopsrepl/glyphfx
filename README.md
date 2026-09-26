@@ -9,58 +9,56 @@ fortune | glyphfx --random-effect
 git log --oneline -10 | glyphfx matrix
 ```
 
-glyphfx animates stdin and writes the frames to the terminal. It has no
-runtime dependencies beyond libc and libm.
+<img src="docs/effects/hero.gif" width="588" alt="the decrypt effect resolving the glyphfx banner">
 
 ## Why C
 
 The effects are a shell toy that lives in a prompt pipeline, so startup and
-throughput matter. glyphfx links nothing but libc and libm: no interpreter, no
-import step, no third-party libraries. `make` builds one binary.
+throughput matter. glyphfx links nothing but libc and libm — no interpreter, no
+import step, no third-party libraries — and starts in well under a
+millisecond. `make` builds one binary.
 
 ## The effects
 
 All 37, each with a full option surface (`glyphfx <effect> --help`).
 
-| effect | what it does |
-|---|---|
-| <b>beams</b> | Create beams which travel over the canvas illuminating the characters behind them. |
-| <b>binarypath</b> | Binary representations of each character move towards the home coordinate of the character. |
-| <b>blackhole</b> | Characters are consumed by a black hole and explode outwards. |
-| <b>bouncyballs</b> | Characters are bouncy balls falling from the top of the canvas. |
-| <b>bubbles</b> | Characters are formed into bubbles that float down and pop. |
-| <b>burn</b> | Burns vertically in the canvas. |
-| <b>colorshift</b> | Display a gradient that shifts colors across the terminal. |
-| <b>crumble</b> | Characters lose color and crumble into dust, vacuumed up, and reformed. |
-| <b>decrypt</b> | Display a movie style decryption effect. |
-| <b>errorcorrect</b> | Some characters start in the wrong position and are corrected in sequence. |
-| <b>expand</b> | Expands the text from a single point. |
-| <b>fireworks</b> | Characters launch and explode like fireworks and fall into place. |
-| <b>highlight</b> | Run a specular highlight across the text. |
-| <b>laseretch</b> | A laser etches characters onto the terminal. |
-| <b>matrix</b> | Matrix digital rain effect. |
-| <b>middleout</b> | Text expands in a single row or column in the middle of the canvas then out. |
-| <b>orbittingvolley</b> | Four launchers orbit the canvas firing volleys of characters inward to build the input text from the center out. |
-| <b>overflow</b> | Input text overflows and scrolls the terminal in a random order until eventually appearing ordered. |
-| <b>pour</b> | Pours the characters into position from the given direction. |
-| <b>print</b> | Lines are printed one at a time following a print head. Print head performs line feed, carriage return. |
-| <b>rain</b> | Rain characters from the top of the canvas. |
-| <b>randomsequence</b> | Prints the input data in a random sequence. |
-| <b>rings</b> | Characters are dispersed and form into spinning rings. |
-| <b>scattered</b> | Text is scattered across the canvas and moves into position. |
-| <b>slice</b> | Slices the input in half and slides it into place from opposite directions. |
-| <b>slide</b> | Slide characters into view from outside the terminal. |
-| <b>smoke</b> | Smoke floods the canvas colorizing any characters it crosses. |
-| <b>spotlights</b> | Spotlights search the text area, illuminating characters, before converging in the center and expanding. |
-| <b>spray</b> | Draws the characters spawning at varying rates from a single point. |
-| <b>swarm</b> | Characters are grouped into swarms and move around the terminal before settling into position. |
-| <b>sweep</b> | Sweep across the canvas to reveal uncolored text, reverse sweep to color the text. |
-| <b>synthgrid</b> | Create a grid which fills with characters dissolving into the final text. |
-| <b>thunderstorm</b> | Create a thunderstorm in the terminal. |
-| <b>unstable</b> | Spawn characters jumbled, explode them to the edge of the canvas, then reassemble them in the correct layout. |
-| <b>vhstape</b> | Lines of characters glitch left and right and lose detail like an old VHS tape. |
-| <b>waves</b> | Waves travel across the terminal leaving behind the characters. |
-| <b>wipe</b> | Wipes the text across the terminal to reveal characters. |
+|     |     |
+|:---:|:---:|
+| <b>beams</b><br><img src="docs/effects/beams.gif" width="400" alt="beams"><br><sub>Create beams which travel over the canvas illuminating the characters behind them.</sub> | <b>binarypath</b><br><img src="docs/effects/binarypath.gif" width="400" alt="binarypath"><br><sub>Binary representations of each character move towards the home coordinate of the character.</sub> |
+| <b>blackhole</b><br><img src="docs/effects/blackhole.gif" width="400" alt="blackhole"><br><sub>Characters are consumed by a black hole and explode outwards.</sub> | <b>bouncyballs</b><br><img src="docs/effects/bouncyballs.gif" width="400" alt="bouncyballs"><br><sub>Characters are bouncy balls falling from the top of the canvas.</sub> |
+| <b>bubbles</b><br><img src="docs/effects/bubbles.gif" width="400" alt="bubbles"><br><sub>Characters are formed into bubbles that float down and pop.</sub> | <b>burn</b><br><img src="docs/effects/burn.gif" width="400" alt="burn"><br><sub>Burns vertically in the canvas.</sub> |
+| <b>colorshift</b><br><img src="docs/effects/colorshift.gif" width="400" alt="colorshift"><br><sub>Display a gradient that shifts colors across the terminal.</sub> | <b>crumble</b><br><img src="docs/effects/crumble.gif" width="400" alt="crumble"><br><sub>Characters lose color and crumble into dust, vacuumed up, and reformed.</sub> |
+| <b>decrypt</b><br><img src="docs/effects/decrypt.gif" width="400" alt="decrypt"><br><sub>Display a movie style decryption effect.</sub> | <b>errorcorrect</b><br><img src="docs/effects/errorcorrect.gif" width="400" alt="errorcorrect"><br><sub>Some characters start in the wrong position and are corrected in sequence.</sub> |
+| <b>expand</b><br><img src="docs/effects/expand.gif" width="400" alt="expand"><br><sub>Expands the text from a single point.</sub> | <b>fireworks</b><br><img src="docs/effects/fireworks.gif" width="400" alt="fireworks"><br><sub>Characters launch and explode like fireworks and fall into place.</sub> |
+| <b>highlight</b><br><img src="docs/effects/highlight.gif" width="400" alt="highlight"><br><sub>Run a specular highlight across the text.</sub> | <b>laseretch</b><br><img src="docs/effects/laseretch.gif" width="400" alt="laseretch"><br><sub>A laser etches characters onto the terminal.</sub> |
+| <b>matrix</b><br><img src="docs/effects/matrix.gif" width="400" alt="matrix"><br><sub>Matrix digital rain effect.</sub> | <b>middleout</b><br><img src="docs/effects/middleout.gif" width="400" alt="middleout"><br><sub>Text expands in a single row or column in the middle of the canvas then out.</sub> |
+| <b>orbittingvolley</b><br><img src="docs/effects/orbittingvolley.gif" width="400" alt="orbittingvolley"><br><sub>Four launchers orbit the canvas firing volleys of characters inward to build the input text from the center out.</sub> | <b>overflow</b><br><img src="docs/effects/overflow.gif" width="400" alt="overflow"><br><sub>Input text overflows and scrolls the terminal in a random order until eventually appearing ordered.</sub> |
+| <b>pour</b><br><img src="docs/effects/pour.gif" width="400" alt="pour"><br><sub>Pours the characters into position from the given direction.</sub> | <b>print</b><br><img src="docs/effects/print.gif" width="400" alt="print"><br><sub>Lines are printed one at a time following a print head. Print head performs line feed, carriage return.</sub> |
+| <b>rain</b><br><img src="docs/effects/rain.gif" width="400" alt="rain"><br><sub>Rain characters from the top of the canvas.</sub> | <b>randomsequence</b><br><img src="docs/effects/randomsequence.gif" width="400" alt="randomsequence"><br><sub>Prints the input data in a random sequence.</sub> |
+| <b>rings</b><br><img src="docs/effects/rings.gif" width="400" alt="rings"><br><sub>Characters are dispersed and form into spinning rings.</sub> | <b>scattered</b><br><img src="docs/effects/scattered.gif" width="400" alt="scattered"><br><sub>Text is scattered across the canvas and moves into position.</sub> |
+| <b>slice</b><br><img src="docs/effects/slice.gif" width="400" alt="slice"><br><sub>Slices the input in half and slides it into place from opposite directions.</sub> | <b>slide</b><br><img src="docs/effects/slide.gif" width="400" alt="slide"><br><sub>Slide characters into view from outside the terminal.</sub> |
+| <b>smoke</b><br><img src="docs/effects/smoke.gif" width="400" alt="smoke"><br><sub>Smoke floods the canvas colorizing any characters it crosses.</sub> | <b>spotlights</b><br><img src="docs/effects/spotlights.gif" width="400" alt="spotlights"><br><sub>Spotlights search the text area, illuminating characters, before converging in the center and expanding.</sub> |
+| <b>spray</b><br><img src="docs/effects/spray.gif" width="400" alt="spray"><br><sub>Draws the characters spawning at varying rates from a single point.</sub> | <b>swarm</b><br><img src="docs/effects/swarm.gif" width="400" alt="swarm"><br><sub>Characters are grouped into swarms and move around the terminal before settling into position.</sub> |
+| <b>sweep</b><br><img src="docs/effects/sweep.gif" width="400" alt="sweep"><br><sub>Sweep across the canvas to reveal uncolored text, reverse sweep to color the text.</sub> | <b>synthgrid</b><br><img src="docs/effects/synthgrid.gif" width="400" alt="synthgrid"><br><sub>Create a grid which fills with characters dissolving into the final text.</sub> |
+| <b>thunderstorm</b><br><img src="docs/effects/thunderstorm.gif" width="400" alt="thunderstorm"><br><sub>Create a thunderstorm in the terminal.</sub> | <b>unstable</b><br><img src="docs/effects/unstable.gif" width="400" alt="unstable"><br><sub>Spawn characters jumbled, explode them to the edge of the canvas, then reassemble them in the correct layout.</sub> |
+| <b>vhstape</b><br><img src="docs/effects/vhstape.gif" width="400" alt="vhstape"><br><sub>Lines of characters glitch left and right and lose detail like an old VHS tape.</sub> | <b>waves</b><br><img src="docs/effects/waves.gif" width="400" alt="waves"><br><sub>Waves travel across the terminal leaving behind the characters.</sub> |
+| <b>wipe</b><br><img src="docs/effects/wipe.gif" width="400" alt="wipe"><br><sub>Wipes the text across the terminal to reveal characters.</sub> | |
+
+## Benchmarks
+
+Startup (median of 300 runs of `glyphfx --version`): **0.36 ms**. On a
+160&times;40 canvas with pacing disabled (`--frame-rate 0`), best of three:
+
+| effect | frames | ms/frame | fps |
+|---|---:|---:|---:|
+| blackhole | 300 | 0.020 | 50,148 |
+| slide | 110 | 0.046 | 21,656 |
+| waves | 300 | 0.061 | 16,291 |
+| matrix | 300 | 0.086 | 11,599 |
+| rings | 300 | 0.153 | 6,534 |
+| beams | 300 | 0.782 | 1,279 |
+
+Reproduce with `python3 tools/tests/bench.py`.
 
 ## Usage
 
@@ -92,9 +90,9 @@ make static     # static link (build/glyphfx-static)
 
 ## Fidelity
 
-Given the same input, options, and seed, glyphfx emits byte-identical frames
-and a byte-identical terminal stream to ttfx. It is verified mechanically
-against the ttfx binary, not by eye:
+Given the same input, options, and seed, glyphfx produces byte-identical frames
+and a byte-identical terminal stream to ttfx, verified mechanically against the
+ttfx binary rather than by eye:
 
 ```sh
 make parity     # M0 input/canvas/anchoring option matrix
@@ -117,6 +115,14 @@ set. A single effect runs with `tools/parity/run_effects.sh <effect>`.
 
 Linux and macOS. Byte-exact comparison is pinned to Linux/glibc; builds and the
 unit tests also run on macOS.
+
+## Credit
+
+glyphfx is a port of [ttfx](https://github.com/omacom/ttfx), which is a port of
+[TerminalTextEffects](https://github.com/ChrisBuilds/terminaltexteffects) by
+ChrisBuilds. The effect set, the animation engine, and the command-line
+interface are that project's design; glyphfx implements them in C17 and matches
+the ttfx binary byte for byte.
 
 ## License
 

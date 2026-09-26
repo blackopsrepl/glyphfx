@@ -70,6 +70,7 @@ void vis_format(CharacterVisual *vis) {
     }
     free(vis->formatted);
     vis->formatted = sb_take(&sb);
+    vis->formatted_len = strlen(vis->formatted);
 }
 
 void vis_init(CharacterVisual *vis, const char *symbol, const VisualParams *params) {
@@ -109,6 +110,7 @@ void vis_copy(CharacterVisual *dst, const CharacterVisual *src) {
     *dst = *src;
     dst->symbol = src->symbol ? dup_cstr(src->symbol) : NULL;
     dst->formatted = src->formatted ? dup_cstr(src->formatted) : NULL;
+    dst->formatted_len = src->formatted_len;
 }
 
 void vis_move(CharacterVisual *dst, CharacterVisual *src) {

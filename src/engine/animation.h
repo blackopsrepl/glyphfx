@@ -58,6 +58,7 @@ typedef struct {
     bool has_bg_code;
     ColorCode bg_code;
     char *formatted;  // owned
+    size_t formatted_len;
 } CharacterVisual;
 
 void vis_init(CharacterVisual *vis, const char *symbol, const VisualParams *params);

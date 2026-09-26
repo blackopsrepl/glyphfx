@@ -532,6 +532,7 @@ static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_heig
 }
 
 char *terminal_get_formatted_output_string(Terminal *t) {
+    static const char SPACES[64] = "                                                                ";
     size_t width = 0;
     size_t height = 0;
     update_render_cells(t, &width, &height);
@@ -541,12 +542,26 @@ char *terminal_get_formatted_output_string(Terminal *t) {
         if (row_index + 1 < height) {
             sb_push(&sb, '\n');
         }
-        for (size_t col = 0; col < width; col++) {
-            uint32_t cell = t->render_cells[row_index * width + col];
+        const uint32_t *row = &t->render_cells[row_index * width];
+        size_t col = 0;
+        while (col < width) {
+            uint32_t cell = row[col];
             if (cell == EMPTY_RENDER_CELL) {
-                sb_push(&sb, ' ');
+                size_t run = 1;
+                while (col + run < width && row[col + run] == EMPTY_RENDER_CELL) {
+                    run++;
+                }
+                size_t remaining = run;
+                while (remaining > 0) {
+                    size_t take = remaining > sizeof(SPACES) ? sizeof(SPACES) : remaining;
+                    sb_append(&sb, SPACES, take);
+                    remaining -= take;
+                }
+                col += run;
             } else {
-                sb_puts(&sb, t->arena.items[cell].animation.current_visual.formatted);
+                const CharacterVisual *vis = &t->arena.items[cell].animation.current_visual;
+                sb_append(&sb, vis->formatted, vis->formatted_len);
+                col++;
             }
         }
     }
