@@ -40,7 +40,7 @@ EFFECT_CASES := $(wildcard tools/parity/cases/*.txt)
 
 # ============== Phony Targets ==============
 .PHONY: all build help banner check test parity effects release static install debug clean version \
-        bump-patch bump-minor bump-major bump-dry
+        bump-patch bump-minor bump-major bump-dry perf perf-update release-check
 
 # ============== Default Target ==============
 .DEFAULT_GOAL := build
@@ -69,6 +69,8 @@ help: banner
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "check" "run the C unit tests"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "parity" "byte-exact M0 option matrix vs the ttfx oracle"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "effects" "byte-exact frame parity for every effect"
+	@printf "  $(CYAN)%-24s$(RESET) %s\n" "perf" "fail on any benchmark slower than the committed baseline"
+	@printf "  $(CYAN)%-24s$(RESET) %s\n" "perf-update" "tighten the perf baseline to this run (improvements only)"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "debug" "ASan/UBSan build"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "release" "stripped release build"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "static" "statically linked build"
@@ -134,6 +136,22 @@ effects: banner $(BUILD)/glyphfx
 	if [ $$fail -eq 0 ]; then printf "$(GREEN)$(CHECK) all effects byte-exact$(RESET)\n"; \
 	else printf "$(RED)$(CROSS) effect parity failed$(RESET)\n" && exit 1; fi
 
+# ============== Performance ==============
+perf: banner $(BUILD)/glyphfx
+	$(call section,Performance Regression Gate)
+	@python3 tools/perf/gate.py
+
+perf-update: banner $(BUILD)/glyphfx
+	$(call section,Tighten Performance Baseline)
+	@python3 tools/perf/gate.py --update
+
+# Everything a release must satisfy, locally and in CI.
+release-check: banner $(BUILD)/glyphfx
+	$(call section,Release Gate)
+	@$(MAKE) --no-print-directory check
+	@$(MAKE) --no-print-directory effects
+	@$(MAKE) --no-print-directory perf
+
 # ============== Release Builds ==============
 release: CFLAGS += -DNDEBUG
 release: banner $(BUILD)/glyphfx
@@ -163,15 +181,15 @@ install: banner $(BUILD)/glyphfx
 version:
 	@printf "$(CYAN)Version:$(RESET) $(YELLOW)$(BOLD)$(VERSION)$(RESET)\n"
 
-bump-patch: banner
+bump-patch: release-check
 	$(call section,Release $(ARROW) patch)
 	@npx commit-and-tag-version --release-as patch
 
-bump-minor: banner
+bump-minor: release-check
 	$(call section,Release $(ARROW) minor)
 	@npx commit-and-tag-version --release-as minor
 
-bump-major: banner
+bump-major: release-check
 	$(call section,Release $(ARROW) major)
 	@npx commit-and-tag-version --release-as major
 

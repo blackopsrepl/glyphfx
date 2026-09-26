@@ -27,3 +27,5 @@ jobs:
         run: python3 tools/tests/tty_compare.py
       - name: PTY runtime behavior
         run: python3 tools/tests/tty_signals.py
+      - name: Performance regression gate
+        run: make perf
