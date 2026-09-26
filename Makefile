@@ -23,7 +23,7 @@ VERSION := $(shell cat VERSION)
 CC      ?= cc
 AR      ?= ar
 PREFIX  ?= /usr/local
-CFLAGS  ?= -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
+CFLAGS  ?= -std=c17 -O3 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
 CPPFLAGS += -Isrc -Ibuild -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE
 LDFLAGS ?=
 LDLIBS  += -lm
