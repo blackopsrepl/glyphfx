@@ -1,0 +1,20 @@
+glyphfx is a port of ttfx, which is a port of TerminalTextEffects (TTE).
+
+    TerminalTextEffects
+    https://github.com/ChrisBuilds/terminaltexteffects
+    MIT License, Copyright (c) 2023 ChrisBuilds
+
+    ttfx
+    https://github.com/omacom/ttfx
+    MIT License, Copyright (c) 2026 37signals / omacom-io
+
+Every effect in this program, the animation engine's architecture, and the
+command-line interface originate with those projects. glyphfx is an
+independent C17 implementation of the same behavior; it is a parity port and
+adds no art of its own. The behavior is specified against the ttfx binary and,
+through it, the TerminalTextEffects design.
+
+The parity test suite compares glyphfx byte for byte against the ttfx binary.
+ttfx is not vendored here; tools/parity/fetch_reference.sh clones it on demand.
+
+If you enjoy these effects, the credit belongs upstream.

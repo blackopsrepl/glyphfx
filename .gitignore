@@ -1,0 +1,14 @@
+# Build artifacts
+/build/
+*.o
+*.d
+*.a
+/glyphfx
+
+# Local reference checkout (oracle, not vendored)
+/reference/
+
+# Editor / tooling
+__pycache__/
+*.pyc
+.DS_Store
