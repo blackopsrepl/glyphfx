@@ -55,10 +55,44 @@ typedef struct {
     bool added_chars;
 } CharacterFilter;
 
+typedef enum {
+    CG_COLUMN_LEFT_TO_RIGHT,
+    CG_COLUMN_RIGHT_TO_LEFT,
+    CG_ROW_TOP_TO_BOTTOM,
+    CG_ROW_BOTTOM_TO_TOP,
+    CG_DIAGONAL_BOTTOM_LEFT_TO_TOP_RIGHT,
+    CG_DIAGONAL_TOP_RIGHT_TO_BOTTOM_LEFT,
+    CG_DIAGONAL_TOP_LEFT_TO_BOTTOM_RIGHT,
+    CG_DIAGONAL_BOTTOM_RIGHT_TO_TOP_LEFT,
+    CG_CENTER_TO_OUTSIDE,
+    CG_OUTSIDE_TO_CENTER,
+} CharacterGroup;
+
+typedef enum {
+    COLOR_SORT_LEAST_TO_MOST,
+    COLOR_SORT_MOST_TO_LEAST,
+    COLOR_SORT_RANDOM,
+} ColorSort;
+
+typedef struct {
+    CharId *items;
+    size_t len;
+} CharIdBucket;
+
+typedef struct {
+    CharIdBucket *buckets;
+    size_t len;
+} CharIdGrouping;
+
+void charidgrouping_free(CharIdGrouping *g);
+
 CharacterFilter character_filter_default(void);
 // Returns a malloc'd, ordered character list (caller frees).
 CharId *terminal_get_characters(const Terminal *t, Rng *rng, CharacterFilter filter, CharacterSort sort,
                                 size_t *out_len);
+CharIdGrouping terminal_get_characters_grouped(const Terminal *t, CharacterFilter filter, CharacterGroup grouping);
+// Returns a malloc'd color list (caller frees).
+Color *terminal_get_input_colors(const Terminal *t, Rng *rng, ColorSort sort, size_t *out_len);
 
 typedef struct {
     int64_t canvas_height;
@@ -120,7 +154,7 @@ int terminal_new(Terminal *t, const char *input_data, const TerminalConfig *conf
 void terminal_free(Terminal *t);
 
 CharId terminal_get_character_by_input_coord(const Terminal *t, Coord coord);
-void terminal_add_character(Terminal *t, const char *symbol, Coord coord);
+CharId terminal_add_character(Terminal *t, const char *symbol, Coord coord);
 void terminal_set_character_visibility(Terminal *t, CharId id, bool is_visible);
 
 // Refreshes the cell buffer and returns the frame string (rows top-first,

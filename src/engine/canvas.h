@@ -9,6 +9,7 @@
 
 #include "engine/character.h"
 #include "utils/geometry.h"
+#include "utils/rng.h"
 
 typedef enum {
     ANCHOR_N,
@@ -49,6 +50,12 @@ typedef struct {
 Canvas canvas_new(int64_t top, int64_t right);
 bool canvas_coord_is_in_canvas(const Canvas *c, Coord coord);
 bool canvas_coord_is_in_text(const Canvas *c, Coord coord);
+
+int64_t canvas_random_column(const Canvas *c, Rng *rng, bool within_text_boundary);
+int64_t canvas_random_row(const Canvas *c, Rng *rng, bool within_text_boundary);
+// outside_scope picks among four coords one cell past an edge; the RNG call
+// order (above, below, left, right, then choice) is part of the contract.
+Coord canvas_random_coord(const Canvas *c, Rng *rng, bool outside_scope, bool within_text_boundary);
 
 // Shifts characters per the anchor, drops out-of-canvas ones, then computes
 // text extents. Returns 0 and sets *out_kept/*out_n on success; -1 on

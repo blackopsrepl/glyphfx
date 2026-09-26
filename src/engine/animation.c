@@ -180,6 +180,22 @@ static bool iq_peek_front(const IndexDeque *q, size_t *out) {
     return true;
 }
 
+bool iq_at(const IndexDeque *q, size_t index, size_t *out) {
+    if (index >= q->len) {
+        return false;
+    }
+    *out = q->items[q->head + index];
+    return true;
+}
+
+bool iq_back(const IndexDeque *q, size_t *out) {
+    if (q->len == 0) {
+        return false;
+    }
+    *out = q->items[q->head + q->len - 1];
+    return true;
+}
+
 void iq_append(IndexDeque *dst, IndexDeque *src) {
     size_t v;
     while (iq_pop_front(src, &v)) {
@@ -189,8 +205,8 @@ void iq_append(IndexDeque *dst, IndexDeque *src) {
 
 // --- Scene ----------------------------------------------------------------
 
-static Scene *scene_new(const char *scene_id, bool is_looping, bool has_sync, SyncMetric sync, const Easing *ease,
-                        bool no_color, bool use_xterm_colors) {
+static Scene *scene_new(const char *scene_id, bool is_looping, bool has_sync, SyncMetric sync, bool has_ease,
+                        Easing ease, bool no_color, bool use_xterm_colors) {
     Scene *scene = calloc(1, sizeof(Scene));
     if (!scene) {
         return NULL;
@@ -201,6 +217,7 @@ static Scene *scene_new(const char *scene_id, bool is_looping, bool has_sync, Sy
     scene->use_xterm_colors = use_xterm_colors;
     scene->has_sync = has_sync;
     scene->sync = sync;
+    scene->has_ease = has_ease;
     scene->ease = ease;
     iq_init(&scene->frames);
     iq_init(&scene->played_frames);
@@ -547,8 +564,8 @@ void animation_set_appearance(Animation *anim, bool uses_input_preexisting_color
     vis_init(&anim->current_visual, use_symbol, &params);
 }
 
-const char *animation_new_scene(Animation *anim, bool is_looping, bool has_sync, SyncMetric sync, const Easing *ease,
-                                const char *scene_id, bool uses_input_preexisting_colors) {
+const char *animation_new_scene(Animation *anim, bool is_looping, bool has_sync, SyncMetric sync, bool has_ease,
+                                Easing ease, const char *scene_id, bool uses_input_preexisting_colors) {
     char auto_id[32];
     if (scene_id == NULL || scene_id[0] == '\0') {
         size_t current_id = om_len(&anim->scenes);
@@ -561,7 +578,8 @@ const char *animation_new_scene(Animation *anim, bool is_looping, bool has_sync,
         }
         scene_id = auto_id;
     }
-    Scene *scene = scene_new(scene_id, is_looping, has_sync, sync, ease, anim->no_color, anim->use_xterm_colors);
+    Scene *scene = scene_new(scene_id, is_looping, has_sync, sync, has_ease, ease, anim->no_color,
+                             anim->use_xterm_colors);
     if (!scene) {
         return NULL;
     }
@@ -593,4 +611,11 @@ Scene *animation_active_scene(Animation *anim) {
         return NULL;
     }
     return (Scene *)om_get(&anim->scenes, anim->active_scene);
+}
+
+void animation_clear_scenes(Animation *anim) {
+    for (size_t i = 0; i < om_len(&anim->scenes); i++) {
+        scene_free((Scene *)om_value_at(&anim->scenes, i));
+    }
+    om_clear(&anim->scenes);
 }

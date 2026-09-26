@@ -12,14 +12,14 @@
 #include "engine/animation.h"
 #include "engine/charid.h"
 #include "engine/events.h"
+#include "engine/motion.h"
 #include "utils/geometry.h"
 
 typedef struct {
     uint32_t character_id;  // Python-compatible allocation id; ordering key
     char *input_symbol;     // owned
     Coord input_coord;
-    Coord motion_coord;
-    bool has_active_path;
+    Motion motion;
     bool is_visible;
     bool has_input_fg_seq;
     char *input_ansi_fg_sequence;  // owned
@@ -30,6 +30,9 @@ typedef struct {
     bool uses_input_preexisting_colors;
     Animation animation;
     EventHandler event_handler;
+    CharId *links;  // ascending by id, owned
+    size_t links_len;
+    size_t links_cap;
     CharId north;
     CharId east;
     CharId south;

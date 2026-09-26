@@ -18,7 +18,7 @@ void character_init(EffectCharacter *ch, uint32_t character_id, const char *symb
     ch->character_id = character_id;
     ch->input_symbol = dup_cstr(symbol);
     ch->input_coord = coord_new(column, row);
-    ch->motion_coord = coord_new(column, row);
+    motion_init(&ch->motion, coord_new(column, row));
     ch->north = CHAR_ID_NONE;
     ch->east = CHAR_ID_NONE;
     ch->south = CHAR_ID_NONE;
@@ -32,12 +32,13 @@ void character_free(EffectCharacter *ch) {
     free(ch->input_ansi_bg_sequence);
     animation_free(&ch->animation);
     event_handler_free(&ch->event_handler);
+    free(ch->links);
+    motion_free(&ch->motion);
     memset(ch, 0, sizeof(*ch));
 }
 
 bool character_is_active(const EffectCharacter *ch) {
-    bool movement_complete = !ch->has_active_path;
-    if (!movement_complete) {
+    if (!motion_movement_is_complete(&ch->motion)) {
         return true;
     }
     return !animation_active_scene_is_complete(&ch->animation);

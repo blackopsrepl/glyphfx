@@ -446,7 +446,7 @@ CharId terminal_get_character_by_input_coord(const Terminal *t, Coord coord) {
     return map_get(t, coord);
 }
 
-void terminal_add_character(Terminal *t, const char *symbol, Coord coord) {
+CharId terminal_add_character(Terminal *t, const char *symbol, Coord coord) {
     CharId id = arena_alloc(&t->arena);
     EffectCharacter *ch = &t->arena.items[id];
     character_init(ch, t->next_character_id, symbol, coord.column, coord.row);
@@ -457,7 +457,7 @@ void terminal_add_character(Terminal *t, const char *symbol, Coord coord) {
     ch->uses_input_preexisting_colors = false;
     t->added_characters = realloc(t->added_characters, (t->added_characters_len + 1) * sizeof(CharId));
     t->added_characters[t->added_characters_len++] = id;
-    t->visible_positions_len = t->arena.len;
+    return id;
 }
 
 void terminal_set_character_visibility(Terminal *t, CharId id, bool is_visible) {
@@ -509,8 +509,8 @@ static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_heig
     for (size_t i = 0; i < t->visible_characters_len; i++) {
         CharId id = t->visible_characters[i];
         EffectCharacter *ch = &t->arena.items[id];
-        int64_t row = ch->motion_coord.row + t->canvas_row_offset;
-        int64_t column = ch->motion_coord.column + t->canvas_column_offset;
+        int64_t row = ch->motion.current_coord.row + t->canvas_row_offset;
+        int64_t column = ch->motion.current_coord.column + t->canvas_column_offset;
         if (t->visible_bottom <= row && row <= t->visible_top && t->visible_left <= column &&
             column <= t->visible_right) {
             size_t cell_index = (size_t)(row - 1) * width + (size_t)(column - 1);
@@ -740,4 +740,200 @@ CharId *terminal_get_characters(const Terminal *t, Rng *rng, CharacterFilter fil
     }
     *out_len = n;
     return all;
+}
+
+// --- grouped queries ------------------------------------------------------
+
+void charidgrouping_free(CharIdGrouping *g) {
+    for (size_t i = 0; i < g->len; i++) {
+        free(g->buckets[i].items);
+    }
+    free(g->buckets);
+    g->buckets = NULL;
+    g->len = 0;
+}
+
+static CharIdGrouping ordered_buckets(const CharId *chars, size_t n, int64_t first_key, int64_t last_key,
+                                      const int64_t *keys) {
+    CharIdGrouping out;
+    out.buckets = NULL;
+    out.len = 0;
+    if (first_key > last_key) {
+        return out;
+    }
+    int64_t span = last_key - first_key + 1;
+    size_t bucket_count = (size_t)span;
+    CharIdBucket *buckets = calloc(bucket_count, sizeof(CharIdBucket));
+    for (size_t i = 0; i < n; i++) {
+        int64_t key = keys[i];
+        if (key >= first_key && key <= last_key) {
+            size_t b = (size_t)(key - first_key);
+            CharIdBucket *bucket = &buckets[b];
+            bucket->items = realloc(bucket->items, (bucket->len + 1) * sizeof(CharId));
+            bucket->items[bucket->len++] = chars[i];
+        }
+    }
+    for (size_t i = 0; i < bucket_count; i++) {
+        if (buckets[i].len > 0) {
+            if (out.len == 0) {
+                out.buckets = malloc(sizeof(CharIdBucket));
+            } else {
+                out.buckets = realloc(out.buckets, (out.len + 1) * sizeof(CharIdBucket));
+            }
+            out.buckets[out.len++] = buckets[i];
+        } else {
+            free(buckets[i].items);
+        }
+    }
+    free(buckets);
+    return out;
+}
+
+CharIdGrouping terminal_get_characters_grouped(const Terminal *t, CharacterFilter filter, CharacterGroup grouping) {
+    size_t n = 0;
+    CharId *all = terminal_get_characters(t, NULL, filter, CS_TOP_TO_BOTTOM_LEFT_TO_RIGHT, &n);
+    // reference re-sorts by (row, column) here, replacing the default (-row,col)
+    stable_sort_ids(all, n, &t->arena, 1);
+    int64_t *keys = malloc((n ? n : 1) * sizeof(int64_t));
+    CharIdGrouping out;
+    out.buckets = NULL;
+    out.len = 0;
+    switch (grouping) {
+        case CG_COLUMN_LEFT_TO_RIGHT:
+        case CG_COLUMN_RIGHT_TO_LEFT:
+            for (size_t i = 0; i < n; i++) keys[i] = t->arena.items[all[i]].input_coord.column;
+            out = ordered_buckets(all, n, 0, t->canvas.right, keys);
+            if (grouping == CG_COLUMN_RIGHT_TO_LEFT) {
+                for (size_t i = 0; i < out.len / 2; i++) {
+                    CharIdBucket tmp = out.buckets[i];
+                    out.buckets[i] = out.buckets[out.len - 1 - i];
+                    out.buckets[out.len - 1 - i] = tmp;
+                }
+            }
+            break;
+        case CG_ROW_BOTTOM_TO_TOP:
+        case CG_ROW_TOP_TO_BOTTOM:
+            for (size_t i = 0; i < n; i++) keys[i] = t->arena.items[all[i]].input_coord.row;
+            out = ordered_buckets(all, n, 0, t->canvas.top, keys);
+            if (grouping == CG_ROW_TOP_TO_BOTTOM) {
+                for (size_t i = 0; i < out.len / 2; i++) {
+                    CharIdBucket tmp = out.buckets[i];
+                    out.buckets[i] = out.buckets[out.len - 1 - i];
+                    out.buckets[out.len - 1 - i] = tmp;
+                }
+            }
+            break;
+        case CG_DIAGONAL_BOTTOM_LEFT_TO_TOP_RIGHT:
+        case CG_DIAGONAL_TOP_RIGHT_TO_BOTTOM_LEFT:
+            for (size_t i = 0; i < n; i++) {
+                Coord c = t->arena.items[all[i]].input_coord;
+                keys[i] = c.row + c.column;
+            }
+            out = ordered_buckets(all, n, 0, t->canvas.top + t->canvas.right, keys);
+            if (grouping == CG_DIAGONAL_TOP_RIGHT_TO_BOTTOM_LEFT) {
+                for (size_t i = 0; i < out.len / 2; i++) {
+                    CharIdBucket tmp = out.buckets[i];
+                    out.buckets[i] = out.buckets[out.len - 1 - i];
+                    out.buckets[out.len - 1 - i] = tmp;
+                }
+            }
+            break;
+        case CG_DIAGONAL_TOP_LEFT_TO_BOTTOM_RIGHT:
+        case CG_DIAGONAL_BOTTOM_RIGHT_TO_TOP_LEFT:
+            for (size_t i = 0; i < n; i++) {
+                Coord c = t->arena.items[all[i]].input_coord;
+                keys[i] = c.column - c.row;
+            }
+            out = ordered_buckets(all, n, t->canvas.left - t->canvas.top, t->canvas.right - t->canvas.bottom, keys);
+            if (grouping == CG_DIAGONAL_BOTTOM_RIGHT_TO_TOP_LEFT) {
+                for (size_t i = 0; i < out.len / 2; i++) {
+                    CharIdBucket tmp = out.buckets[i];
+                    out.buckets[i] = out.buckets[out.len - 1 - i];
+                    out.buckets[out.len - 1 - i] = tmp;
+                }
+            }
+            break;
+        case CG_CENTER_TO_OUTSIDE:
+        case CG_OUTSIDE_TO_CENTER: {
+            int64_t max_distance = -1;
+            for (size_t i = 0; i < n; i++) {
+                Coord c = t->arena.items[all[i]].input_coord;
+                int64_t d = llabs(c.column - t->canvas.text_center.column) +
+                            llabs(c.row - t->canvas.text_center.row);
+                keys[i] = d;
+                if (d > max_distance) max_distance = d;
+            }
+            size_t dense_limit = n * 4 > 256 ? n * 4 : 256;
+            if (max_distance >= 0 && (size_t)max_distance <= dense_limit) {
+                out = ordered_buckets(all, n, 0, max_distance, keys);
+            } else {
+                // sparse: bucket by distinct distance, ascending
+                for (size_t i = 1; i < n; i++) {
+                    int64_t k = keys[i];
+                    CharId id = all[i];
+                    size_t j = i;
+                    while (j > 0 && keys[j - 1] > k) {
+                        keys[j] = keys[j - 1];
+                        all[j] = all[j - 1];
+                        j--;
+                    }
+                    keys[j] = k;
+                    all[j] = id;
+                }
+                size_t cap = 0;
+                for (size_t i = 0; i < n;) {
+                    size_t j = i;
+                    while (j < n && keys[j] == keys[i]) j++;
+                    if (out.len == cap) {
+                        cap = cap ? cap * 2 : 8;
+                        out.buckets = realloc(out.buckets, cap * sizeof(CharIdBucket));
+                    }
+                    CharIdBucket bucket;
+                    bucket.len = j - i;
+                    bucket.items = malloc(bucket.len * sizeof(CharId));
+                    memcpy(bucket.items, all + i, bucket.len * sizeof(CharId));
+                    out.buckets[out.len++] = bucket;
+                    i = j;
+                }
+            }
+            if (grouping == CG_OUTSIDE_TO_CENTER) {
+                for (size_t i = 0; i < out.len / 2; i++) {
+                    CharIdBucket tmp = out.buckets[i];
+                    out.buckets[i] = out.buckets[out.len - 1 - i];
+                    out.buckets[out.len - 1 - i] = tmp;
+                }
+            }
+            break;
+        }
+    }
+    free(keys);
+    return out;
+}
+
+Color *terminal_get_input_colors(const Terminal *t, Rng *rng, ColorSort sort, size_t *out_len) {
+    size_t n = t->input_colors_frequency.len;
+    ColorFreqEntry *entries = malloc((n ? n : 1) * sizeof(ColorFreqEntry));
+    memcpy(entries, t->input_colors_frequency.items, n * sizeof(ColorFreqEntry));
+    if (sort == COLOR_SORT_RANDOM) {
+        rng_shuffle(rng, entries, n, sizeof(ColorFreqEntry));
+    } else {
+        bool desc = sort == COLOR_SORT_MOST_TO_LEAST;
+        // stable insertion sort by count, descending or ascending
+        for (size_t i = 1; i < n; i++) {
+            ColorFreqEntry e = entries[i];
+            size_t j = i;
+            while (j > 0 && (desc ? entries[j - 1].count < e.count : entries[j - 1].count > e.count)) {
+                entries[j] = entries[j - 1];
+                j--;
+            }
+            entries[j] = e;
+        }
+    }
+    Color *out = malloc((n ? n : 1) * sizeof(Color));
+    for (size_t i = 0; i < n; i++) {
+        out[i] = entries[i].color;
+    }
+    free(entries);
+    *out_len = n;
+    return out;
 }

@@ -9,6 +9,7 @@
 #include <stddef.h>
 
 #include "utils/ansi.h"
+#include "utils/easing.h"
 #include "utils/graphics.h"
 #include "utils/ordmap.h"
 
@@ -22,9 +23,6 @@ typedef enum {
     SYNC_DISTANCE,
     SYNC_STEP,
 } SyncMetric;
-
-// Opaque here; defined in utils/easing.h.
-typedef struct Easing Easing;
 
 typedef struct {
     bool bold;
@@ -86,6 +84,8 @@ void iq_init(IndexDeque *q);
 void iq_free(IndexDeque *q);
 void iq_push_back(IndexDeque *q, size_t v);
 bool iq_pop_front(IndexDeque *q, size_t *out);
+bool iq_at(const IndexDeque *q, size_t index, size_t *out);
+bool iq_back(const IndexDeque *q, size_t *out);
 void iq_append(IndexDeque *dst, IndexDeque *src);
 static inline size_t iq_len(const IndexDeque *q) {
     return q->len;
@@ -98,7 +98,8 @@ typedef struct {
     bool use_xterm_colors;
     bool has_sync;
     SyncMetric sync;
-    const Easing *ease;
+    bool has_ease;
+    Easing ease;
     Frame *all_frames;
     size_t all_frames_len;
     size_t all_frames_cap;
@@ -137,10 +138,12 @@ void animation_free(Animation *anim);
 void animation_set_appearance(Animation *anim, bool uses_input_preexisting_colors, const char *symbol,
                               const ColorPair *colors);
 // Returns a stable pointer to the interned scene id (NULL on failure).
-const char *animation_new_scene(Animation *anim, bool is_looping, bool has_sync, SyncMetric sync,
-                                const Easing *ease, const char *scene_id, bool uses_input_preexisting_colors);
+const char *animation_new_scene(Animation *anim, bool is_looping, bool has_sync, SyncMetric sync, bool has_ease,
+                                Easing ease, const char *scene_id, bool uses_input_preexisting_colors);
 bool animation_active_scene_is_complete(const Animation *anim);
 Scene *animation_active_scene(Animation *anim);
+// Removes every scene (used by particle reset).
+void animation_clear_scenes(Animation *anim);
 
 // Scene operations.
 void scene_free(Scene *scene);

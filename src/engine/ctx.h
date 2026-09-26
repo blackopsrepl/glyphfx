@@ -35,6 +35,12 @@ void engine_tick(EngineCtx *ctx, Effect *effect, CharId id);
 void engine_update(EngineCtx *ctx, Effect *effect);
 char *engine_frame(EngineCtx *ctx);
 void engine_handle_event(EngineCtx *ctx, Effect *effect, CharId id, Event event, const CallerKey *caller);
+void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char *path_id);
+// Builds the waypoint caller key used to register/match segment events.
+void engine_caller_from_waypoint(const Waypoint *wp, CallerKey *out);
+// Returns 0 on success, -1 on duplicate registration.
+int engine_register_event(EngineCtx *ctx, CharId id, Event event, const CallerKey *caller, const EventAction *action);
+int engine_chain_paths(EngineCtx *ctx, CharId id, const char *const *paths, size_t n_paths, bool loop);
 
 int effect_dump(Effect *effect, EngineCtx *ctx, bool has_max_frames, uint64_t max_frames);
 int effect_run(Effect *effect, EngineCtx *ctx, bool tty_output);

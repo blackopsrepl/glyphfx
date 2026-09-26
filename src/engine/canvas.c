@@ -65,6 +65,33 @@ bool canvas_coord_is_in_text(const Canvas *c, Coord coord) {
            coord.row <= c->text_top;
 }
 
+int64_t canvas_random_column(const Canvas *c, Rng *rng, bool within_text_boundary) {
+    if (within_text_boundary) {
+        return rng_randint(rng, c->text_left, c->text_right);
+    }
+    return rng_randint(rng, c->left, c->right);
+}
+
+int64_t canvas_random_row(const Canvas *c, Rng *rng, bool within_text_boundary) {
+    if (within_text_boundary) {
+        return rng_randint(rng, c->text_bottom, c->text_top);
+    }
+    return rng_randint(rng, c->bottom, c->top);
+}
+
+Coord canvas_random_coord(const Canvas *c, Rng *rng, bool outside_scope, bool within_text_boundary) {
+    if (outside_scope) {
+        Coord above = coord_new(canvas_random_column(c, rng, false), c->top + 1);
+        Coord below = coord_new(canvas_random_column(c, rng, false), c->bottom - 1);
+        Coord left = coord_new(c->left - 1, canvas_random_row(c, rng, false));
+        Coord right = coord_new(c->right + 1, canvas_random_row(c, rng, false));
+        Coord options[4] = {above, below, left, right};
+        return options[rng_choice_index(rng, 4)];
+    }
+    return coord_new(canvas_random_column(c, rng, within_text_boundary),
+                     canvas_random_row(c, rng, within_text_boundary));
+}
+
 int canvas_anchor_text(Canvas *canvas, Arena *arena, CharId *chars, size_t n, Anchor anchor, CharId **out_kept,
                        size_t *out_n) {
     if (n == 0) {
@@ -127,7 +154,7 @@ int canvas_anchor_text(Canvas *canvas, Arena *arena, CharId *chars, size_t n, An
         EffectCharacter *ch = &arena->items[chars[i]];
         Coord anchored = coord_new(ch->input_coord.column + column_delta, ch->input_coord.row + row_delta);
         ch->input_coord = anchored;
-        ch->motion_coord = anchored;
+        motion_set_coordinate(&ch->motion, anchored);
     }
 
     CharId *kept = malloc((n ? n : 1) * sizeof(CharId));
