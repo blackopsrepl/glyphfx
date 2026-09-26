@@ -12,7 +12,7 @@ OBJS := $(patsubst src/%.c,$(BUILD)/%.o,$(SRCS))
 LIB_OBJS := $(patsubst src/%.c,$(BUILD)/%.o,$(LIB_SRCS))
 DEPS := $(OBJS:.o=.d)
 
-.PHONY: all clean check parity release debug test
+.PHONY: all clean check parity effects release debug test
 
 all: $(BUILD)/glyphfx
 
@@ -45,6 +45,12 @@ test: check
 
 parity: $(BUILD)/glyphfx
 	@tools/parity/run_m0.sh
+
+effects: $(BUILD)/glyphfx
+	@fail=0; for f in tools/parity/cases/*.txt; do \
+		e=$$(basename $$f .txt); \
+		tools/parity/run_effects.sh $$e || fail=1; \
+	done; exit $$fail
 
 release: CFLAGS += -DNDEBUG
 release: $(BUILD)/glyphfx
