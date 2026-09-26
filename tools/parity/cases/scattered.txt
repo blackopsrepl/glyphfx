@@ -1,0 +1,16 @@
+# scattered parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+42  |      | --movement-speed 0.2
+42  |      | --movement-easing out_bounce
+42  |      | --final-gradient-frames 3
+42  |      | --final-gradient-direction horizontal --final-gradient-steps 5
+1   |      |
+7   |      |
+123 |      |
+42  | --xterm-colors |
+42  | --existing-color-handling always |
+42  | --existing-color-handling dynamic |
+42  | --existing-color-handling dynamic | --movement-speed 0.3
+42  | --canvas-width 20 --canvas-height 8 |
+42  | --anchor-canvas nw --anchor-text c |

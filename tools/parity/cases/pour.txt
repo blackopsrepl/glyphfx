@@ -1,0 +1,19 @@
+# pour parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+42  |      | --pour-direction up
+42  |      | --pour-direction left
+42  |      | --pour-direction right
+42  |      | --pour-speed 4
+42  |      | --gap 3
+42  |      | --movement-speed-range 0.2-0.3 --movement-easing out_bounce
+42  |      | --starting-color FF0000 --final-gradient-direction horizontal --final-gradient-steps 5
+1   |      |
+7   |      |
+123 |      |
+42  | --xterm-colors |
+42  | --existing-color-handling always |
+42  | --existing-color-handling dynamic |
+42  | --existing-color-handling dynamic | --pour-direction left
+42  | --canvas-width 20 --canvas-height 8 |
+42  | --anchor-canvas nw --anchor-text c |
