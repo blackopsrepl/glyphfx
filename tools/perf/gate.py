@@ -15,17 +15,16 @@ Nothing that cannot be verified is allowed to pass:
   * --update refuses to record a run that regressed or changed output, unless
     --force is given, and it only ever lowers a time (tightens the bar).
 
-The gate is a threshold on measured wall time with zero tolerance: any effect
-slower than its baseline fails. The baseline is only ever lowered, so the bar
-rises with every improvement. Because wall time is noisy on a shared machine,
-re-baseline deliberately with --update after a verified change; never raise a
-threshold to pass.
+The gate has no tolerance: any effect whose measured time exceeds its baseline
+fails. The baseline is only ever lowered, so the bar rises with every verified
+improvement. Re-baseline deliberately with --update after a verified change;
+never widen the threshold to pass.
 
 Baseline: tools/perf/baseline.tsv, machine-keyed, one row per effect:
     <effect>\t<best_of_ms>\t<frames>\t<sha256-of-parity-stream>
 
 Usage:
-  tools/perf/gate.py [--runs N] [--tol F] [--floor-ms MS] [--binary PATH] [--allow-machine]
+  tools/perf/gate.py [--runs N] [--binary PATH] [--allow-machine]
   tools/perf/gate.py --update [--force]
 """
 from __future__ import annotations
@@ -177,9 +176,6 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--binary", default=str(ROOT / "build/glyphfx"))
     ap.add_argument("--runs", type=int, default=5)
-    ap.add_argument("--tol", type=float, default=0.0)
-    ap.add_argument("--floor-ms", type=float, default=0.0,
-                    help="absolute allowance in ms; zero by default")
     ap.add_argument("--allow-machine", action="store_true",
                     help="do not fail when the baseline was recorded on another CPU")
     ap.add_argument("--update", action="store_true", help="tighten the baseline to this run")
@@ -211,8 +207,7 @@ def main() -> int:
         print("  fail-closed: re-baseline on this machine, or pass --allow-machine", file=sys.stderr)
         return 3
 
-    print(f"perf gate: {len(EFFECTS)} effects, best of {a.runs}, "
-          f"tol {a.tol:.0%}+{a.floor_ms:.0f}ms, machine {key}")
+    print(f"perf gate: {len(EFFECTS)} effects, best of {a.runs}, machine {key}")
     measured: dict[str, tuple[float, int, str]] = {}
     regressions: list[tuple[str, float, float]] = []
     try:
@@ -224,7 +219,7 @@ def main() -> int:
                     raise GateError(f"{e}: parity stream changed ({frames} frames, {sha[:12]})")
             ms = time_run(a.binary, e, data, env, a.runs)
             measured[e] = (ms, frames, sha)
-            if base is not None and ms > base[0] * (1.0 + a.tol) and ms > base[0] + a.floor_ms:
+            if base is not None and ms > base[0]:
                 regressions.append((e, base[0], ms))
                 mark = f"REGRESSED (baseline {base[0]:.1f})"
             else:
@@ -252,7 +247,7 @@ def main() -> int:
         return 0
 
     if regressions:
-        print(f"\nperf gate FAILED: {len(regressions)} regression(s) beyond {a.tol:.0%}")
+        print(f"\nperf gate FAILED: {len(regressions)} regression(s) vs baseline")
         for e, base, ms in regressions:
             print(f"  {e}: {base:.1f} -> {ms:.1f} ms (+{100 * (ms / base - 1):.0f}%)")
         return 1
