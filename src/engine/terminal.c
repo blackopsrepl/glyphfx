@@ -907,6 +907,7 @@ CharIdGrouping terminal_get_characters_grouped(const Terminal *t, CharacterFilte
         }
     }
     free(keys);
+    free(all);
     return out;
 }
 

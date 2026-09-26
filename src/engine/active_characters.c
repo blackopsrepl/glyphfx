@@ -70,7 +70,9 @@ bool ac_insert(ActiveCharacters *ac, CharId id) {
         ac->items = grown;
         ac->cap = cap;
     }
-    memmove(ac->items + lo + 1, ac->items + lo, (ac->len - lo) * sizeof(CharId));
+    if (ac->len > lo) {
+        memmove(ac->items + lo + 1, ac->items + lo, (ac->len - lo) * sizeof(CharId));
+    }
     ac->items[lo] = id;
     ac->len++;
     return true;
@@ -81,7 +83,9 @@ bool ac_remove(ActiveCharacters *ac, CharId id) {
     if (idx < 0) {
         return false;
     }
-    memmove(ac->items + idx, ac->items + idx + 1, (ac->len - (size_t)idx - 1) * sizeof(CharId));
+    if (ac->len > (size_t)idx + 1) {
+        memmove(ac->items + idx, ac->items + idx + 1, (ac->len - (size_t)idx - 1) * sizeof(CharId));
+    }
     ac->len--;
     return true;
 }

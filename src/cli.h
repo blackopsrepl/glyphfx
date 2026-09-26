@@ -50,6 +50,7 @@ typedef enum {
     EF_CHAR_GROUP,
     EF_COLOR_LIST,
     EF_INT_LIST,
+    EF_STRING_LIST,
     EF_INT_RANGE,
     EF_FLOAT_RANGE,
     EF_CUSTOM,
@@ -91,6 +92,14 @@ typedef struct {
     size_t cap;
     bool provided;
 } IntList;
+
+// A list of single-codepoint symbols (reference Vec<String> parse_symbol).
+typedef struct {
+    char **items;
+    size_t len;
+    size_t cap;
+    bool provided;
+} StringList;
 
 // Returns 0 on success, 2 on usage error (message already written to stderr),
 // or 1 for a runtime error that terminates before any input handling.

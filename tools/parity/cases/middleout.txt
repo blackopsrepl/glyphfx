@@ -1,0 +1,10 @@
+# middleout parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+7   |      |
+1   |      | --expand-direction horizontal
+42  |      | --starting-color FF0000 --full-movement-speed 1.1
+42  |      | --center-easing out_bounce --full-easing in_out_bounce
+42  | --existing-color-handling dynamic |
+42  | --xterm-colors |
+42  | --canvas-width 20 --canvas-height 8 | --expand-direction horizontal --center-movement-speed 1.0 --final-gradient-steps 5

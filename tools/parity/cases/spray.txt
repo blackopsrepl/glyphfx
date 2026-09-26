@@ -1,0 +1,10 @@
+# spray parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+7   |      |
+1   |      | --spray-position center
+42  |      | --spray-position nw
+42  |      | --spray-volume 0.5 --movement-speed-range 0.2-0.4
+42  |      | --spray-position se --movement-easing out_bounce
+42  | --existing-color-handling dynamic |
+42  | --xterm-colors --canvas-width 20 --canvas-height 8 | --spray-position n

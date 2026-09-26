@@ -1,0 +1,10 @@
+# slide parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+7   |      |
+1   |      | --grouping column
+42  |      | --grouping diagonal
+42  |      | --grouping row --reverse-direction
+42  |      | --grouping column --merge --gap 0
+42  | --existing-color-handling dynamic |
+42  | --xterm-colors --canvas-width 20 --canvas-height 8 | --grouping diagonal --movement-speed 1.2

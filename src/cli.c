@@ -422,6 +422,29 @@ static int eff_assign(const EffectEntry *entry, void *cfg, const EffOptSpec *spe
             list_int_append(list, v);
             return 0;
         }
+        case EF_STRING_LIST: {
+            StringList *list = (StringList *)(base + spec->offset);
+            if (utf8_count_codepoints(value) != 1) {
+                usage_error("invalid symbol '%s': must be a single character", value);
+                return 2;
+            }
+            if (!list->provided) {
+                for (size_t i = 0; i < list->len; i++) {
+                    free(list->items[i]);
+                }
+                list->len = 0;
+                list->provided = true;
+            }
+            if (list->len == list->cap) {
+                size_t cap = list->cap ? list->cap * 2 : 4;
+                list->items = realloc(list->items, cap * sizeof(char *));
+                list->cap = cap;
+            }
+            list->items[list->len] = malloc(strlen(value) + 1);
+            strcpy(list->items[list->len], value);
+            list->len++;
+            return 0;
+        }
         case EF_EASING: {
             Easing e;
             if (!easing_parse(value, &e)) {
@@ -564,7 +587,7 @@ static int parse_effect_args(const EffectEntry *entry, void *cfg, int argc, char
                 }
                 continue;
             }
-            if (spec->kind == EF_COLOR_LIST || spec->kind == EF_INT_LIST) {
+            if (spec->kind == EF_COLOR_LIST || spec->kind == EF_INT_LIST || spec->kind == EF_STRING_LIST) {
                 // Consume one or more values until the next option.
                 int consumed = 0;
                 if (value) {

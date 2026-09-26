@@ -385,8 +385,9 @@ void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id) {
             free(ch->motion.completed_path);
             ch->motion.completed_path = completed;
             motion_deactivate_path(&ch->motion, active);
+            // `active` points into the freed active_path; use the owned copy.
             if (observes_event(ctx, id, EVENT_PATH_COMPLETE)) {
-                CallerKey caller = path_caller(active);
+                CallerKey caller = path_caller(completed);
                 engine_handle_event(ctx, effect, id, EVENT_PATH_COMPLETE, &caller);
             }
         }
