@@ -121,8 +121,6 @@ static void vis_destroy(CharacterVisual *vis) {
 
 typedef struct {
     uint64_t hash;
-    char *key;
-    size_t key_len;
     CharacterVisual *vis;  // NULL marks a deleted slot (occupied but free)
     bool occupied;
 } VisPoolSlot;
@@ -133,68 +131,84 @@ static size_t g_pool_live;
 static size_t g_pool_used;
 static bool g_pool_atexit;
 
-static uint64_t hash_bytes(const char *p, size_t n) {
-    uint64_t h = 1469598103934665603ULL;
+static uint64_t hash_mix(uint64_t h, const void *p, size_t n) {
+    const unsigned char *b = p;
     for (size_t i = 0; i < n; i++) {
-        h ^= (unsigned char)p[i];
+        h ^= b[i];
         h *= 1099511628211ULL;
     }
     return h;
 }
 
-static size_t key_put(char *buf, size_t n, const void *p, size_t k) {
-    memcpy(buf + n, p, k);
-    return n + k;
+static uint8_t color_hex_len(const Color *c) {
+    return c->hex_len > sizeof(c->hex) ? (uint8_t)sizeof(c->hex) : c->hex_len;
 }
 
-static size_t key_u8(char *buf, size_t n, uint8_t v) {
-    buf[n] = (char)v;
-    return n + 1;
-}
-
-static size_t key_color(char *buf, size_t n, const Color *c) {
-    n = key_u8(buf, n, c->is_xterm);
-    n = key_u8(buf, n, c->xterm);
-    uint8_t hl = c->hex_len;
-    if (hl > sizeof(c->hex)) {
-        hl = sizeof(c->hex);
+// A cheap, defined hash over the appearance. It need not be exact: correctness
+// comes from vis_matches(), so a hash collision costs a comparison, never a
+// wrong merge.
+static uint64_t vis_hash(const char *symbol, const VisualParams *p) {
+    uint64_t h = 14695981039346656037ULL;
+    for (const unsigned char *s = (const unsigned char *)symbol; *s; s++) {
+        h ^= *s;
+        h *= 1099511628211ULL;
     }
-    n = key_u8(buf, n, hl);
-    n = key_put(buf, n, c->hex, hl);
-    n = key_put(buf, n, c->rgb, 3);
-    return n;
+    h = hash_mix(h, &p->bold, 9);  // eight attributes plus has_colors
+    h = hash_mix(h, &p->colors.has_fg, 1);
+    h = hash_mix(h, &p->colors.fg.is_xterm, 2);
+    h = hash_mix(h, &p->colors.fg.hex_len, 1);
+    h = hash_mix(h, p->colors.fg.hex, color_hex_len(&p->colors.fg));
+    h = hash_mix(h, p->colors.fg.rgb, 3);
+    h = hash_mix(h, &p->colors.has_bg, 1);
+    h = hash_mix(h, &p->colors.bg.is_xterm, 2);
+    h = hash_mix(h, &p->colors.bg.hex_len, 1);
+    h = hash_mix(h, p->colors.bg.hex, color_hex_len(&p->colors.bg));
+    h = hash_mix(h, p->colors.bg.rgb, 3);
+    h = hash_mix(h, &p->has_fg_code, 1);
+    h = hash_mix(h, &p->fg_code.kind, sizeof(p->fg_code.kind));
+    h = hash_mix(h, &p->fg_code.xterm, 1);
+    h = hash_mix(h, p->fg_code.hex, sizeof(p->fg_code.hex));
+    h = hash_mix(h, &p->has_bg_code, 1);
+    h = hash_mix(h, &p->bg_code.kind, sizeof(p->bg_code.kind));
+    h = hash_mix(h, &p->bg_code.xterm, 1);
+    h = hash_mix(h, p->bg_code.hex, sizeof(p->bg_code.hex));
+    return h;
 }
 
-static size_t key_code(char *buf, size_t n, const ColorCode *c) {
-    n = key_u8(buf, n, (uint8_t)c->kind);
-    n = key_u8(buf, n, c->xterm);
-    n = key_put(buf, n, c->hex, sizeof(c->hex));
-    return n;
+static bool color_key_eq(const Color *a, const Color *b) {
+    if (a->is_xterm != b->is_xterm || a->xterm != b->xterm) {
+        return false;
+    }
+    uint8_t ha = color_hex_len(a);
+    uint8_t hb = color_hex_len(b);
+    if (ha != hb) {
+        return false;
+    }
+    if (ha && memcmp(a->hex, b->hex, ha) != 0) {
+        return false;
+    }
+    return a->rgb[0] == b->rgb[0] && a->rgb[1] == b->rgb[1] && a->rgb[2] == b->rgb[2];
 }
 
-static size_t vis_key(char *buf, const char *symbol, const VisualParams *p) {
-    size_t n = 0;
-    size_t sl = strlen(symbol);
-    n = key_put(buf, n, symbol, sl);
-    n = key_u8(buf, n, 0);
-    n = key_u8(buf, n, p->bold);
-    n = key_u8(buf, n, p->dim);
-    n = key_u8(buf, n, p->italic);
-    n = key_u8(buf, n, p->underline);
-    n = key_u8(buf, n, p->blink);
-    n = key_u8(buf, n, p->reverse);
-    n = key_u8(buf, n, p->hidden);
-    n = key_u8(buf, n, p->strike);
-    n = key_u8(buf, n, p->has_colors);
-    n = key_u8(buf, n, p->colors.has_fg);
-    n = key_color(buf, n, &p->colors.fg);
-    n = key_u8(buf, n, p->colors.has_bg);
-    n = key_color(buf, n, &p->colors.bg);
-    n = key_u8(buf, n, p->has_fg_code);
-    n = key_code(buf, n, &p->fg_code);
-    n = key_u8(buf, n, p->has_bg_code);
-    n = key_code(buf, n, &p->bg_code);
-    return n;
+static bool code_key_eq(const ColorCode *a, const ColorCode *b) {
+    if (a->kind != b->kind || a->xterm != b->xterm) {
+        return false;
+    }
+    return memcmp(a->hex, b->hex, sizeof(a->hex)) == 0;
+}
+
+// Exact appearance comparison. Mirrors the fields of the serialized key this
+// replaced, so the pool interns the same set of visuals.
+static bool vis_matches(const CharacterVisual *v, const char *symbol, const VisualParams *p) {
+    return strcmp(v->symbol, symbol) == 0
+        && v->bold == p->bold && v->dim == p->dim && v->italic == p->italic
+        && v->underline == p->underline && v->blink == p->blink && v->reverse == p->reverse
+        && v->hidden == p->hidden && v->strike == p->strike
+        && v->has_colors == p->has_colors
+        && v->colors.has_fg == p->colors.has_fg && color_key_eq(&v->colors.fg, &p->colors.fg)
+        && v->colors.has_bg == p->colors.has_bg && color_key_eq(&v->colors.bg, &p->colors.bg)
+        && v->has_fg_code == p->has_fg_code && code_key_eq(&v->fg_code, &p->fg_code)
+        && v->has_bg_code == p->has_bg_code && code_key_eq(&v->bg_code, &p->bg_code);
 }
 
 void vis_pool_reset(void) {
@@ -202,7 +216,6 @@ void vis_pool_reset(void) {
         if (g_pool[i].vis) {
             vis_destroy(g_pool[i].vis);
         }
-        free(g_pool[i].key);
     }
     free(g_pool);
     g_pool = NULL;
@@ -225,7 +238,6 @@ static void vis_pool_grow(void) {
     g_pool_used = 0;
     for (size_t i = 0; i < old_cap; i++) {
         if (!old[i].vis) {
-            free(old[i].key);
             continue;
         }
         size_t mask = g_pool_cap - 1;
@@ -243,9 +255,7 @@ static void vis_pool_grow(void) {
 }
 
 CharacterVisual *vis_new(const char *symbol, const VisualParams *params) {
-    char key[256];
-    size_t klen = vis_key(key, symbol, params);
-    uint64_t h = hash_bytes(key, klen);
+    uint64_t h = vis_hash(symbol, params);
     if (!g_pool_atexit) {
         atexit(vis_pool_reset);
         g_pool_atexit = true;
@@ -261,7 +271,7 @@ CharacterVisual *vis_new(const char *symbol, const VisualParams *params) {
     size_t first_dead = SIZE_MAX;
     while (g_pool[i].occupied) {
         if (g_pool[i].vis) {
-            if (g_pool[i].hash == h && g_pool[i].key_len == klen && memcmp(g_pool[i].key, key, klen) == 0) {
+            if (g_pool[i].hash == h && vis_matches(g_pool[i].vis, symbol, params)) {
                 g_pool[i].vis->refcount++;
                 return g_pool[i].vis;
             }
@@ -276,15 +286,7 @@ CharacterVisual *vis_new(const char *symbol, const VisualParams *params) {
     if (!vis) {
         return NULL;
     }
-    char *keycopy = malloc(klen);
-    if (!keycopy) {
-        vis_destroy(vis);
-        return NULL;
-    }
-    memcpy(keycopy, key, klen);
     g_pool[slot].hash = h;
-    g_pool[slot].key = keycopy;
-    g_pool[slot].key_len = klen;
     g_pool[slot].vis = vis;
     g_pool[slot].occupied = true;
     if (!reuse) {
@@ -307,11 +309,7 @@ void vis_unref(CharacterVisual *vis) {
         return;
     }
     if (g_pool && vis->pool_slot < g_pool_cap && g_pool[vis->pool_slot].vis == vis) {
-        VisPoolSlot *slot = &g_pool[vis->pool_slot];
-        free(slot->key);
-        slot->key = NULL;
-        slot->key_len = 0;
-        slot->vis = NULL;  // stays occupied so probing never stops early
+        g_pool[vis->pool_slot].vis = NULL;  // stays occupied so probing never stops early
         g_pool_live--;
     }
     vis_destroy(vis);
