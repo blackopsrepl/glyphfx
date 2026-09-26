@@ -257,22 +257,20 @@ void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char 
 }
 
 static Coord path_step(EngineCtx *ctx, Effect *effect, CharId id, const char *path_id) {
-    size_t slot = ctx->terminal.arena.items[id].motion.active_path_slot;
-    bool slot_valid = ctx->terminal.arena.items[id].motion.active_path_slot_valid;
-    Path *p = slot_valid ? (Path *)om_value_at(&ctx->terminal.arena.items[id].motion.paths, slot) : NULL;
+    EffectCharacter *ch = &ctx->terminal.arena.items[id];
+    Motion *m = &ch->motion;
+    Path *p = m->active_path_slot_valid ? (Path *)om_value_at(&m->paths, m->active_path_slot) : NULL;
     if (!p) {
-        long s = om_slot(&ctx->terminal.arena.items[id].motion.paths, path_id);
+        long s = om_slot(&m->paths, path_id);
         if (s < 0) {
-            return ctx->terminal.arena.items[id].motion.current_coord;
+            return m->current_coord;
         }
-        slot = (size_t)s;
-        slot_valid = true;
-        ctx->terminal.arena.items[id].motion.active_path_slot = slot;
-        ctx->terminal.arena.items[id].motion.active_path_slot_valid = true;
-        p = (Path *)om_value_at(&ctx->terminal.arena.items[id].motion.paths, slot);
+        m->active_path_slot = (size_t)s;
+        m->active_path_slot_valid = true;
+        p = (Path *)om_value_at(&m->paths, (size_t)s);
     }
     if (!p) {
-        return ctx->terminal.arena.items[id].motion.current_coord;
+        return m->current_coord;
     }
     if (p->max_steps == 0 || p->current_step >= p->max_steps || p->total_distance == 0.0) {
         return p->segments[p->segments_len - 1].end.coord;
@@ -285,9 +283,11 @@ static Coord path_step(EngineCtx *ctx, Effect *effect, CharId id, const char *pa
 
     long active = -1;
     size_t i = 0;
+    // A dispatched event can mutate the path map (the handler runs reentrantly),
+    // so re-resolve after any dispatch; otherwise the pointer above is kept.
+    bool dispatched = false;
     for (;;) {
-        p = slot_valid ? (Path *)om_value_at(&ctx->terminal.arena.items[id].motion.paths, slot) : NULL;
-        if (!p || i >= p->segments_len) {
+        if (i >= p->segments_len) {
             break;
         }
         double seg_distance = p->segments[i].distance;
@@ -296,14 +296,13 @@ static Coord path_step(EngineCtx *ctx, Effect *effect, CharId id, const char *pa
         if (distance_to_travel <= seg_distance) {
             active = (long)i;
             if (!enter_triggered) {
+                p->segments[i].enter_event_triggered = true;
                 if (observes_event(ctx, id, EVENT_SEGMENT_ENTERED)) {
                     CallerKey key;
                     engine_caller_from_waypoint(&p->segments[i].end, &key);
-                    p->segments[i].enter_event_triggered = true;
                     engine_handle_event(ctx, effect, id, EVENT_SEGMENT_ENTERED, &key);
                     caller_key_free(&key);
-                } else {
-                    p->segments[i].enter_event_triggered = true;
+                    dispatched = true;
                 }
             }
             break;
@@ -317,30 +316,34 @@ static Coord path_step(EngineCtx *ctx, Effect *effect, CharId id, const char *pa
                 p->segments[i].exit_event_triggered = true;
             } else {
                 if (!enter_triggered) {
+                    p->segments[i].enter_event_triggered = true;
                     CallerKey key;
                     engine_caller_from_waypoint(&p->segments[i].end, &key);
-                    p->segments[i].enter_event_triggered = true;
                     engine_handle_event(ctx, effect, id, EVENT_SEGMENT_ENTERED, &key);
                     caller_key_free(&key);
+                    dispatched = true;
                 }
-                p = slot_valid ? (Path *)om_value_at(&ctx->terminal.arena.items[id].motion.paths, slot) : NULL;
+                p = (Path *)om_value_at(&m->paths, m->active_path_slot);
                 if (!p) {
-                    return ctx->terminal.arena.items[id].motion.current_coord;
+                    return m->current_coord;
                 }
                 if (!p->segments[i].exit_event_triggered) {
+                    p->segments[i].exit_event_triggered = true;
                     CallerKey key;
                     engine_caller_from_waypoint(&p->segments[i].end, &key);
-                    p->segments[i].exit_event_triggered = true;
                     engine_handle_event(ctx, effect, id, EVENT_SEGMENT_EXITED, &key);
                     caller_key_free(&key);
+                    dispatched = true;
                 }
             }
         }
         i += 1;
     }
-    p = slot_valid ? (Path *)om_value_at(&ctx->terminal.arena.items[id].motion.paths, slot) : NULL;
+    if (dispatched) {
+        p = m->active_path_slot_valid ? (Path *)om_value_at(&m->paths, m->active_path_slot) : NULL;
+    }
     if (!p || p->segments_len == 0) {
-        return ctx->terminal.arena.items[id].motion.current_coord;
+        return m->current_coord;
     }
     if (active < 0) {
         active = (long)p->segments_len - 1;
