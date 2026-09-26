@@ -142,6 +142,10 @@ struct Terminal {
     size_t visible_positions_len;
     uint32_t *render_cells;
     size_t render_cells_len;
+    uint32_t *cell_epoch;   // render_epoch stamp per cell; avoids clearing the grid
+    size_t grid_width;
+    size_t grid_height;
+    uint32_t render_epoch;
     StrBuf output_buffer;  // reused across frames
     char *move_cursor_to_top;
     int64_t frame_rate;

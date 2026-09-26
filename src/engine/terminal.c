@@ -13,7 +13,6 @@
 #include "utils/pycompat.h"
 #include "utils/signals.h"
 
-#define EMPTY_RENDER_CELL UINT32_MAX
 #define NOT_VISIBLE SIZE_MAX
 
 void terminal_config_default(TerminalConfig *config) {
@@ -439,6 +438,7 @@ void terminal_free(Terminal *t) {
     free(t->visible_characters);
     free(t->visible_positions);
     free(t->render_cells);
+    free(t->cell_epoch);
     free(t->move_cursor_to_top);
     sb_free(&t->output_buffer);
     memset(t, 0, sizeof(*t));
@@ -503,11 +503,21 @@ static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_heig
     size_t cell_count = width * height;
     if (cell_count > t->render_cells_len) {
         t->render_cells = realloc(t->render_cells, cell_count * sizeof(uint32_t));
+        t->cell_epoch = realloc(t->cell_epoch, cell_count * sizeof(uint32_t));
         t->render_cells_len = cell_count;
     }
-    for (size_t i = 0; i < cell_count; i++) {
-        t->render_cells[i] = EMPTY_RENDER_CELL;
+    // Stamp each frame instead of clearing the grid: a cell belongs to this
+    // frame only if its epoch was set now, so the O(cells) clear disappears.
+    if (width != t->grid_width || height != t->grid_height || t->render_epoch == UINT32_MAX) {
+        if (t->cell_epoch && cell_count) {
+            memset(t->cell_epoch, 0, cell_count * sizeof(uint32_t));
+        }
+        t->grid_width = width;
+        t->grid_height = height;
+        t->render_epoch = 0;
     }
+    t->render_epoch++;
+    uint32_t epoch = t->render_epoch;
     for (size_t i = 0; i < t->visible_characters_len; i++) {
         CharId id = t->visible_characters[i];
         EffectCharacter *ch = &t->arena.items[id];
@@ -516,11 +526,11 @@ static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_heig
         if (t->visible_bottom <= row && row <= t->visible_top && t->visible_left <= column &&
             column <= t->visible_right) {
             size_t cell_index = (size_t)(row - 1) * width + (size_t)(column - 1);
-            uint32_t cell = t->render_cells[cell_index];
-            if (cell == EMPTY_RENDER_CELL) {
+            if (t->cell_epoch[cell_index] != epoch) {
                 t->render_cells[cell_index] = (uint32_t)id;
+                t->cell_epoch[cell_index] = epoch;
             } else {
-                EffectCharacter *painted = &t->arena.items[cell];
+                EffectCharacter *painted = &t->arena.items[t->render_cells[cell_index]];
                 if (ch->layer > painted->layer ||
                     (ch->layer == painted->layer && ch->character_id > painted->character_id)) {
                     t->render_cells[cell_index] = (uint32_t)id;
@@ -540,17 +550,18 @@ const char *terminal_get_formatted_output_string(Terminal *t) {
     update_render_cells(t, &width, &height);
     StrBuf *sb = &t->output_buffer;
     sb_clear(sb);
+    uint32_t epoch = t->render_epoch;
     for (size_t row_index = height; row_index-- > 0;) {
         if (row_index + 1 < height) {
             sb_push(sb, '\n');
         }
         const uint32_t *row = &t->render_cells[row_index * width];
+        const uint32_t *stamp = &t->cell_epoch[row_index * width];
         size_t col = 0;
         while (col < width) {
-            uint32_t cell = row[col];
-            if (cell == EMPTY_RENDER_CELL) {
+            if (stamp[col] != epoch) {
                 size_t run = 1;
-                while (col + run < width && row[col + run] == EMPTY_RENDER_CELL) {
+                while (col + run < width && stamp[col + run] != epoch) {
                     run++;
                 }
                 size_t remaining = run;
@@ -561,7 +572,7 @@ const char *terminal_get_formatted_output_string(Terminal *t) {
                 }
                 col += run;
             } else {
-                const CharacterVisual *vis = t->arena.items[cell].animation.current_visual;
+                const CharacterVisual *vis = t->arena.items[row[col]].animation.current_visual;
                 sb_append(sb, vis->formatted, vis->formatted_len);
                 col++;
             }
