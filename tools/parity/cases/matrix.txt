@@ -1,0 +1,12 @@
+# matrix parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      | --rain-time 1
+7   |      | --rain-time 1
+123 |      | --rain-time 2 --rain-column-delay-range 1-2 --rain-fall-delay-range 1-3
+999 | --existing-color-handling dynamic | --rain-time 1
+42  | --xterm-colors | --rain-time 1
+42  | --canvas-width 20 --canvas-height 8 | --rain-time 1
+42  |      | --rain-time 1 --rain-symbols X
+42  |      | --rain-time 1 --rain-color-gradient FF0000 00FF00 --highlight-color 0000FF
+42  | --existing-color-handling dynamic | --rain-time 1 --final-gradient-stops FF0000 00FF00 0000FF --final-gradient-steps 4 --final-gradient-direction diagonal --final-gradient-frames 2 --resolve-delay 1
+42  | --canvas-width 20 --canvas-height 8 | --rain-time 1 --rain-symbols o --rain-symbols . --rain-color-gradient 112233 445566 778899 --symbol-swap-chance 0.5 --color-swap-chance 0.5 --resolve-delay 1
