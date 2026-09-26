@@ -82,19 +82,52 @@ All 37, each with a full option surface (`glyphfx <effect> --help`).
 
 ## Benchmarks
 
-Startup (median of 300 runs of `glyphfx --version`): **0.33 ms**. On an
-80&times;24 canvas with pacing disabled (`--frame-rate 0`), best of three:
+Startup is under a millisecond (about 0.3 ms for `glyphfx --version`). The full
+37-effect matrix against the Rust reference and the Rust assembly engine:
 
-| effect | frames | ms/frame | fps |
-|---|---:|---:|---:|
-| blackhole | 300 | 0.014 | 71,429 |
-| slide | 110 | 0.027 | 37,037 |
-| matrix | 300 | 0.035 | 28,571 |
-| waves | 300 | 0.037 | 27,027 |
-| rings | 300 | 0.047 | 21,277 |
-| beams | 300 | 0.166 | 6,024 |
+Best-of-N total run time at 200&times;50 with pacing disabled (`--frame-rate 0`), seed 1, on `x86_64:12th Gen Intel(R) Core(TM) i5-12400`. Speedups above 1.00&times; mean glyphfx is faster.
 
-Reproduce with `python3 tools/tests/bench.py`.
+| effect | glyphfx | ttfx (Rust) | vs Rust | ttfx (asm) | vs asm |
+|---|---:|---:|---:|---:|---:|
+| beams | 264.3 ms | 364.4 ms | **1.38&times;** | 31.8 ms | **0.12&times;** |
+| binarypath | 1617.3 ms | 1566.6 ms | **0.97&times;** | 464.7 ms | **0.29&times;** |
+| blackhole | 865.4 ms | 865.4 ms | **1.00&times;** | 164.2 ms | **0.19&times;** |
+| bouncyballs | 564.7 ms | 564.9 ms | **1.00&times;** | 114.0 ms | **0.20&times;** |
+| bubbles | 765.2 ms | 815.2 ms | **1.07&times;** | 113.9 ms | **0.15&times;** |
+| burn | 564.7 ms | 615.6 ms | **1.09&times;** | 63.9 ms | **0.11&times;** |
+| colorshift | 564.8 ms | 665.0 ms | **1.18&times;** | 63.9 ms | **0.11&times;** |
+| crumble | 514.9 ms | 514.8 ms | **1.00&times;** | 114.0 ms | **0.22&times;** |
+| decrypt | 765.2 ms | 765.2 ms | **1.00&times;** | 63.9 ms | **0.08&times;** |
+| errorcorrect | 565.1 ms | 564.9 ms | **1.00&times;** | 63.9 ms | **0.11&times;** |
+| expand | 264.2 ms | 214.2 ms | **0.81&times;** | 63.9 ms | **0.24&times;** |
+| fireworks | 564.8 ms | 614.8 ms | **1.09&times;** | 164.1 ms | **0.29&times;** |
+| highlight | 113.9 ms | 114.0 ms | **1.00&times;** | 7.8 ms | **0.07&times;** |
+| laseretch | 915.2 ms | 965.5 ms | **1.05&times;** | 114.0 ms | **0.12&times;** |
+| matrix | 364.5 ms | 314.6 ms | **0.86&times;** | 63.8 ms | **0.18&times;** |
+| middleout | 164.2 ms | 164.1 ms | **1.00&times;** | 31.9 ms | **0.19&times;** |
+| orbittingvolley | 164.1 ms | 114.3 ms | **0.70&times;** | 63.9 ms | **0.39&times;** |
+| overflow | 264.3 ms | 214.1 ms | **0.81&times;** | 31.8 ms | **0.12&times;** |
+| pour | 414.5 ms | 414.4 ms | **1.00&times;** | 63.9 ms | **0.15&times;** |
+| print | 414.5 ms | 615.4 ms | **1.48&times;** | 15.9 ms | **0.04&times;** |
+| rain | 364.6 ms | 364.4 ms | **1.00&times;** | 63.9 ms | **0.18&times;** |
+| randomsequence | 114.1 ms | 114.1 ms | **1.00&times;** | 7.9 ms | **0.07&times;** |
+| rings | 1266.1 ms | 915.4 ms | **0.72&times;** | 264.3 ms | **0.21&times;** |
+| scattered | 264.0 ms | 264.4 ms | **1.00&times;** | 63.9 ms | **0.24&times;** |
+| slice | 164.1 ms | 114.2 ms | **0.70&times;** | 31.8 ms | **0.19&times;** |
+| slide | 114.0 ms | 164.2 ms | **1.44&times;** | 64.5 ms | **0.57&times;** |
+| smoke | 264.2 ms | 314.3 ms | **1.19&times;** | 31.8 ms | **0.12&times;** |
+| spotlights | 414.5 ms | 464.7 ms | **1.12&times;** | 63.9 ms | **0.15&times;** |
+| spray | 214.1 ms | 264.3 ms | **1.23&times;** | 63.9 ms | **0.30&times;** |
+| swarm | 1165.8 ms | 1065.6 ms | **0.91&times;** | 264.2 ms | **0.23&times;** |
+| sweep | 114.0 ms | 114.0 ms | **1.00&times;** | 15.7 ms | **0.14&times;** |
+| synthgrid | 164.0 ms | 214.0 ms | **1.30&times;** | 15.7 ms | **0.10&times;** |
+| thunderstorm | 514.7 ms | 565.3 ms | **1.10&times;** | 63.9 ms | **0.12&times;** |
+| unstable | 364.5 ms | 364.5 ms | **1.00&times;** | 114.7 ms | **0.31&times;** |
+| vhstape | 464.7 ms | 564.9 ms | **1.22&times;** | 114.0 ms | **0.25&times;** |
+| waves | 615.0 ms | 915.5 ms | **1.49&times;** | 64.1 ms | **0.10&times;** |
+| wipe | 63.9 ms | 114.0 ms | **1.78&times;** | 7.6 ms | **0.12&times;** |
+
+Reproduce with `python3 tools/tests/matrix.py` (and `make perf` to gate against regression).
 
 ## Usage
 
@@ -151,6 +184,23 @@ set. A single effect runs with `tools/parity/run_effects.sh <effect>`.
 
 Linux and macOS. Byte-exact comparison is pinned to Linux/glibc; builds and the
 unit tests also run on macOS.
+
+## Project facts
+
+`repo_facts.db` is a [nisaba](https://github.com/blackopsrepl/nisaba) store: an
+append-only, temporal key-value log of this project's decisions, benchmarks,
+releases and verification results, committed on purpose so the claims in this
+repository carry provenance rather than living in chat. Read it with the
+`nisaba` CLI:
+
+```sh
+nisaba repo_facts.db canon project.release.latest    # current value of one key
+nisaba repo_facts.db scan perf                        # everything under a prefix
+nisaba repo_facts.db history perf.milestone.v1_0_0    # how a claim changed
+```
+
+The log is the source of truth; `repo_facts.db.idx`, if present, is a disposable
+index cache and is not committed.
 
 ## Credit
 

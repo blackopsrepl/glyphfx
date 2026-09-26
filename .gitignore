@@ -12,3 +12,6 @@
 __pycache__/
 *.pyc
 .DS_Store
+
+# nisaba disposable index cache
+repo_facts.db.idx

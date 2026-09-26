@@ -49,6 +49,45 @@ EFFECTS = [
 ]
 
 
+def matrix_table():
+    """Render the full performance matrix recorded by tools/tests/matrix.py."""
+    path = os.path.join(ROOT, "docs/benchmarks/matrix.tsv")
+    if not os.path.exists(path):
+        return "_No matrix recorded; run `python3 tools/tests/matrix.py`._"
+    machine = ""
+    rows = []
+    for line in open(path):
+        if line.startswith("# machine "):
+            machine = line.strip()[len("# machine "):]
+        elif line.startswith("#") or not line.strip():
+            continue
+        parts = line.rstrip("\n").split("\t")
+        if len(parts) != 4:
+            continue
+        name, g, r, s = parts
+        rows.append((name, float(g), float(r), float(s)))
+    out = [
+        f"Best-of-N total run time at 200&times;50 with pacing disabled "
+        f"(`--frame-rate 0`), seed 1, on `{machine}`. "
+        "Speedups above 1.00&times; mean glyphfx is faster.",
+        "",
+        "| effect | glyphfx | ttfx (Rust) | vs Rust | ttfx (asm) | vs asm |",
+        "|---|---:|---:|---:|---:|---:|",
+    ]
+    for name, g, r, s in rows:
+        vs_r = f"**{r / g:.2f}&times;**" if g else "n/a"
+        if s == s and s > 0:  # not NaN
+            vs_s = f"**{s / g:.2f}&times;**" if g else "n/a"
+            asm = f"{s:.1f} ms"
+        else:
+            vs_s, asm = "-", "-"
+        out.append(f"| {name} | {g:.1f} ms | {r:.1f} ms | {vs_r} | {asm} | {vs_s} |")
+    out.append("")
+    out.append("Reproduce with `python3 tools/tests/matrix.py` "
+               "(and `make perf` to gate against regression).")
+    return "\n".join(out)
+
+
 def effects_table():
     rows = []
     for i in range(0, len(EFFECTS), 2):
@@ -127,19 +166,10 @@ All 37, each with a full option surface (`glyphfx <effect> --help`).
 
 ## Benchmarks
 
-Startup (median of 300 runs of `glyphfx --version`): **0.33 ms**. On an
-80&times;24 canvas with pacing disabled (`--frame-rate 0`), best of three:
+Startup is under a millisecond (about 0.3 ms for `glyphfx --version`). The full
+37-effect matrix against the Rust reference and the Rust assembly engine:
 
-| effect | frames | ms/frame | fps |
-|---|---:|---:|---:|
-| blackhole | 300 | 0.014 | 71,429 |
-| slide | 110 | 0.027 | 37,037 |
-| matrix | 300 | 0.035 | 28,571 |
-| waves | 300 | 0.037 | 27,027 |
-| rings | 300 | 0.047 | 21,277 |
-| beams | 300 | 0.166 | 6,024 |
-
-Reproduce with `python3 tools/tests/bench.py`.
+{matrix_table()}
 
 ## Usage
 
@@ -196,6 +226,23 @@ set. A single effect runs with `tools/parity/run_effects.sh <effect>`.
 
 Linux and macOS. Byte-exact comparison is pinned to Linux/glibc; builds and the
 unit tests also run on macOS.
+
+## Project facts
+
+`repo_facts.db` is a [nisaba](https://github.com/blackopsrepl/nisaba) store: an
+append-only, temporal key-value log of this project's decisions, benchmarks,
+releases and verification results, committed on purpose so the claims in this
+repository carry provenance rather than living in chat. Read it with the
+`nisaba` CLI:
+
+```sh
+nisaba repo_facts.db canon project.release.latest    # current value of one key
+nisaba repo_facts.db scan perf                        # everything under a prefix
+nisaba repo_facts.db history perf.milestone.v1_0_0    # how a claim changed
+```
+
+The log is the source of truth; `repo_facts.db.idx`, if present, is a disposable
+index cache and is not committed.
 
 ## Credit
 
