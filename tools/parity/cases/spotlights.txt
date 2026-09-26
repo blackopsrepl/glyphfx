@@ -1,0 +1,12 @@
+# spotlights parity cases.
+# format: <seed>|<terminal options>|<effect options>
+42| |
+7| |
+123| |
+999| --existing-color-handling dynamic |
+42| --existing-color-handling dynamic |
+42| --xterm-colors |
+42| --canvas-width 20 --canvas-height 8 |
+42| | --beam-width-ratio 3.0 --beam-falloff 0.5 --search-duration 5
+42| | --spotlight-count 5 --search-speed-range 0.5-1.0 --search-duration 4
+42| --existing-color-handling dynamic | --final-gradient-stops FF0000 00FF00 --final-gradient-steps 4 --final-gradient-direction horizontal --search-duration 3
