@@ -31,6 +31,7 @@ typedef enum {
 typedef struct {
     Coord coord;
     char *waypoint_id;  // owned
+    uint64_t waypoint_id_hash;
     Coord *bezier;      // owned, may be NULL
     size_t bezier_len;
 } WaypointKey;
@@ -38,6 +39,7 @@ typedef struct {
 typedef struct {
     CallerKind kind;
     char *id;  // owned; scene or path id (NULL for waypoint)
+    uint64_t id_hash;
     WaypointKey waypoint;
 } CallerKey;
 

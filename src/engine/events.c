@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "utils/strhash.h"
+
 static char *dup_cstr(const char *s) {
     if (!s) {
         return NULL;
@@ -27,9 +29,12 @@ void caller_key_copy(CallerKey *dst, const CallerKey *src) {
     memset(dst, 0, sizeof(*dst));
     dst->kind = src->kind;
     dst->id = dup_cstr(src->id);
+    dst->id_hash = dst->id ? str_hash64(dst->id) : 0;
     if (src->kind == CALLER_WAYPOINT) {
         dst->waypoint.coord = src->waypoint.coord;
         dst->waypoint.waypoint_id = dup_cstr(src->waypoint.waypoint_id);
+        dst->waypoint.waypoint_id_hash =
+            dst->waypoint.waypoint_id ? str_hash64(dst->waypoint.waypoint_id) : 0;
         dst->waypoint.bezier_len = src->waypoint.bezier_len;
         if (src->waypoint.bezier_len) {
             dst->waypoint.bezier = malloc(src->waypoint.bezier_len * sizeof(Coord));
@@ -45,7 +50,13 @@ bool caller_key_matches(const CallerKey *a, const CallerKey *b) {
     switch (a->kind) {
         case CALLER_SCENE:
         case CALLER_PATH:
-            return a->id && b->id && strcmp(a->id, b->id) == 0;
+            if (!a->id || !b->id) {
+                return false;
+            }
+            if (a->id_hash && b->id_hash && a->id_hash != b->id_hash) {
+                return false;
+            }
+            return strcmp(a->id, b->id) == 0;
         case CALLER_WAYPOINT:
             if (!coord_eq(a->waypoint.coord, b->waypoint.coord)) {
                 return false;
@@ -61,9 +72,23 @@ bool caller_key_matches(const CallerKey *a, const CallerKey *b) {
             if (a->waypoint.waypoint_id == NULL || b->waypoint.waypoint_id == NULL) {
                 return a->waypoint.waypoint_id == b->waypoint.waypoint_id;
             }
+            if (a->waypoint.waypoint_id_hash && b->waypoint.waypoint_id_hash &&
+                a->waypoint.waypoint_id_hash != b->waypoint.waypoint_id_hash) {
+                return false;
+            }
             return strcmp(a->waypoint.waypoint_id, b->waypoint.waypoint_id) == 0;
     }
     return false;
+}
+
+// Shallow copy with the id hashes filled in, so caller_key_matches can reject a
+// non-matching entry with an integer compare instead of strcmp. The string
+// pointers are borrowed, not owned.
+static void caller_key_hashed(const CallerKey *in, CallerKey *out) {
+    *out = *in;
+    out->id_hash = in->id ? str_hash64(in->id) : 0;
+    out->waypoint.waypoint_id_hash =
+        in->waypoint.waypoint_id ? str_hash64(in->waypoint.waypoint_id) : 0;
 }
 
 void effect_callback_free(EffectCallback *cb) {
@@ -133,8 +158,10 @@ bool event_handler_subscribes(const EventHandler *h, Event event) {
 }
 
 static RegisteredEvent *find_entry(EventHandler *h, Event event, const CallerKey *caller) {
+    CallerKey q;
+    caller_key_hashed(caller, &q);
     for (size_t i = 0; i < h->len; i++) {
-        if (h->entries[i].event == event && caller_key_matches(&h->entries[i].caller, caller)) {
+        if (h->entries[i].event == event && caller_key_matches(&h->entries[i].caller, &q)) {
             return &h->entries[i];
         }
     }
@@ -211,8 +238,10 @@ long event_handler_actions_index(const EventHandler *h, Event event, const Calle
     if (!event_handler_subscribes(h, event)) {
         return -1;
     }
+    CallerKey q;
+    caller_key_hashed(caller, &q);
     for (size_t i = 0; i < h->len; i++) {
-        if (h->entries[i].event == event && caller_key_matches(&h->entries[i].caller, caller)) {
+        if (h->entries[i].event == event && caller_key_matches(&h->entries[i].caller, &q)) {
             return (long)i;
         }
     }
