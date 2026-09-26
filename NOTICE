@@ -1,8 +1,8 @@
 # Attribution
 
-glyphfx implements the terminal text-effects design and command-line surface of
-ttfx, which in turn implements TerminalTextEffects. The relevant licenses and
-copyrights:
+glyphfx is a C17 implementation of the terminal text-effects design, animation
+engine, and command-line surface of TerminalTextEffects, as implemented by ttfx.
+The relevant licenses and copyrights:
 
     TerminalTextEffects
     https://github.com/ChrisBuilds/terminaltexteffects

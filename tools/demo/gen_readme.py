@@ -63,6 +63,10 @@ def effects_table():
 
 README = f"""# glyphfx
 
+<p align="center">
+  <img src="docs/images/glyphfx-mascot.png" width="360" alt="The GlyphFX Cursor Gecko mascot, with terminal glyphs resolving along its C-shaped tail">
+</p>
+
 Terminal text effects as a single C17 binary. Pipe text in, pick an effect:
 
 ```sh
@@ -72,7 +76,9 @@ fortune | glyphfx --random-effect
 git log --oneline -10 | glyphfx matrix
 ```
 
-<img src="docs/effects/hero.gif" width="588" alt="the decrypt effect resolving the glyphfx banner">
+<p align="center">
+  <img src="docs/effects/hero.gif" width="588" alt="the decrypt effect resolving the glyphfx banner">
+</p>
 
 ## Why C
 
@@ -81,7 +87,8 @@ throughput matter. glyphfx links nothing but libc and libm — no interpreter, n
 import step, no third-party libraries — and starts in well under a millisecond.
 
 The tempting alternative is to hand-write the hot paths in x86-64 assembly, as
-ttfx experimented with in an open pull request. glyphfx does not, deliberately:
+ttfx experimented with in [an open pull request](https://github.com/omacom/ttfx/pull/35).
+glyphfx does not, deliberately:
 
 - **The measured gains were algorithmic, not instruction-level.** That PR's own
   notes credit structure-of-arrays character storage, pooled visuals, an
@@ -184,11 +191,11 @@ unit tests also run on macOS.
 
 ## Credit
 
-glyphfx is a port of [ttfx](https://github.com/omacom/ttfx), which is a port of
-[TerminalTextEffects](https://github.com/ChrisBuilds/terminaltexteffects) by
-ChrisBuilds. The effect set, the animation engine, and the command-line
-interface are that project's design; glyphfx implements them in C17 and matches
-the ttfx binary byte for byte.
+glyphfx is a C port of [ttfx](https://github.com/omacom/ttfx), which is a Rust
+port of [TerminalTextEffects](https://github.com/ChrisBuilds/terminaltexteffects)
+by ChrisBuilds. The effect set, the animation engine, and the command-line
+interface are TerminalTextEffects' design; ttfx is the reference glyphfx
+matches byte for byte.
 
 ## License
 
