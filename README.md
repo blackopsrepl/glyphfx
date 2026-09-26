@@ -1,5 +1,9 @@
 # glyphfx
 
+<p align="center">
+  <img src="docs/images/glyphfx-mascot.png" width="360" alt="The GlyphFX Cursor Gecko mascot, with terminal glyphs resolving along its C-shaped tail">
+</p>
+
 Terminal text effects as a single C17 binary. Pipe text in, pick an effect:
 
 ```sh
