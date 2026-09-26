@@ -2,6 +2,14 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
 
+## [0.1.4](https://github.com/blackopsrepl/glyphfx/compare/v0.1.3...v0.1.4) (2026-09-26)
+
+### Performance
+
+* **animation:** hash and compare visual keys directly ([b9a5939](https://github.com/blackopsrepl/glyphfx/commit/b9a5939c5824f21fd1a814603fc8b8984fac8b1e))
+* **events:** reuse the caller id hash ([b29e306](https://github.com/blackopsrepl/glyphfx/commit/b29e30669ad2326994a4dfb3fbfba05f5d0ef097))
+* **rng:** inline the xoshiro primitives ([4a36edb](https://github.com/blackopsrepl/glyphfx/commit/4a36edb1e64a72b56a6c8289dc8ab71bd31c8ee7))
+
 ## [0.1.3](https://github.com/blackopsrepl/glyphfx/compare/v0.1.2...v0.1.3) (2026-09-26)
 
 ### Performance
