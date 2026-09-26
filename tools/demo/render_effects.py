@@ -18,10 +18,22 @@ FONT_DIR = "/usr/share/fonts/truetype"
 BANNER = os.path.join(ROOT, "tools/demo/banner.txt")
 OUT_DIR = os.path.join(ROOT, "docs/effects")
 
-CANVAS_W, CANVAS_H = 72, 18
-FONT_SIZE = 13
-DEFAULT_FG = (198, 198, 198)
-DEFAULT_BG = (0, 0, 0)
+# The banner is the subject of every GIF, so size the canvas to hold it with a
+# couple of cells of travel on each side rather than a fixed 80x24 that leaves
+# the logo stranded in dead space. Palette matches the reference gallery.
+def _banner_dimensions():
+    with open(BANNER, encoding="utf-8") as handle:
+        lines = handle.read().rstrip("\n").split("\n")
+    return max(len(line) for line in lines), len(lines)
+
+
+BANNER_COLS, BANNER_ROWS = _banner_dimensions()
+MARGIN = 2
+CANVAS_W = BANNER_COLS + 2 * MARGIN
+CANVAS_H = BANNER_ROWS + 2 * MARGIN
+FONT_SIZE = 16
+DEFAULT_FG = (200, 200, 208)
+DEFAULT_BG = (18, 18, 26)
 FRAME_MS = 60
 HOLD_FRAMES = 8
 
@@ -42,10 +54,10 @@ def load_fonts():
     def f(name, size):
         return ImageFont.truetype(os.path.join(FONT_DIR, name), size)
     return {
-        "r": f("LiberationMono-Regular.ttf", FONT_SIZE),
-        "b": f("LiberationMono-Bold.ttf", FONT_SIZE),
-        "i": f("LiberationMono-Italic.ttf", FONT_SIZE),
-        "bi": f("LiberationMono-BoldItalic.ttf", FONT_SIZE),
+        "r": f("DejaVuSansMono.ttf", FONT_SIZE),
+        "b": f("DejaVuSansMono-Bold.ttf", FONT_SIZE),
+        "i": f("DejaVuSansMono-Oblique.ttf", FONT_SIZE),
+        "bi": f("DejaVuSansMono-BoldOblique.ttf", FONT_SIZE),
     }
 
 
@@ -60,7 +72,7 @@ def capture(effect, effect_args, seed, cols, rows):
     env["LINES"] = str(CANVAS_H)
     cmd = [BIN, "--seed", str(seed), "--parity-dump", "--virtual-clock",
            "--canvas-width", str(cols), "--canvas-height", str(rows), "--anchor-canvas", "c",
-           "--anchor-text", "c", effect] + effect_args
+           "--anchor-text", "c", "--ignore-terminal-dimensions", effect] + effect_args
     out = subprocess.run(cmd, input=open(BANNER, "rb").read(), stdout=subprocess.PIPE,
                          stderr=subprocess.DEVNULL, env=env, timeout=300).stdout
     frames = []
@@ -263,9 +275,8 @@ EFFECTS = [
     ("vhstape", ["--total-glitch-time", "300"], 110), ("waves", [], 90), ("wipe", [], 120),
 ]
 
-# The README hero: a large, legible render of one effect.
+# The README hero: the same tight canvas, shown larger than the gallery cards.
 HERO = ("wipe", [], 140)
-HERO_W, HERO_H = 96, 24
 
 
 def render_one(name, extra, budget, cols, rows, palette, fonts, cell_w, cell_h, ascent, path):
@@ -295,11 +306,8 @@ def main():
         render_one(name, extra, budget, CANVAS_W, CANVAS_H, palette, fonts, cell_w, cell_h, ascent,
                    os.path.join(OUT_DIR, name + ".gif"))
     if not only or "hero" in only:
-        width, height = CANVAS_W, CANVAS_H
-        globals()["CANVAS_W"], globals()["CANVAS_H"] = HERO_W, HERO_H
-        render_one(HERO[0], HERO[1], HERO[2], HERO_W, HERO_H, palette, fonts, cell_w, cell_h, ascent,
+        render_one(HERO[0], HERO[1], HERO[2], CANVAS_W, CANVAS_H, palette, fonts, cell_w, cell_h, ascent,
                    os.path.join(OUT_DIR, "hero.gif"))
-        globals()["CANVAS_W"], globals()["CANVAS_H"] = width, height
 
 
 if __name__ == "__main__":
