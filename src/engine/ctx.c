@@ -120,10 +120,17 @@ int engine_chain_paths(EngineCtx *ctx, CharId id, const char *const *paths, size
 }
 
 void engine_handle_event(EngineCtx *ctx, Effect *effect, CharId id, Event event, const CallerKey *caller) {
+    // The matching entry index is stable for the whole dispatch: actions only
+    // ever append (to this entry or a new one at the end), so resolve it once
+    // instead of re-hashing the caller once per action.
+    EventHandler *first = &ctx->terminal.arena.items[id].event_handler;
+    long entry = event_handler_actions_index(first, event, caller);
+    if (entry < 0) {
+        return;
+    }
     for (size_t action_index = 0;; action_index++) {
         EventHandler *handler = &ctx->terminal.arena.items[id].event_handler;
-        long entry = event_handler_actions_index(handler, event, caller);
-        if (entry < 0) {
+        if ((size_t)entry >= handler->len) {
             return;
         }
         size_t count = event_handler_action_count(handler, (size_t)entry);
@@ -588,13 +595,24 @@ static bool retain_keep(CharId id, void *ctxp) {
 }
 
 void engine_update(EngineCtx *ctx, Effect *effect) {
-    CharId *snapshot = NULL;
-    size_t snapshot_len = 0;
-    ac_snapshot(&ctx->active_characters, &snapshot, &snapshot_len);
-    for (size_t i = 0; i < snapshot_len; i++) {
-        engine_tick(ctx, effect, snapshot[i]);
+    // Tick a snapshot of the active set: ticks can activate characters, which
+    // would invalidate an in-place walk. Reuse one buffer across frames instead
+    // of allocating the copy every frame.
+    size_t n = ctx->active_characters.len;
+    if (n > ctx->scratch_len) {
+        CharId *grown = realloc(ctx->scratch, (n ? n : 1) * sizeof(CharId));
+        if (!grown) {
+            return;
+        }
+        ctx->scratch = grown;
+        ctx->scratch_len = n;
     }
-    free(snapshot);
+    if (n) {
+        memcpy(ctx->scratch, ctx->active_characters.items, n * sizeof(CharId));
+    }
+    for (size_t i = 0; i < n; i++) {
+        engine_tick(ctx, effect, ctx->scratch[i]);
+    }
     ac_retain(&ctx->active_characters, retain_keep, ctx);
 }
 
