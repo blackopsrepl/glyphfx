@@ -1,0 +1,10 @@
+# waves parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+7   |      |
+123 |      | --wave-count 3 --wave-length 1
+42  |      | --wave-direction row_top_to_bottom --wave-easing out_bounce
+42  |      | --wave-symbols X o --wave-gradient-stops FF0000 00FF00 --wave-gradient-steps 4
+42  | --existing-color-handling dynamic |
+42  | --xterm-colors |
+42  | --canvas-width 20 --canvas-height 8 | --wave-count 2 --final-gradient-steps 5

@@ -1,0 +1,10 @@
+# sweep parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+7   |      |
+123 |      | --first-sweep-direction row_bottom_to_top --second-sweep-direction row_top_to_bottom
+42  |      | --sweep-symbols X
+42  |      | --final-gradient-stops FF0000 0000FF --final-gradient-steps 5
+42  | --existing-color-handling dynamic |
+42  | --xterm-colors |
+42  | --canvas-width 20 --canvas-height 8 | --first-sweep-direction outside_to_center

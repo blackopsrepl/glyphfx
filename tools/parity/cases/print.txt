@@ -1,0 +1,10 @@
+# print parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+7   |      |
+123 |      | --print-speed 5
+42  |      | --print-head-return-speed 0.5 --print-head-easing out_bounce
+42  |      | --final-gradient-stops FF0000 00FF00 --final-gradient-steps 5 --final-gradient-direction horizontal
+42  | --existing-color-handling dynamic |
+42  | --xterm-colors |
+42  | --canvas-width 20 --canvas-height 8 | --print-speed 1
