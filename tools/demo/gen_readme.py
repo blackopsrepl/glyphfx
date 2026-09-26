@@ -78,8 +78,29 @@ git log --oneline -10 | glyphfx matrix
 
 The effects are a shell toy that lives in a prompt pipeline, so startup and
 throughput matter. glyphfx links nothing but libc and libm — no interpreter, no
-import step, no third-party libraries — and starts in well under a
-millisecond. `make` builds one binary.
+import step, no third-party libraries — and starts in well under a millisecond.
+
+The tempting alternative is to hand-write the hot paths in x86-64 assembly, as
+ttfx experimented with in an open pull request. glyphfx does not, deliberately:
+
+- **The measured gains were algorithmic, not instruction-level.** That PR's own
+  notes credit structure-of-arrays character storage, pooled visuals, an
+  incremental cell grid, batched writes, and a faster RNG for most of its
+  speedup — all expressible in C. glyphfx already takes the portable subset
+  (shared visuals, batched writes, cached lookups) and matches or beats the Rust
+  engine on most effects here.
+- **Assembly ties the fast path to one ISA.** That engine only runs on
+  x86-64-v4 (AVX-512), which Intel disabled on consumer parts after 11th gen,
+  AMD shipped only from Zen 4, and no ARM or Apple silicon has. Elsewhere it
+  declines and you get the old code. Portable C is the same speed everywhere.
+- **A byte-exact target makes a second implementation a liability.** Every
+  effect must reproduce ttfx bit for bit, including banker's rounding and libm
+  results; a hand-tuned assembly engine doubles the surface where the two can
+  silently diverge.
+
+The result builds anywhere with a C compiler, starts in about 0.3 ms, and
+renders every effect at thousands to tens of thousands of frames per second
+with pacing disabled.
 
 ## The effects
 
