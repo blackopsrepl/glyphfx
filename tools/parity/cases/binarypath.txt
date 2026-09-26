@@ -1,0 +1,11 @@
+# binarypath parity cases.
+# format: <seed> | <terminal options> | <effect options>
+1 | |
+2 | |
+7 | | --active-binary-groups 0.5
+42 | --existing-color-handling dynamic |
+123 | --xterm-colors |
+5 | --canvas-width 20 --canvas-height 8 | --movement-speed 0.5
+9 | | --binary-colors ff0000 00ff00 0000ff
+11 | --existing-color-handling dynamic --xterm-colors | --final-gradient-direction horizontal --final-gradient-stops ff0000 00ff00
+13 | | --final-gradient-steps 4 --active-binary-groups 1.0

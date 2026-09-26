@@ -1,0 +1,11 @@
+# orbittingvolley parity cases.
+# format: <seed> | <terminal options> | <effect options>
+1 | |
+2 | |
+7 | | --launch-delay 2 --volley-size 0.1
+42 | --existing-color-handling dynamic |
+123 | --xterm-colors |
+5 | --canvas-width 20 --canvas-height 8 | --launcher-movement-speed 0.4 --character-movement-speed 0.8
+9 | | --top-launcher-symbol T --right-launcher-symbol R --bottom-launcher-symbol B --left-launcher-symbol L
+11 | --existing-color-handling dynamic --xterm-colors | --character-easing in_out_circ --final-gradient-direction horizontal --final-gradient-stops ff0000 00ff00
+13 | | --final-gradient-steps 5 --final-gradient-direction vertical
