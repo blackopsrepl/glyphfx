@@ -1,0 +1,12 @@
+# synthgrid parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+7   |      |
+123 |      |
+999 | --existing-color-handling dynamic |
+42  | --xterm-colors |
+42  | --canvas-width 20 --canvas-height 8 |
+7   | --existing-color-handling dynamic --canvas-width 4 --canvas-height 10 |
+42  |      | --grid-row-symbol = --grid-column-symbol + --max-active-blocks 0.5
+123 |      | --grid-gradient-stops ff0000 00ff00 --grid-gradient-steps 4 --grid-gradient-direction horizontal
+42  |      | --text-generation-symbols a b c --text-gradient-stops FF0000 00FF00 0000FF --text-gradient-direction diagonal
