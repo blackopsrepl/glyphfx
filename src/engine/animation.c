@@ -774,6 +774,55 @@ void animation_set_appearance(Animation *anim, bool uses_input_preexisting_color
         params.has_bg_code =
             resolve_color_code(true, &effective.bg, anim->no_color, anim->use_xterm_colors, &params.bg_code);
     }
+
+    CharacterVisual *cur = anim->current_visual;
+    // The reference reuses the current visual's allocation when it is uniquely
+    // owned (Rc::get_mut), so restyling costs no allocation and a no-op restyle
+    // costs nothing at all. Same rule here: a visual nobody else references and
+    // that never entered the pool can be restyled in place.
+    if (cur && cur->refcount == 1 && cur->pool_slot == SIZE_MAX) {
+        bool params_same = cur->bold == params.bold && cur->dim == params.dim &&
+                           cur->italic == params.italic && cur->underline == params.underline &&
+                           cur->blink == params.blink && cur->reverse == params.reverse &&
+                           cur->hidden == params.hidden && cur->strike == params.strike &&
+                           cur->has_colors == params.has_colors &&
+                           memcmp(&cur->colors, &params.colors, sizeof(ColorPair)) == 0 &&
+                           cur->has_fg_code == params.has_fg_code &&
+                           memcmp(&cur->fg_code, &params.fg_code, sizeof(ColorCode)) == 0 &&
+                           cur->has_bg_code == params.has_bg_code &&
+                           memcmp(&cur->bg_code, &params.bg_code, sizeof(ColorCode)) == 0;
+        bool symbol_same = strcmp(cur->symbol, use_symbol) == 0;
+        if (params_same && symbol_same) {
+            return;
+        }
+        cur->bold = params.bold;
+        cur->dim = params.dim;
+        cur->italic = params.italic;
+        cur->underline = params.underline;
+        cur->blink = params.blink;
+        cur->reverse = params.reverse;
+        cur->hidden = params.hidden;
+        cur->strike = params.strike;
+        cur->has_colors = params.has_colors;
+        cur->colors = params.colors;
+        cur->has_fg_code = params.has_fg_code;
+        cur->fg_code = params.fg_code;
+        cur->has_bg_code = params.has_bg_code;
+        cur->bg_code = params.bg_code;
+        if (!symbol_same) {
+            size_t need = strlen(use_symbol) + 1;
+            char *grown = realloc(cur->symbol, need);
+            if (!grown) {
+                free(cur->symbol);
+                cur->symbol = dup_cstr(use_symbol);
+            } else {
+                memcpy(grown, use_symbol, need);
+                cur->symbol = grown;
+            }
+        }
+        vis_format(cur);
+        return;
+    }
     vis_unref(anim->current_visual);
     // Not pooled: a character's live appearance is unique to it, so a lookup is
     // pure overhead here (the reference makes the same call).
