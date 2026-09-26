@@ -8,6 +8,7 @@
 
 #include "effects/registry.h"
 #include "utils/hexterm.h"
+#include "utils/utf8.h"
 
 #include "glyphfx_version.h"
 
@@ -356,6 +357,17 @@ static int eff_assign(const EffectEntry *entry, void *cfg, const EffOptSpec *spe
         case EF_STRING:
             *(const char **)(base + spec->offset) = value;
             return 0;
+        case EF_SYMBOL: {
+            if (utf8_count_codepoints(value) != 1) {
+                usage_error("invalid symbol '%s': must be a single character", value);
+                return 2;
+            }
+            char **dst = (char **)(base + spec->offset);
+            free(*dst);
+            *dst = malloc(strlen(value) + 1);
+            strcpy(*dst, value);
+            return 0;
+        }
         case EF_COLOR: {
             Color c;
             if (parse_color_arg(value, &c) != 0) {
@@ -410,11 +422,106 @@ static int eff_assign(const EffectEntry *entry, void *cfg, const EffOptSpec *spe
             list_int_append(list, v);
             return 0;
         }
-        case EF_EASING:
-        case EF_CHAR_SORT:
-        case EF_CHAR_GROUP:
-            usage_error("option '--%s' is not yet supported", spec->name);
-            return 2;
+        case EF_EASING: {
+            Easing e;
+            if (!easing_parse(value, &e)) {
+                usage_error("invalid easing function '%s'", value);
+                return 2;
+            }
+            *(Easing *)(base + spec->offset) = e;
+            return 0;
+        }
+        case EF_CHAR_SORT: {
+            CharacterSort s;
+            if (strcmp(value, "random") == 0) s = CS_RANDOM;
+            else if (strcmp(value, "top_to_bottom_left_to_right") == 0) s = CS_TOP_TO_BOTTOM_LEFT_TO_RIGHT;
+            else if (strcmp(value, "top_to_bottom_right_to_left") == 0) s = CS_TOP_TO_BOTTOM_RIGHT_TO_LEFT;
+            else if (strcmp(value, "bottom_to_top_left_to_right") == 0) s = CS_BOTTOM_TO_TOP_LEFT_TO_RIGHT;
+            else if (strcmp(value, "bottom_to_top_right_to_left") == 0) s = CS_BOTTOM_TO_TOP_RIGHT_TO_LEFT;
+            else if (strcmp(value, "outside_row_to_middle") == 0) s = CS_OUTSIDE_ROW_TO_MIDDLE;
+            else if (strcmp(value, "middle_row_to_outside") == 0) s = CS_MIDDLE_ROW_TO_OUTSIDE;
+            else {
+                usage_error("invalid character sort '%s'", value);
+                return 2;
+            }
+            *(CharacterSort *)(base + spec->offset) = s;
+            return 0;
+        }
+        case EF_CHAR_GROUP: {
+            CharacterGroup grp;
+            if (strcmp(value, "column_left_to_right") == 0) grp = CG_COLUMN_LEFT_TO_RIGHT;
+            else if (strcmp(value, "column_right_to_left") == 0) grp = CG_COLUMN_RIGHT_TO_LEFT;
+            else if (strcmp(value, "row_top_to_bottom") == 0) grp = CG_ROW_TOP_TO_BOTTOM;
+            else if (strcmp(value, "row_bottom_to_top") == 0) grp = CG_ROW_BOTTOM_TO_TOP;
+            else if (strcmp(value, "diagonal_top_left_to_bottom_right") == 0) grp = CG_DIAGONAL_TOP_LEFT_TO_BOTTOM_RIGHT;
+            else if (strcmp(value, "diagonal_bottom_left_to_top_right") == 0) grp = CG_DIAGONAL_BOTTOM_LEFT_TO_TOP_RIGHT;
+            else if (strcmp(value, "diagonal_top_right_to_bottom_left") == 0) grp = CG_DIAGONAL_TOP_RIGHT_TO_BOTTOM_LEFT;
+            else if (strcmp(value, "diagonal_bottom_right_to_top_left") == 0) grp = CG_DIAGONAL_BOTTOM_RIGHT_TO_TOP_LEFT;
+            else if (strcmp(value, "center_to_outside") == 0) grp = CG_CENTER_TO_OUTSIDE;
+            else if (strcmp(value, "outside_to_center") == 0) grp = CG_OUTSIDE_TO_CENTER;
+            else {
+                usage_error("invalid character group '%s'", value);
+                return 2;
+            }
+            *(CharacterGroup *)(base + spec->offset) = grp;
+            return 0;
+        }
+        case EF_INT_RANGE: {
+            const char *dash = strchr(value, '-');
+            if (!dash || dash == value) {
+                usage_error("invalid range '%s'", value);
+                return 2;
+            }
+            char a[32];
+            size_t alen = (size_t)(dash - value);
+            if (alen >= sizeof(a)) {
+                usage_error("invalid range '%s'", value);
+                return 2;
+            }
+            memcpy(a, value, alen);
+            a[alen] = '\0';
+            int64_t lo, hi;
+            if (parse_i64(a, &lo) != 0 || parse_i64(dash + 1, &hi) != 0 || lo <= 0 || lo > hi) {
+                usage_error("invalid range '%s'", value);
+                return 2;
+            }
+            IntRange *r = (IntRange *)(base + spec->offset);
+            r->start = lo;
+            r->end = hi;
+            return 0;
+        }
+        case EF_FLOAT_RANGE: {
+            const char *dash = strchr(value, '-');
+            if (!dash || dash == value) {
+                usage_error("invalid range '%s'", value);
+                return 2;
+            }
+            char a[64];
+            size_t alen = (size_t)(dash - value);
+            if (alen >= sizeof(a)) {
+                usage_error("invalid range '%s'", value);
+                return 2;
+            }
+            memcpy(a, value, alen);
+            a[alen] = '\0';
+            double lo, hi;
+            if (parse_double_arg(a, &lo) != 0 || parse_double_arg(dash + 1, &hi) != 0 || !(lo > 0.0) ||
+                !(lo <= hi)) {
+                usage_error("invalid range '%s'", value);
+                return 2;
+            }
+            FloatRange *r = (FloatRange *)(base + spec->offset);
+            r->start = lo;
+            r->end = hi;
+            return 0;
+        }
+        case EF_CUSTOM: {
+            if (!spec->custom || spec->custom(value, base + spec->offset) != 0) {
+                usage_error("invalid value '%s' for option '%s'", value, spec->name);
+                return 2;
+            }
+            return 0;
+        }
     }
     return 2;
 }

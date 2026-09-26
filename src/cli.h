@@ -42,6 +42,7 @@ typedef enum {
     EF_RATIO_NONNEG,
     EF_RATIO_POS,
     EF_STRING,
+    EF_SYMBOL,
     EF_COLOR,
     EF_DIRECTION,
     EF_EASING,
@@ -49,14 +50,33 @@ typedef enum {
     EF_CHAR_GROUP,
     EF_COLOR_LIST,
     EF_INT_LIST,
+    EF_INT_RANGE,
+    EF_FLOAT_RANGE,
+    EF_CUSTOM,
 } EffKind;
+
+typedef struct {
+    int64_t start;
+    int64_t end;
+} IntRange;
+
+typedef struct {
+    double start;
+    double end;
+} FloatRange;
 
 typedef struct {
     const char *name;  // long name without the leading "--"
     char short_name;   // 0 if none
     EffKind kind;
     size_t offset;     // offset into the effect config struct
+    // For EF_CUSTOM: fills base+offset. Returns 0 on success.
+    int (*custom)(const char *value, void *dst);
 } EffOptSpec;
+
+// Designated initializer so the trailing custom field needs no mention.
+#define EF_SPEC(n, sc, k, o) \
+    { .name = (n), .short_name = (sc), .kind = (k), .offset = (o), .custom = NULL }
 
 typedef struct {
     Color *items;

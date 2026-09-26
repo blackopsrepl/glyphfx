@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "effects/registry.h"
 #include "engine/animation.h"
 #include "engine/ctx.h"
 #include "engine/terminal.h"
@@ -24,11 +25,12 @@ static void push_int_default(IntList *list, int64_t v);
 const size_t randomsequence_specs_len = 5;
 
 const EffOptSpec randomsequence_specs[] = {
-    {"speed", 0, EF_FLOAT_POS, offsetof(RandomSequenceConfig, speed)},
-    {"final-gradient-stops", 0, EF_COLOR_LIST, offsetof(RandomSequenceConfig, final_gradient_stops)},
-    {"final-gradient-steps", 0, EF_INT_LIST, offsetof(RandomSequenceConfig, final_gradient_steps)},
-    {"final-gradient-frames", 0, EF_INT, offsetof(RandomSequenceConfig, final_gradient_frames)},
-    {"final-gradient-direction", 0, EF_DIRECTION, offsetof(RandomSequenceConfig, final_gradient_direction)},
+    EF_SPEC("speed", 0, EF_FLOAT_POS, offsetof(RandomSequenceConfig, speed)),
+    EF_SPEC("final-gradient-stops", 0, EF_COLOR_LIST, offsetof(RandomSequenceConfig, final_gradient_stops)),
+    EF_SPEC("final-gradient-steps", 0, EF_INT_LIST, offsetof(RandomSequenceConfig, final_gradient_steps)),
+    EF_SPEC("final-gradient-frames", 0, EF_INT, offsetof(RandomSequenceConfig, final_gradient_frames)),
+    EF_SPEC("final-gradient-direction", 0, EF_DIRECTION,
+            offsetof(RandomSequenceConfig, final_gradient_direction)),
 };
 
 void randomsequence_config_defaults(void *cfg_ptr) {
@@ -146,8 +148,10 @@ static int rs_build(Effect *self, EngineCtx *ctx) {
         strcpy(input_symbol, ch->input_symbol);
 
         terminal_set_character_visibility(&ctx->terminal, id, false);
+        Easing no_ease;
+        memset(&no_ease, 0, sizeof(no_ease));
         const char *scene_id =
-            animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, NULL, "", uses_pre);
+            animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, no_ease, "", uses_pre);
         Scene *scene = (Scene *)om_get(&ch->animation.scenes, scene_id);
         const char *symbols[1] = {input_symbol};
         int64_t frames = cfg->final_gradient_frames;
@@ -278,3 +282,13 @@ Effect *randomsequence_make(const void *cfg) {
     effect->state = st;
     return effect;
 }
+
+const EffectEntry randomsequence_entry = {
+    "randomsequence",
+    randomsequence_specs,
+    sizeof(randomsequence_specs) / sizeof(randomsequence_specs[0]),
+    sizeof(RandomSequenceConfig),
+    randomsequence_config_defaults,
+    randomsequence_free_config,
+    randomsequence_make,
+};

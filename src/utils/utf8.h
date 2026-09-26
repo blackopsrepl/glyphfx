@@ -12,4 +12,7 @@
 int utf8_decode_strict(const char *bytes, size_t len, uint32_t **out_cps, size_t *out_count,
                        size_t *bad_offset);
 
+// Counts UTF-8 codepoints (leading bytes only; assumes valid UTF-8).
+size_t utf8_count_codepoints(const char *s);
+
 #endif

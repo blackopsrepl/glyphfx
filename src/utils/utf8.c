@@ -2,6 +2,16 @@
 
 #include <stdlib.h>
 
+size_t utf8_count_codepoints(const char *s) {
+    size_t n = 0;
+    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+        if ((*p & 0xC0) != 0x80) {
+            n++;
+        }
+    }
+    return n;
+}
+
 static int is_cont(uint8_t b) {
     return (b & 0xC0) == 0x80;
 }
