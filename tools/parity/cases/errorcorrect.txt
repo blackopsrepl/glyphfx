@@ -1,0 +1,11 @@
+# errorcorrect parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+7   |      |
+123 |      | --error-pairs 0.01 --swap-delay 2
+42  |      | --error-color FF0000 --correct-color 00FF00 --movement-speed 0.5
+42  |      | --final-gradient-direction horizontal --final-gradient-steps 5
+1   |      | --error-pairs 0.02
+42  | --xterm-colors |
+42  | --existing-color-handling dynamic |
+42  | --canvas-width 20 --canvas-height 8 | --error-pairs 0.03

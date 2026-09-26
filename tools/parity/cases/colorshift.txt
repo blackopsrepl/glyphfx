@@ -1,0 +1,12 @@
+# colorshift parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+7   |      |
+123 |      | --cycles 1 --gradient-frames 3
+42  |      | --no-travel --travel-direction horizontal
+42  |      | --travel-direction horizontal --reverse-travel-direction
+42  |      | --no-loop --skip-final-gradient --cycles 2
+1   |      | --gradient-stops FF0000 0000FF --gradient-steps 5 --cycles 1
+42  | --xterm-colors |
+42  | --existing-color-handling dynamic |
+42  | --canvas-width 20 --canvas-height 8 | --cycles 1

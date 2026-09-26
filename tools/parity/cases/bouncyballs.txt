@@ -1,0 +1,12 @@
+# bouncyballs parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+7   |      |
+123 |      |
+42  |      | --ball-delay 2 --movement-speed 0.6
+42  |      | --ball-colors FF0000 00FF00 --ball-symbols X
+42  |      | --movement-easing out_bounce --final-gradient-direction horizontal
+1   |      | --final-gradient-stops FF0000 0000FF --final-gradient-steps 5
+42  | --xterm-colors |
+42  | --existing-color-handling dynamic |
+42  | --canvas-width 20 --canvas-height 8 | --ball-symbols o

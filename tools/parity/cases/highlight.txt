@@ -1,0 +1,12 @@
+# highlight parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+7   |      |
+123 |      | --highlight-width 4 --highlight-brightness 2.0
+42  |      | --highlight-direction column_left_to_right --highlight-width 6
+42  |      | --highlight-direction row_top_to_bottom --highlight-brightness 1.2
+42  |      | --final-gradient-direction horizontal --final-gradient-steps 5
+1   |      | --highlight-direction outside_to_center --highlight-width 3
+42  | --xterm-colors |
+42  | --existing-color-handling dynamic |
+42  | --canvas-width 20 --canvas-height 8 | --highlight-width 5
