@@ -23,6 +23,7 @@ FONT_SIZE = 13
 DEFAULT_FG = (198, 198, 198)
 DEFAULT_BG = (0, 0, 0)
 FRAME_MS = 60
+HOLD_FRAMES = 8
 
 
 def load_palette():
@@ -48,24 +49,43 @@ def load_fonts():
     }
 
 
-def capture(effect, effect_args, seed, max_frames, cols, rows):
+def capture(effect, effect_args, seed, cols, rows):
+    """Run glyphfx to completion and return every raw frame string.
+
+    The effect, not a frame cap, decides where the animation ends; sampling to
+    a budget happens afterwards in sample_frames().
+    """
     env = dict(os.environ)
     env["COLUMNS"] = str(CANVAS_W)
     env["LINES"] = str(CANVAS_H)
-    cmd = [BIN, "--seed", str(seed), "--parity-dump", "--max-frames", str(max_frames), "--virtual-clock",
+    cmd = [BIN, "--seed", str(seed), "--parity-dump", "--virtual-clock",
            "--canvas-width", str(cols), "--canvas-height", str(rows), "--anchor-canvas", "c",
            "--anchor-text", "c", effect] + effect_args
     out = subprocess.run(cmd, input=open(BANNER, "rb").read(), stdout=subprocess.PIPE,
-                         stderr=subprocess.DEVNULL, env=env).stdout
+                         stderr=subprocess.DEVNULL, env=env, timeout=300).stdout
     frames = []
     i = 0
     while i < len(out):
         nl = out.index(b"\n", i)
         length = int(out[i:nl])
         data = out[nl + 1:nl + 1 + length]
-        frames.append(data.decode("utf-8", "replace"))
+        frames.append(data)
         i = nl + 1 + length + 1
     return frames
+
+
+def sample_frames(frames, budget):
+    """Evenly down-sample a full animation to at most `budget` frames.
+
+    Keeps the whole arc rather than a prefix, and always keeps the final frame
+    so the GIF ends on the resolved text.
+    """
+    if not frames or len(frames) <= budget:
+        return list(frames)
+    step = len(frames) / budget
+    picked = [frames[min(int(i * step), len(frames) - 1)] for i in range(budget)]
+    picked[-1] = frames[-1]
+    return picked
 
 
 class State:
@@ -197,6 +217,9 @@ def save_gif(frames, path):
     return True
 
 
+# (effect, extra args, sampling budget). The budget is a ceiling on how many
+# frames the GIF shows; longer animations are evenly down-sampled across their
+# whole arc, never cut to a prefix.
 EFFECTS = [
     ("beams", [], 90), ("binarypath", [], 90), ("blackhole", [], 110), ("bouncyballs", [], 90),
     ("bubbles", [], 90), ("burn", [], 90), ("colorshift", [], 70), ("crumble", [], 110),
@@ -216,14 +239,17 @@ HERO = ("wipe", [], 140)
 HERO_W, HERO_H = 96, 24
 
 
-def render_one(name, extra, max_frames, cols, rows, palette, fonts, cell_w, cell_h, ascent, path):
-    frames = capture(name, extra, seed=7, max_frames=max_frames, cols=cols, rows=rows)
-    images = [render_frame(f, palette, fonts, cell_w, cell_h, ascent) for f in frames]
-    if not frames:
+def render_one(name, extra, budget, cols, rows, palette, fonts, cell_w, cell_h, ascent, path):
+    raw = capture(name, extra, seed=7, cols=cols, rows=rows)
+    if not raw:
         print(f"{name}: no frames")
         return
+    picked = sample_frames(raw, budget)
+    frames = [f.decode("utf-8", "replace") for f in picked]
+    images = [render_frame(f, palette, fonts, cell_w, cell_h, ascent) for f in frames]
+    images += [images[-1]] * HOLD_FRAMES
     save_gif(images, path)
-    print(f"{name}: {len(frames)} frames -> {path}")
+    print(f"{name}: {len(raw)} frames, sampled {len(picked)} + {HOLD_FRAMES} hold -> {path}")
 
 
 def main():
@@ -234,10 +260,10 @@ def main():
     ascent, descent = fonts["r"].getmetrics()
     cell_h = ascent + descent
     os.makedirs(OUT_DIR, exist_ok=True)
-    for name, extra, max_frames in EFFECTS:
+    for name, extra, budget in EFFECTS:
         if only and name not in only:
             continue
-        render_one(name, extra, max_frames, CANVAS_W, CANVAS_H, palette, fonts, cell_w, cell_h, ascent,
+        render_one(name, extra, budget, CANVAS_W, CANVAS_H, palette, fonts, cell_w, cell_h, ascent,
                    os.path.join(OUT_DIR, name + ".gif"))
     if not only or "hero" in only:
         width, height = CANVAS_W, CANVAS_H
