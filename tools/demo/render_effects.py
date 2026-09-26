@@ -162,6 +162,26 @@ class State:
             i += 1
 
 
+# Block elements are drawn as filled rectangles rather than font glyphs: a
+# monospace face does not tile its blocks edge to edge at an arbitrary cell
+# size, which puts visible seams through the solid areas of the logo.
+# (y_fraction, height_fraction, opacity) within the cell.
+BLOCKS = {
+    "█": (0.0, 1.0, 1.0),
+    "▄": (0.5, 0.5, 1.0),
+    "▀": (0.0, 0.5, 1.0),
+    "▓": (0.0, 1.0, 0.75),
+    "▒": (0.0, 1.0, 0.5),
+    "░": (0.0, 1.0, 0.25),
+}
+# half-width blocks also need an x offset: (x_fraction, width_fraction)
+HALF_BLOCKS = {"▌": (0.0, 0.5), "▐": (0.5, 0.5)}
+
+
+def blend(fg, bg, opacity):
+    return tuple(round(bg[i] + (fg[i] - bg[i]) * opacity) for i in range(3))
+
+
 def render_frame(frame, palette, fonts, cell_w, cell_h, ascent):
     img = Image.new("RGB", (CANVAS_W * cell_w, CANVAS_H * cell_h), DEFAULT_BG)
     draw = ImageDraw.Draw(img)
@@ -196,8 +216,17 @@ def render_frame(frame, palette, fonts, cell_w, cell_h, ascent):
         if st.hidden:
             fg = bg
         if bg != DEFAULT_BG:
-            draw.rectangle([x, y, x + cell_w, y + cell_h], fill=bg)
-        if c != " ":
+            draw.rectangle([x, y, x + cell_w - 1, y + cell_h - 1], fill=bg)
+        if c in BLOCKS:
+            yf, hf, opacity = BLOCKS[c]
+            fill = blend(fg, bg, opacity) if opacity < 1.0 else fg
+            draw.rectangle([x, y + round(yf * cell_h), x + cell_w - 1,
+                            y + round((yf + hf) * cell_h) - 1], fill=fill)
+        elif c in HALF_BLOCKS:
+            xf, wf = HALF_BLOCKS[c]
+            draw.rectangle([x + round(xf * cell_w), y, x + round((xf + wf) * cell_w) - 1,
+                            y + cell_h - 1], fill=fg)
+        elif c != " ":
             font = fonts["bi" if (st.bold and st.italic) else "b" if st.bold else "i" if st.italic else "r"]
             draw.text((x, y + ascent), c, font=font, fill=fg, anchor="ls")
         if st.underline:
