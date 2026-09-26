@@ -13,6 +13,8 @@ jobs:
         run: make
       - name: Unit tests
         run: make check
+      - name: Install the oracle's Rust toolchain
+        run: rustup update stable && rustup default stable
       - name: Fetch and build the ttfx oracle
         run: tools/parity/fetch_reference.sh
       - name: Byte-exact M0 parity

@@ -3,6 +3,11 @@
 #include <signal.h>
 #include <stdlib.h>
 
+// SIGWINCH is BSD/Linux and is 28 on both; strict C17 hides it on macOS.
+#ifndef SIGWINCH
+#define SIGWINCH 28
+#endif
+
 static volatile sig_atomic_t g_interrupted = 0;
 static volatile sig_atomic_t g_terminated = 0;
 static volatile sig_atomic_t g_resized = 0;
