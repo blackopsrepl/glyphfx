@@ -2,6 +2,14 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
 
+## [0.1.5](https://github.com/blackopsrepl/glyphfx/compare/v0.1.4...v0.1.5) (2026-09-26)
+
+### Performance
+
+* **events:** keep non-callback action ids on the stack ([1804f03](https://github.com/blackopsrepl/glyphfx/commit/1804f03c4afacaeae05da12cdd20d8878343706c))
+* **render:** store formatted symbols inline and copy a fixed block ([3ccc311](https://github.com/blackopsrepl/glyphfx/commit/3ccc3116571ff81241a17bdd23587d8133499bfe))
+* **strbuf:** inline the hot small appends ([b34f045](https://github.com/blackopsrepl/glyphfx/commit/b34f0456506b3a1b164eb9cbbab2f270d23ae2f1))
+
 ## [0.1.4](https://github.com/blackopsrepl/glyphfx/compare/v0.1.3...v0.1.4) (2026-09-26)
 
 ### Performance
