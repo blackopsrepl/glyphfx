@@ -16,6 +16,8 @@
 #include "utils/clock.h"
 #include "utils/graphics.h"
 
+typedef struct Terminal Terminal;
+
 typedef struct TerminalConfig {
     int64_t tab_width;
     bool xterm_colors;
@@ -36,6 +38,28 @@ typedef struct TerminalConfig {
 
 void terminal_config_default(TerminalConfig *config);
 
+typedef enum {
+    CS_RANDOM,
+    CS_TOP_TO_BOTTOM_LEFT_TO_RIGHT,
+    CS_BOTTOM_TO_TOP_RIGHT_TO_LEFT,
+    CS_BOTTOM_TO_TOP_LEFT_TO_RIGHT,
+    CS_TOP_TO_BOTTOM_RIGHT_TO_LEFT,
+    CS_OUTSIDE_ROW_TO_MIDDLE,
+    CS_MIDDLE_ROW_TO_OUTSIDE,
+} CharacterSort;
+
+typedef struct {
+    bool input_chars;
+    bool inner_fill_chars;
+    bool outer_fill_chars;
+    bool added_chars;
+} CharacterFilter;
+
+CharacterFilter character_filter_default(void);
+// Returns a malloc'd, ordered character list (caller frees).
+CharId *terminal_get_characters(const Terminal *t, Rng *rng, CharacterFilter filter, CharacterSort sort,
+                                size_t *out_len);
+
 typedef struct {
     int64_t canvas_height;
     int64_t canvas_width;
@@ -47,7 +71,7 @@ typedef struct {
     int64_t visible_left;
 } Layout;
 
-typedef struct {
+struct Terminal {
     TerminalConfig config;
     Canvas canvas;
     Arena arena;
@@ -88,7 +112,7 @@ typedef struct {
     int64_t frame_rate;
     double last_time_printed;
     Clock clock;
-} Terminal;
+};
 
 // Builds the terminal (preprocess + canvas + fill + neighbors). Returns 0 on
 // success, or a PreprocessError via *err. On success *err->status == OK.

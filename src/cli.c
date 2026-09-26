@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "effects/registry.h"
 #include "utils/hexterm.h"
 
 #include "glyphfx_version.h"
@@ -233,23 +234,282 @@ static int assign_option(CliConfig *cfg, const OptSpec *spec, const char *value)
     return 2;
 }
 
+static void list_color_append(ColorList *list, Color c) {
+    if (list->len == list->cap) {
+        size_t cap = list->cap ? list->cap * 2 : 4;
+        Color *grown = realloc(list->items, cap * sizeof(Color));
+        if (!grown) {
+            return;
+        }
+        list->items = grown;
+        list->cap = cap;
+    }
+    list->items[list->len++] = c;
+}
+
+static void list_int_append(IntList *list, int64_t v) {
+    if (list->len == list->cap) {
+        size_t cap = list->cap ? list->cap * 2 : 4;
+        int64_t *grown = realloc(list->items, cap * sizeof(int64_t));
+        if (!grown) {
+            return;
+        }
+        list->items = grown;
+        list->cap = cap;
+    }
+    list->items[list->len++] = v;
+}
+
+static int parse_double_arg(const char *s, double *out) {
+    if (s[0] == '\0') {
+        return -1;
+    }
+    char *endp = NULL;
+    errno = 0;
+    double v = strtod(s, &endp);
+    if (errno != 0 || !endp || *endp != '\0') {
+        return -1;
+    }
+    *out = v;
+    return 0;
+}
+
+static const EffOptSpec *eff_find(const EffectEntry *entry, const char *name) {
+    for (size_t i = 0; i < entry->n_specs; i++) {
+        if (strcmp(entry->specs[i].name, name) == 0) {
+            return &entry->specs[i];
+        }
+    }
+    return NULL;
+}
+
+static int eff_assign(const EffectEntry *entry, void *cfg, const EffOptSpec *spec, const char *value) {
+    char *base = cfg;
+    (void)entry;
+    switch (spec->kind) {
+        case EF_FLAG:
+            *(bool *)(base + spec->offset) = true;
+            return 0;
+        case EF_INT: {
+            int64_t v;
+            if (parse_i64(value, &v) != 0) {
+                usage_error("invalid int value '%s'", value);
+                return 2;
+            }
+            *(int64_t *)(base + spec->offset) = v;
+            return 0;
+        }
+        case EF_POS_INT: {
+            int64_t v;
+            if (parse_i64(value, &v) != 0 || v <= 0) {
+                usage_error("invalid value '%s': must be an int > 0", value);
+                return 2;
+            }
+            *(int64_t *)(base + spec->offset) = v;
+            return 0;
+        }
+        case EF_NONNEG_INT: {
+            int64_t v;
+            if (parse_i64(value, &v) != 0 || v < 0) {
+                usage_error("invalid value '%s': must be an int >= 0", value);
+                return 2;
+            }
+            *(int64_t *)(base + spec->offset) = v;
+            return 0;
+        }
+        case EF_FLOAT_POS: {
+            double v;
+            if (parse_double_arg(value, &v) != 0 || !(v > 0.0)) {
+                usage_error("invalid value '%s': must be a float > 0", value);
+                return 2;
+            }
+            *(double *)(base + spec->offset) = v;
+            return 0;
+        }
+        case EF_FLOAT_NONNEG: {
+            double v;
+            if (parse_double_arg(value, &v) != 0 || !(v >= 0.0)) {
+                usage_error("invalid value '%s': must be a float >= 0", value);
+                return 2;
+            }
+            *(double *)(base + spec->offset) = v;
+            return 0;
+        }
+        case EF_RATIO_NONNEG: {
+            double v;
+            if (parse_double_arg(value, &v) != 0 || !(v >= 0.0 && v <= 1.0)) {
+                usage_error("invalid value '%s': must be a float 0 <= n <= 1", value);
+                return 2;
+            }
+            *(double *)(base + spec->offset) = v;
+            return 0;
+        }
+        case EF_RATIO_POS: {
+            double v;
+            if (parse_double_arg(value, &v) != 0 || !(v > 0.0 && v <= 1.0)) {
+                usage_error("invalid value '%s': must be a float 0 < n <= 1", value);
+                return 2;
+            }
+            *(double *)(base + spec->offset) = v;
+            return 0;
+        }
+        case EF_STRING:
+            *(const char **)(base + spec->offset) = value;
+            return 0;
+        case EF_COLOR: {
+            Color c;
+            if (parse_color_arg(value, &c) != 0) {
+                usage_error("invalid color value '%s'", value);
+                return 2;
+            }
+            *(Color *)(base + spec->offset) = c;
+            return 0;
+        }
+        case EF_DIRECTION: {
+            GradientDirection d;
+            if (strcmp(value, "horizontal") == 0) {
+                d = GRADIENT_HORIZONTAL;
+            } else if (strcmp(value, "vertical") == 0) {
+                d = GRADIENT_VERTICAL;
+            } else if (strcmp(value, "diagonal") == 0) {
+                d = GRADIENT_DIAGONAL;
+            } else if (strcmp(value, "radial") == 0) {
+                d = GRADIENT_RADIAL;
+            } else {
+                usage_error("invalid gradient direction '%s'", value);
+                return 2;
+            }
+            *(GradientDirection *)(base + spec->offset) = d;
+            return 0;
+        }
+        case EF_COLOR_LIST: {
+            ColorList *list = (ColorList *)(base + spec->offset);
+            if (!list->provided) {
+                list->len = 0;
+                list->provided = true;
+            }
+            Color c;
+            if (parse_color_arg(value, &c) != 0) {
+                usage_error("invalid color value '%s'", value);
+                return 2;
+            }
+            list_color_append(list, c);
+            return 0;
+        }
+        case EF_INT_LIST: {
+            IntList *list = (IntList *)(base + spec->offset);
+            if (!list->provided) {
+                list->len = 0;
+                list->provided = true;
+            }
+            int64_t v;
+            if (parse_i64(value, &v) != 0 || v <= 0) {
+                usage_error("invalid value '%s': must be an int > 0", value);
+                return 2;
+            }
+            list_int_append(list, v);
+            return 0;
+        }
+        case EF_EASING:
+        case EF_CHAR_SORT:
+        case EF_CHAR_GROUP:
+            usage_error("option '--%s' is not yet supported", spec->name);
+            return 2;
+    }
+    return 2;
+}
+
+static bool looks_like_option(const char *s) {
+    return s[0] == '-' && s[1] != '\0';
+}
+
+static int parse_effect_args(const EffectEntry *entry, void *cfg, int argc, char **argv, int start) {
+    for (int i = start; i < argc; i++) {
+        const char *arg = argv[i];
+        if (strcmp(arg, "--") == 0) {
+            continue;
+        }
+        if (arg[0] == '-' && arg[1] == '-' && arg[2] != '\0') {
+            const char *name = arg + 2;
+            const char *eq = strchr(name, '=');
+            char namebuf[64];
+            const char *value = NULL;
+            if (eq) {
+                size_t n = (size_t)(eq - name);
+                if (n >= sizeof(namebuf)) {
+                    usage_error("unrecognized option '%s'", arg);
+                    return 2;
+                }
+                memcpy(namebuf, name, n);
+                namebuf[n] = '\0';
+                name = namebuf;
+                value = eq + 1;
+            }
+            const EffOptSpec *spec = eff_find(entry, name);
+            if (!spec) {
+                usage_error("unrecognized option '--%s' for effect '%s'", name, entry->name);
+                return 2;
+            }
+            if (spec->kind == EF_FLAG) {
+                int rc = eff_assign(entry, cfg, spec, "1");
+                if (rc != 0) {
+                    return rc;
+                }
+                continue;
+            }
+            if (spec->kind == EF_COLOR_LIST || spec->kind == EF_INT_LIST) {
+                // Consume one or more values until the next option.
+                int consumed = 0;
+                if (value) {
+                    int rc = eff_assign(entry, cfg, spec, value);
+                    if (rc != 0) {
+                        return rc;
+                    }
+                    consumed++;
+                }
+                while (i + 1 < argc && !looks_like_option(argv[i + 1])) {
+                    int rc = eff_assign(entry, cfg, spec, argv[++i]);
+                    if (rc != 0) {
+                        return rc;
+                    }
+                    consumed++;
+                }
+                if (consumed == 0) {
+                    usage_error("option '--%s' requires at least one value", name);
+                    return 2;
+                }
+                continue;
+            }
+            if (!value) {
+                if (i + 1 >= argc) {
+                    usage_error("option '--%s' requires a value", name);
+                    return 2;
+                }
+                value = argv[++i];
+            }
+            int rc = eff_assign(entry, cfg, spec, value);
+            if (rc != 0) {
+                return rc;
+            }
+            continue;
+        }
+        usage_error("unrecognized argument '%s' for effect '%s'", arg, entry->name);
+        return 2;
+    }
+    return 0;
+}
+
 int cli_parse(int argc, char **argv, CliConfig *cfg) {
     memset(cfg, 0, sizeof(*cfg));
     terminal_config_default(&cfg->tc);
 
-    bool positional_seen = false;
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
-        if (positional_seen) {
-            // Effect options are parsed by the effect's own table (M3).
-            continue;
-        }
         if (strcmp(arg, "--") == 0) {
-            if (i + 1 < argc) {
-                cfg->effect_name = argv[i + 1];
-                positional_seen = true;
+            if (i + 1 >= argc) {
+                break;
             }
-            continue;
+            arg = argv[++i];
         }
         if (arg[0] == '-' && arg[1] == '-' && arg[2] != '\0') {
             const char *name = arg + 2;
@@ -318,9 +578,24 @@ int cli_parse(int argc, char **argv, CliConfig *cfg) {
             }
             continue;
         }
-        // First positional argument names the effect.
+        // First positional argument names the effect; the rest are its options.
         cfg->effect_name = arg;
-        positional_seen = true;
+        const EffectEntry *entry = effect_find(arg);
+        if (!entry) {
+            usage_error("unrecognized effect '%s'", arg);
+            return 2;
+        }
+        cfg->effect_entry = entry;
+        cfg->effect_config = calloc(1, entry->config_size);
+        if (!cfg->effect_config) {
+            return 1;
+        }
+        entry->defaults(cfg->effect_config);
+        int effect_rc = parse_effect_args(entry, cfg->effect_config, argc, argv, i + 1);
+        if (effect_rc != 0) {
+            return effect_rc;
+        }
+        break;
     }
     return 0;
 }

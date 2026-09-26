@@ -31,7 +31,16 @@ void character_free(EffectCharacter *ch) {
     free(ch->input_ansi_fg_sequence);
     free(ch->input_ansi_bg_sequence);
     animation_free(&ch->animation);
+    event_handler_free(&ch->event_handler);
     memset(ch, 0, sizeof(*ch));
+}
+
+bool character_is_active(const EffectCharacter *ch) {
+    bool movement_complete = !ch->has_active_path;
+    if (!movement_complete) {
+        return true;
+    }
+    return !animation_active_scene_is_complete(&ch->animation);
 }
 
 void arena_init(Arena *a) {

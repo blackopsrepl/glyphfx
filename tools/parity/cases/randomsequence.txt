@@ -1,0 +1,18 @@
+# randomsequence parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |                     |
+42  |                     | --speed 0.05
+42  |                     | --final-gradient-frames 3
+42  |                     | --final-gradient-direction horizontal
+42  |                     | --final-gradient-stops FF0000 0000FF --final-gradient-steps 5
+1   |                     |
+7   |                     |
+123 |                     |
+999 |                     |
+42  | --xterm-colors       |
+42  | --no-color          |
+42  | --existing-color-handling always  |
+42  | --existing-color-handling dynamic |
+42  | --existing-color-handling dynamic | --speed 0.2
+42  | --canvas-width 20 --canvas-height 8 |
+42  | --anchor-canvas nw --anchor-text c |

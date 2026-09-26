@@ -10,17 +10,16 @@
 #include <stddef.h>
 
 #include "engine/animation.h"
+#include "engine/charid.h"
+#include "engine/events.h"
 #include "utils/geometry.h"
-
-// Arena slot index. -1 means "none".
-typedef int32_t CharId;
-#define CHAR_ID_NONE ((CharId)-1)
 
 typedef struct {
     uint32_t character_id;  // Python-compatible allocation id; ordering key
     char *input_symbol;     // owned
     Coord input_coord;
     Coord motion_coord;
+    bool has_active_path;
     bool is_visible;
     bool has_input_fg_seq;
     char *input_ansi_fg_sequence;  // owned
@@ -30,6 +29,7 @@ typedef struct {
     bool is_fill_character;
     bool uses_input_preexisting_colors;
     Animation animation;
+    EventHandler event_handler;
     CharId north;
     CharId east;
     CharId south;
@@ -38,6 +38,8 @@ typedef struct {
 
 void character_init(EffectCharacter *ch, uint32_t character_id, const char *symbol, int64_t column, int64_t row);
 void character_free(EffectCharacter *ch);
+// Movement is complete while no path is active; then the animation decides.
+bool character_is_active(const EffectCharacter *ch);
 
 typedef struct {
     EffectCharacter *items;

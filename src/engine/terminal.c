@@ -610,3 +610,134 @@ void terminal_enforce_framerate(Terminal *t) {
     }
     t->last_time_printed = monotonic_seconds();
 }
+
+// --- character queries ----------------------------------------------------
+
+CharacterFilter character_filter_default(void) {
+    CharacterFilter filter;
+    filter.input_chars = true;
+    filter.inner_fill_chars = false;
+    filter.outer_fill_chars = false;
+    filter.added_chars = false;
+    return filter;
+}
+
+static int sort_key_compare(const Arena *arena, CharId a, CharId b, int mode) {
+    Coord ca = arena->items[a].input_coord;
+    Coord cb = arena->items[b].input_coord;
+    if (mode == 0) {
+        // (-row, column)
+        if (ca.row != cb.row) return ca.row > cb.row ? -1 : 1;
+        if (ca.column != cb.column) return ca.column < cb.column ? -1 : 1;
+    } else {
+        // (row, column)
+        if (ca.row != cb.row) return ca.row < cb.row ? -1 : 1;
+        if (ca.column != cb.column) return ca.column < cb.column ? -1 : 1;
+    }
+    return 0;
+}
+
+// Stable merge sort over the (mode) key. Ties keep their input order, matching
+// the reference's stable sort_by_key.
+static void stable_sort_ids(CharId *ids, size_t n, const Arena *arena, int mode) {
+    if (n < 2) {
+        return;
+    }
+    CharId *tmp = malloc(n * sizeof(CharId));
+    if (!tmp) {
+        return;
+    }
+    for (size_t width = 1; width < n; width *= 2) {
+        for (size_t lo = 0; lo < n; lo += 2 * width) {
+            size_t mid = lo + width < n ? lo + width : n;
+            size_t hi = lo + 2 * width < n ? lo + 2 * width : n;
+            size_t i = lo, j = mid, k = lo;
+            while (i < mid && j < hi) {
+                if (sort_key_compare(arena, ids[j], ids[i], mode) < 0) {
+                    tmp[k++] = ids[j++];
+                } else {
+                    tmp[k++] = ids[i++];
+                }
+            }
+            while (i < mid) tmp[k++] = ids[i++];
+            while (j < hi) tmp[k++] = ids[j++];
+        }
+        memcpy(ids, tmp, n * sizeof(CharId));
+    }
+    free(tmp);
+}
+
+CharId *terminal_get_characters(const Terminal *t, Rng *rng, CharacterFilter filter, CharacterSort sort,
+                                size_t *out_len) {
+    size_t cap = 0;
+    if (filter.input_chars) cap += t->input_characters_len;
+    if (filter.inner_fill_chars) cap += t->inner_fill_characters_len;
+    if (filter.outer_fill_chars) cap += t->outer_fill_characters_len;
+    if (filter.added_chars) cap += t->added_characters_len;
+    CharId *all = malloc((cap ? cap : 1) * sizeof(CharId));
+    size_t n = 0;
+    if (filter.input_chars) {
+        memcpy(all + n, t->input_characters, t->input_characters_len * sizeof(CharId));
+        n += t->input_characters_len;
+    }
+    if (filter.inner_fill_chars) {
+        memcpy(all + n, t->inner_fill_characters, t->inner_fill_characters_len * sizeof(CharId));
+        n += t->inner_fill_characters_len;
+    }
+    if (filter.outer_fill_chars) {
+        memcpy(all + n, t->outer_fill_characters, t->outer_fill_characters_len * sizeof(CharId));
+        n += t->outer_fill_characters_len;
+    }
+    if (filter.added_chars) {
+        memcpy(all + n, t->added_characters, t->added_characters_len * sizeof(CharId));
+        n += t->added_characters_len;
+    }
+    stable_sort_ids(all, n, &t->arena, 0);
+    switch (sort) {
+        case CS_RANDOM:
+            rng_shuffle(rng, all, n, sizeof(CharId));
+            break;
+        case CS_TOP_TO_BOTTOM_LEFT_TO_RIGHT:
+            break;
+        case CS_BOTTOM_TO_TOP_RIGHT_TO_LEFT:
+            for (size_t i = 0; i < n / 2; i++) {
+                CharId tmp = all[i];
+                all[i] = all[n - 1 - i];
+                all[n - 1 - i] = tmp;
+            }
+            break;
+        case CS_BOTTOM_TO_TOP_LEFT_TO_RIGHT:
+        case CS_TOP_TO_BOTTOM_RIGHT_TO_LEFT:
+            stable_sort_ids(all, n, &t->arena, 1);
+            if (sort == CS_TOP_TO_BOTTOM_RIGHT_TO_LEFT) {
+                for (size_t i = 0; i < n / 2; i++) {
+                    CharId tmp = all[i];
+                    all[i] = all[n - 1 - i];
+                    all[n - 1 - i] = tmp;
+                }
+            }
+            break;
+        case CS_OUTSIDE_ROW_TO_MIDDLE:
+        case CS_MIDDLE_ROW_TO_OUTSIDE: {
+            CharId *interleaved = malloc((n ? n : 1) * sizeof(CharId));
+            size_t lo = 0, hi = n, k = 0;
+            bool from_front = true;
+            while (lo < hi) {
+                interleaved[k++] = from_front ? all[lo++] : all[--hi];
+                from_front = !from_front;
+            }
+            memcpy(all, interleaved, n * sizeof(CharId));
+            free(interleaved);
+            if (sort == CS_MIDDLE_ROW_TO_OUTSIDE) {
+                for (size_t i = 0; i < n / 2; i++) {
+                    CharId tmp = all[i];
+                    all[i] = all[n - 1 - i];
+                    all[n - 1 - i] = tmp;
+                }
+            }
+            break;
+        }
+    }
+    *out_len = n;
+    return all;
+}

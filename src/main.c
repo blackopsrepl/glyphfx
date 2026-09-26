@@ -8,7 +8,11 @@
 #include <unistd.h>
 
 #include "cli.h"
+#include "effects/registry.h"
+#include "engine/ctx.h"
 #include "engine/terminal.h"
+#include "utils/clock.h"
+#include "utils/rng.h"
 #include "utils/utf8.h"
 
 static char *read_all(FILE *f, size_t *out_len) {
@@ -163,13 +167,48 @@ int main(int argc, char **argv) {
         return m0;
     }
 
-    if (!cfg.effect_name) {
+    if (!cfg.effect_entry) {
         fputs("Error: No effect specified.\n", stderr);
         free(input);
         return 1;
     }
 
-    fputs("Error: effect execution is not yet implemented.\n", stderr);
+    const EffectEntry *entry = (const EffectEntry *)cfg.effect_entry;
+    Effect *effect = entry->make(cfg.effect_config);
+    if (!effect) {
+        fputs("Error: failed to build effect.\n", stderr);
+        free(input);
+        return 1;
+    }
+    Rng rng = cfg.has_seed ? rng_seeded(cfg.seed) : rng_from_entropy();
+    Clock clock = (cfg.parity_dump || cfg.virtual_clock) ? clock_virtual_with_frame_rate(cfg.tc.frame_rate)
+                                                          : clock_real();
+    EngineCtx ctx;
+    PreprocessError pp_err;
+    memset(&pp_err, 0, sizeof(pp_err));
+    if (engine_ctx_init(&ctx, input, &cfg.tc, rng, clock, &pp_err) != 0) {
+        if (pp_err.status == PREPROCESS_UNSUPPORTED_ANSI) {
+            fprintf(stderr, "Error: Unsupported ANSI sequence in input data: \"%s\"\n", pp_err.sequence);
+        } else {
+            fprintf(stderr, "Error: %s\n", pp_err.message[0] ? pp_err.message : "failed to build canvas");
+        }
+        effect->ops->destroy(effect);
+        free(input);
+        return 1;
+    }
+
+    int run_rc;
+    if (cfg.parity_dump) {
+        run_rc = effect_dump(effect, &ctx, cfg.has_max_frames, cfg.max_frames);
+    } else {
+        run_rc = effect_run(effect, &ctx, isatty(STDOUT_FILENO) != 0);
+    }
+    effect->ops->destroy(effect);
+    engine_ctx_free(&ctx);
     free(input);
-    return 1;
+    if (run_rc != 0) {
+        fputs("Error: effect execution failed.\n", stderr);
+        return 1;
+    }
+    return 0;
 }
