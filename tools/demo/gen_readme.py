@@ -105,6 +105,14 @@ glyphfx does not, deliberately:
   results; a hand-tuned assembly engine doubles the surface where the two can
   silently diverge.
 
+> **Why not assembly?** There is no frame budget to win. glyphfx paces itself at
+> 60 fps and hands one batched frame to the terminal per tick; the
+> tens-of-thousands-of-fps figures are a benchmark, not the product. ttfx's own
+> AVX-512 experiment credits data layout and batched writes for its speedup, not
+> instruction selection — and that is portable C work. Hand-written SIMD would
+> accelerate a number nobody watches while trading away the single binary that
+> stays byte-exact with the oracle.
+
 The result builds anywhere with a C compiler, starts in about 0.3 ms, and
 renders every effect at thousands to tens of thousands of frames per second
 with pacing disabled.
