@@ -1,0 +1,12 @@
+# crumble parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+7   |      |
+123 |      |
+999 | --existing-color-handling dynamic |
+42  | --existing-color-handling dynamic |
+42  | --xterm-colors |
+42  | --canvas-width 20 --canvas-height 8 |
+42  |      | --final-gradient-stops FF0000 00FF00 --final-gradient-steps 4
+42  |      | --final-gradient-stops ffffff 000000 --final-gradient-direction horizontal
+42  | --existing-color-handling dynamic | --final-gradient-direction horizontal --final-gradient-steps 6

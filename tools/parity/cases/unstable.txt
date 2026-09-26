@@ -1,0 +1,12 @@
+# unstable parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+7   |      |
+999 | --existing-color-handling dynamic |
+42  | --existing-color-handling dynamic |
+42  | --xterm-colors |
+42  | --canvas-width 20 --canvas-height 8 |
+42  |      | --unstable-color FF0000 --explosion-ease in_quad --explosion-speed 2.0
+42  |      | --reassembly-ease out_bounce --reassembly-speed 0.5
+42  |      | --final-gradient-stops FF0000 00FF00 --final-gradient-steps 4 --final-gradient-direction horizontal
+42  | --existing-color-handling dynamic | --unstable-color 00FFFF --final-gradient-direction horizontal
