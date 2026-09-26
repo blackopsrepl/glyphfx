@@ -208,8 +208,22 @@ EFFECTS = [
     ("slice", [], 80), ("slide", [], 80), ("smoke", [], 100), ("spotlights", ["--search-duration", "60"], 110),
     ("spray", [], 90), ("swarm", [], 90), ("sweep", [], 90), ("synthgrid", [], 100),
     ("thunderstorm", ["--storm-time", "1"], 110), ("unstable", [], 90),
-    ("vhstape", ["--total-glitch-time", "300"], 110), ("waves", [], 90), ("wipe", [], 80),
+    ("vhstape", ["--total-glitch-time", "300"], 110), ("waves", [], 90), ("wipe", [], 120),
 ]
+
+# The README hero: a large, legible render of one effect.
+HERO = ("wipe", [], 140)
+HERO_W, HERO_H = 96, 24
+
+
+def render_one(name, extra, max_frames, cols, rows, palette, fonts, cell_w, cell_h, ascent, path):
+    frames = capture(name, extra, seed=7, max_frames=max_frames, cols=cols, rows=rows)
+    images = [render_frame(f, palette, fonts, cell_w, cell_h, ascent) for f in frames]
+    if not frames:
+        print(f"{name}: no frames")
+        return
+    save_gif(images, path)
+    print(f"{name}: {len(frames)} frames -> {path}")
 
 
 def main():
@@ -223,11 +237,14 @@ def main():
     for name, extra, max_frames in EFFECTS:
         if only and name not in only:
             continue
-        frames = capture(name, extra, seed=7, max_frames=max_frames, cols=CANVAS_W, rows=CANVAS_H)
-        images = [render_frame(f, palette, fonts, cell_w, cell_h, ascent) for f in frames]
-        path = os.path.join(OUT_DIR, name + ".gif")
-        ok = save_gif(images, path)
-        print(f"{name}: {len(frames)} frames -> {path}" if ok else f"{name}: no frames")
+        render_one(name, extra, max_frames, CANVAS_W, CANVAS_H, palette, fonts, cell_w, cell_h, ascent,
+                   os.path.join(OUT_DIR, name + ".gif"))
+    if not only or "hero" in only:
+        width, height = CANVAS_W, CANVAS_H
+        globals()["CANVAS_W"], globals()["CANVAS_H"] = HERO_W, HERO_H
+        render_one(HERO[0], HERO[1], HERO[2], HERO_W, HERO_H, palette, fonts, cell_w, cell_h, ascent,
+                   os.path.join(OUT_DIR, "hero.gif"))
+        globals()["CANVAS_W"], globals()["CANVAS_H"] = width, height
 
 
 if __name__ == "__main__":

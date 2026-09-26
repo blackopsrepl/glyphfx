@@ -77,7 +77,7 @@ git log --oneline -10 | glyphfx matrix
 ```
 
 <p align="center">
-  <img src="docs/effects/hero.gif" width="588" alt="the decrypt effect resolving the glyphfx banner">
+  <img src="docs/effects/hero.gif" width="588" alt="the wipe effect resolving the glyphfx banner">
 </p>
 
 ## Why C
