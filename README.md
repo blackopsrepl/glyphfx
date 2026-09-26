@@ -16,19 +16,19 @@ reinterpreted. libc and libm are the only dependencies.
 
 ## Status
 
-The engine is complete: arena and character ids, the CSI input emulator,
-canvas and anchoring, scenes with sync/eased stepping, path motion and events
-with inline reentrant dispatch, particles, spanning trees, gradients, easing,
-and the xoshiro256++ RNG.
+The engine and all 37 effects are implemented and verified byte for byte
+against the ttfx oracle, including the full CLI option surface, signal and
+resize handling, and the terminal byte stream. The verification suites:
 
-Effects are ported one file at a time and checked byte for byte against the
-ttfx oracle. Every effect with a case file in `tools/parity/cases/` is ported
-and passing; `make effects` runs all of them. The remaining effects are still
-being ported.
+- `make check` — pure-function, geometry, gradient, and RNG goldens.
+- `make parity` — the M0 input/canvas/anchoring option matrix.
+- `make effects` — every effect's frame stream across seeds and configs.
+- `tools/tests/cli_corpus.sh` — exit codes and stdout/stderr routing.
+- `tools/tests/tty_compare.py` — the full pty prep+frames+teardown stream.
+- `tools/tests/tty_signals.py` — SIGINT/SIGTERM/close/resize behavior.
 
-Not yet implemented: the remaining heavy effects (M5), CLI polish
-(`--help`/`--print-completion`/`--random-effect` filtering), and the pty and
-release-engineering suites.
+Byte-exact parity is pinned to Linux/glibc; builds and the unit tests also run
+on macOS.
 
 ## Build
 

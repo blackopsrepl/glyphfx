@@ -1,5 +1,6 @@
 VERSION := $(shell cat VERSION)
 CC ?= cc
+PREFIX ?= /usr/local
 CFLAGS ?= -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
 CPPFLAGS += -Isrc -Ibuild -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE
 LDFLAGS ?=
@@ -12,7 +13,7 @@ OBJS := $(patsubst src/%.c,$(BUILD)/%.o,$(SRCS))
 LIB_OBJS := $(patsubst src/%.c,$(BUILD)/%.o,$(LIB_SRCS))
 DEPS := $(OBJS:.o=.d)
 
-.PHONY: all clean check parity effects release debug test
+.PHONY: all clean check parity effects release debug static install test
 
 all: $(BUILD)/glyphfx
 
@@ -56,6 +57,13 @@ release: CFLAGS += -DNDEBUG
 release: $(BUILD)/glyphfx
 	strip $(BUILD)/glyphfx 2>/dev/null || true
 	@echo "release: $(BUILD)/glyphfx"
+
+static: $(OBJS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -static -o $(BUILD)/glyphfx-static $(OBJS) $(LDFLAGS) $(LDLIBS)
+
+install: $(BUILD)/glyphfx
+	install -d $(DESTDIR)$(PREFIX)/bin
+	install -m 0755 $(BUILD)/glyphfx $(DESTDIR)$(PREFIX)/bin/glyphfx
 
 debug:
 	@mkdir -p $(BUILD)

@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+      - name: Build
+        run: make
+      - name: Unit tests
+        run: make check
+      - name: Fetch and build the ttfx oracle
+        run: tools/parity/fetch_reference.sh
+      - name: Byte-exact M0 parity
+        run: make parity
+      - name: Byte-exact effect parity
+        run: GLYPHFX_MAX_FRAMES=600 make effects
+      - name: CLI corpus
+        run: tools/tests/cli_corpus.sh
+      - name: PTY byte stream
+        run: python3 tools/tests/tty_compare.py
+      - name: PTY runtime behavior
+        run: python3 tools/tests/tty_signals.py
+
+  macos-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: make
+      - name: Unit tests
+        run: make check

@@ -1,0 +1,22 @@
+# Maintainer: pvd <pvd@localhost>
+pkgname=glyphfx
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Terminal text effects as a standalone C17 binary (parity port of ttfx)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/blackopsrepl/glyphfx"
+license=('MIT')
+depends=('glibc')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$pkgname-$pkgver"
+  make release
+  make DESTDIR="$pkgdir" install
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  make check
+}
