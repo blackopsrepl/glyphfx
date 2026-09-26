@@ -1,0 +1,12 @@
+# vhstape parity cases.
+# format: <seed> | <terminal options> | <effect options>
+1  |      |
+2  |      | --total-glitch-time 20
+3  | --existing-color-handling dynamic | --total-glitch-time 20
+4  | --xterm-colors | --total-glitch-time 20
+5  | --canvas-width 20 --canvas-height 8 | --total-glitch-time 30
+6  |      | --glitch-line-chance 0.5 --noise-chance 0.1 --total-glitch-time 40
+7  |      | --glitch-line-colors ff0000 00ff00 --noise-colors 000000 ffffff --total-glitch-time 25
+8  | --existing-color-handling dynamic | --glitch-line-chance 0.9 --noise-chance 0.4 --total-glitch-time 15 --final-gradient-stops FF0000 00FF00 0000FF --final-gradient-steps 4 --final-gradient-direction diagonal
+9  |      | --total-glitch-time 250
+10 | --existing-color-handling dynamic --xterm-colors | --glitch-wave-colors ff0000 00ff00 --final-gradient-direction horizontal --total-glitch-time 35
