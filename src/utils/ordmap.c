@@ -15,17 +15,26 @@ static char *dup_cstr(const char *s) {
     return out;
 }
 
+static OrdEntry *om_arr(OrdMap *m) {
+    return m->heap ? m->heap : m->inline_entries;
+}
+
+static const OrdEntry *om_carr(const OrdMap *m) {
+    return m->heap ? m->heap : m->inline_entries;
+}
+
 void om_init(OrdMap *m) {
-    m->entries = NULL;
+    m->heap = NULL;
     m->len = 0;
-    m->cap = 0;
+    m->cap = OM_INLINE;
 }
 
 void om_free(OrdMap *m) {
+    OrdEntry *a = om_arr(m);
     for (size_t i = 0; i < m->len; i++) {
-        free(m->entries[i].key);
+        free(a[i].key);
     }
-    free(m->entries);
+    free(m->heap);
     om_init(m);
 }
 
@@ -34,9 +43,10 @@ size_t om_len(const OrdMap *m) {
 }
 
 long om_slot(const OrdMap *m, const char *key) {
+    const OrdEntry *a = om_carr(m);
     uint64_t h = str_hash64(key);
     for (size_t i = 0; i < m->len; i++) {
-        if (m->entries[i].hash == h && strcmp(m->entries[i].key, key) == 0) {
+        if (a[i].hash == h && strcmp(a[i].key, key) == 0) {
             return (long)i;
         }
     }
@@ -49,47 +59,58 @@ bool om_contains(const OrdMap *m, const char *key) {
 
 void *om_get(const OrdMap *m, const char *key) {
     long slot = om_slot(m, key);
-    return slot < 0 ? NULL : m->entries[slot].value;
+    return slot < 0 ? NULL : om_carr(m)[slot].value;
 }
 
 void om_insert(OrdMap *m, const char *key, void *value) {
     long slot = om_slot(m, key);
     if (slot >= 0) {
-        m->entries[slot].value = value;
+        om_arr(m)[slot].value = value;
         return;
     }
     if (m->len == m->cap) {
-        size_t cap = m->cap ? m->cap * 2 : 8;
-        OrdEntry *grown = realloc(m->entries, cap * sizeof(OrdEntry));
-        if (!grown) {
-            return;
+        size_t cap = m->cap ? m->cap * 2 : OM_INLINE;
+        if (m->heap) {
+            OrdEntry *grown = realloc(m->heap, cap * sizeof(OrdEntry));
+            if (!grown) {
+                return;
+            }
+            m->heap = grown;
+        } else {
+            OrdEntry *grown = malloc(cap * sizeof(OrdEntry));
+            if (!grown) {
+                return;
+            }
+            memcpy(grown, m->inline_entries, m->len * sizeof(OrdEntry));
+            m->heap = grown;
         }
-        m->entries = grown;
         m->cap = cap;
     }
-    m->entries[m->len].key = dup_cstr(key);
-    m->entries[m->len].hash = str_hash64(key);
-    m->entries[m->len].value = value;
+    OrdEntry *a = om_arr(m);
+    a[m->len].key = dup_cstr(key);
+    a[m->len].hash = str_hash64(key);
+    a[m->len].value = value;
     m->len++;
 }
 
 void om_set_at(OrdMap *m, size_t slot, void *value) {
     if (slot < m->len) {
-        m->entries[slot].value = value;
+        om_arr(m)[slot].value = value;
     }
 }
 
 const char *om_key_at(const OrdMap *m, size_t slot) {
-    return slot < m->len ? m->entries[slot].key : NULL;
+    return slot < m->len ? om_carr(m)[slot].key : NULL;
 }
 
 void *om_value_at(const OrdMap *m, size_t slot) {
-    return slot < m->len ? m->entries[slot].value : NULL;
+    return slot < m->len ? om_carr(m)[slot].value : NULL;
 }
 
 void om_clear(OrdMap *m) {
+    OrdEntry *a = om_arr(m);
     for (size_t i = 0; i < m->len; i++) {
-        free(m->entries[i].key);
+        free(a[i].key);
     }
     m->len = 0;
 }

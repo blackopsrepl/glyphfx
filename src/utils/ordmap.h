@@ -14,10 +14,18 @@ typedef struct {
     void *value;
 } OrdEntry;
 
+// Small maps (a character's scenes and paths hold a handful of entries) keep
+// their storage inline, so creating one costs no allocation and the entries sit
+// next to the owner. Larger maps move to the heap on first overflow. The owner
+// may move (the character arena reallocs), so no self-pointer is stored: `heap`
+// is NULL while the inline buffer is in use.
+#define OM_INLINE 4
+
 typedef struct {
-    OrdEntry *entries;
+    OrdEntry *heap;
     size_t len;
     size_t cap;
+    OrdEntry inline_entries[OM_INLINE];
 } OrdMap;
 
 void om_init(OrdMap *m);
