@@ -10,6 +10,14 @@
 
 #define DYNAMIC_NEUTRAL_GRAY "808080"
 
+void randomsequence_free_config(void *cfg_ptr) {
+    RandomSequenceConfig *cfg = cfg_ptr;
+    free(cfg->final_gradient_stops.items);
+    free(cfg->final_gradient_steps.items);
+    cfg->final_gradient_stops.items = NULL;
+    cfg->final_gradient_steps.items = NULL;
+}
+
 static void push_color_default(ColorList *list, const char *hex);
 static void push_int_default(IntList *list, int64_t v);
 

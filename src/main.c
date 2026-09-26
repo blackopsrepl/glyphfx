@@ -163,6 +163,10 @@ int main(int argc, char **argv) {
 
     if (cfg.m0_dump) {
         int m0 = run_m0_dump(input, &cfg);
+        if (cfg.effect_entry) {
+            ((const EffectEntry *)cfg.effect_entry)->free_config(cfg.effect_config);
+            free(cfg.effect_config);
+        }
         free(input);
         return m0;
     }
@@ -177,6 +181,8 @@ int main(int argc, char **argv) {
     Effect *effect = entry->make(cfg.effect_config);
     if (!effect) {
         fputs("Error: failed to build effect.\n", stderr);
+        entry->free_config(cfg.effect_config);
+        free(cfg.effect_config);
         free(input);
         return 1;
     }
@@ -193,6 +199,9 @@ int main(int argc, char **argv) {
             fprintf(stderr, "Error: %s\n", pp_err.message[0] ? pp_err.message : "failed to build canvas");
         }
         effect->ops->destroy(effect);
+        engine_ctx_free(&ctx);
+        entry->free_config(cfg.effect_config);
+        free(cfg.effect_config);
         free(input);
         return 1;
     }
@@ -205,6 +214,8 @@ int main(int argc, char **argv) {
     }
     effect->ops->destroy(effect);
     engine_ctx_free(&ctx);
+    entry->free_config(cfg.effect_config);
+    free(cfg.effect_config);
     free(input);
     if (run_rc != 0) {
         fputs("Error: effect execution failed.\n", stderr);

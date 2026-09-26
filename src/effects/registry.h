@@ -14,6 +14,9 @@ typedef struct {
     size_t n_specs;
     size_t config_size;
     void (*defaults)(void *cfg);
+    // Frees any heap owned by the config (e.g. option lists); the config
+    // struct itself is freed by the caller.
+    void (*free_config)(void *cfg);
     Effect *(*make)(const void *cfg);
 } EffectEntry;
 

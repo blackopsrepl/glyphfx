@@ -18,6 +18,7 @@ typedef struct {
 extern const EffOptSpec randomsequence_specs[];
 extern const size_t randomsequence_specs_len;
 void randomsequence_config_defaults(void *cfg);
+void randomsequence_free_config(void *cfg);
 Effect *randomsequence_make(const void *cfg);
 
 #endif

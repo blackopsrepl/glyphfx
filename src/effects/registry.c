@@ -11,6 +11,7 @@ static const EffectEntry EFFECTS[] = {
         0,  // n_specs filled below via randomsequence_specs_len
         sizeof(RandomSequenceConfig),
         randomsequence_config_defaults,
+        randomsequence_free_config,
         randomsequence_make,
     },
 };
