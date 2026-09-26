@@ -4,8 +4,7 @@
 For every effect this checks, in order:
   1. Correctness: a full `--parity-dump` run must exit 0, produce at least one
      frame, and hash to the same byte stream recorded in the baseline.
-  2. Speed: the fixed workload timed best-of-N must not exceed the baseline by
-     more than the noise tolerance.
+  2. Speed: the fixed workload timed best-of-N must not exceed the baseline.
 
 Nothing that cannot be verified is allowed to pass:
   * a timed run that exits non-zero, times out, or is killed fails the gate;
