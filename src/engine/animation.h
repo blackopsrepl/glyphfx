@@ -42,6 +42,8 @@ typedef struct {
 } VisualParams;
 
 typedef struct CharacterVisual {
+    int refcount;
+    size_t pool_slot;  // index in the visual pool while interned
     char *symbol;  // owned
     bool bold;
     bool dim;  // stored but never emitted, faithfully
@@ -61,17 +63,14 @@ typedef struct CharacterVisual {
     size_t formatted_len;
 } CharacterVisual;
 
-// Visuals are immutable and interned by appearance in a process-wide pool, so
-// scene stepping shares one instance per distinct look instead of copying
-// strings every tick or refcounting (as ttfx's Rc does).
+// Visuals are interned by appearance in a process-wide pool so identical looks
+// share one instance, and reference-counted so the pool evicts a visual as soon
+// as nothing holds it. That keeps effects that churn colours (overflow,
+// spotlights) from growing the pool without bound.
 CharacterVisual *vis_new(const char *symbol, const VisualParams *params);
 CharacterVisual *vis_new_plain(const char *symbol);
-static inline CharacterVisual *vis_ref(CharacterVisual *vis) {
-    return vis;
-}
-static inline void vis_unref(CharacterVisual *vis) {
-    (void)vis;
-}
+CharacterVisual *vis_ref(CharacterVisual *vis);
+void vis_unref(CharacterVisual *vis);
 // Frees every pooled visual; registered at exit, also usable by tests.
 void vis_pool_reset(void);
 

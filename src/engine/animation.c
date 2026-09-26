@@ -81,6 +81,8 @@ static CharacterVisual *vis_alloc(const char *symbol, const VisualParams *params
     if (!vis) {
         return NULL;
     }
+    vis->refcount = 1;
+    vis->pool_slot = SIZE_MAX;
     vis->symbol = dup_cstr(symbol);
     vis->bold = params->bold;
     vis->dim = params->dim;
@@ -121,12 +123,14 @@ typedef struct {
     uint64_t hash;
     char *key;
     size_t key_len;
-    CharacterVisual *vis;
+    CharacterVisual *vis;  // NULL marks a deleted slot (occupied but free)
+    bool occupied;
 } VisPoolSlot;
 
 static VisPoolSlot *g_pool;
 static size_t g_pool_cap;
-static size_t g_pool_len;
+static size_t g_pool_live;
+static size_t g_pool_used;
 static bool g_pool_atexit;
 
 static uint64_t hash_bytes(const char *p, size_t n) {
@@ -197,34 +201,43 @@ void vis_pool_reset(void) {
     for (size_t i = 0; i < g_pool_cap; i++) {
         if (g_pool[i].vis) {
             vis_destroy(g_pool[i].vis);
-            free(g_pool[i].key);
         }
+        free(g_pool[i].key);
     }
     free(g_pool);
     g_pool = NULL;
     g_pool_cap = 0;
-    g_pool_len = 0;
+    g_pool_live = 0;
+    g_pool_used = 0;
 }
 
 static void vis_pool_grow(void) {
     size_t old_cap = g_pool_cap;
     VisPoolSlot *old = g_pool;
-    g_pool_cap = old_cap ? old_cap * 2 : 16;
+    g_pool_cap = old_cap ? old_cap * 2 : 32;
     g_pool = calloc(g_pool_cap, sizeof(VisPoolSlot));
-    g_pool_len = 0;
     if (!g_pool) {
+        g_pool = old;
+        g_pool_cap = old_cap;
         return;
     }
+    g_pool_live = 0;
+    g_pool_used = 0;
     for (size_t i = 0; i < old_cap; i++) {
-        if (old[i].vis) {
-            size_t mask = g_pool_cap - 1;
-            size_t j = old[i].hash & mask;
-            while (g_pool[j].vis) {
-                j = (j + 1) & mask;
-            }
-            g_pool[j] = old[i];
-            g_pool_len++;
+        if (!old[i].vis) {
+            free(old[i].key);
+            continue;
         }
+        size_t mask = g_pool_cap - 1;
+        size_t j = old[i].hash & mask;
+        while (g_pool[j].occupied) {
+            j = (j + 1) & mask;
+        }
+        g_pool[j] = old[i];
+        g_pool[j].occupied = true;
+        old[i].vis->pool_slot = j;
+        g_pool_live++;
+        g_pool_used++;
     }
     free(old);
 }
@@ -237,7 +250,7 @@ CharacterVisual *vis_new(const char *symbol, const VisualParams *params) {
         atexit(vis_pool_reset);
         g_pool_atexit = true;
     }
-    if ((g_pool_len + 1) * 2 >= g_pool_cap) {
+    if (g_pool_cap == 0 || (g_pool_used + 1) * 2 >= g_pool_cap) {
         vis_pool_grow();
         if (!g_pool) {
             return NULL;
@@ -245,12 +258,20 @@ CharacterVisual *vis_new(const char *symbol, const VisualParams *params) {
     }
     size_t mask = g_pool_cap - 1;
     size_t i = h & mask;
-    while (g_pool[i].vis) {
-        if (g_pool[i].hash == h && g_pool[i].key_len == klen && memcmp(g_pool[i].key, key, klen) == 0) {
-            return g_pool[i].vis;
+    size_t first_dead = SIZE_MAX;
+    while (g_pool[i].occupied) {
+        if (g_pool[i].vis) {
+            if (g_pool[i].hash == h && g_pool[i].key_len == klen && memcmp(g_pool[i].key, key, klen) == 0) {
+                g_pool[i].vis->refcount++;
+                return g_pool[i].vis;
+            }
+        } else if (first_dead == SIZE_MAX) {
+            first_dead = i;
         }
         i = (i + 1) & mask;
     }
+    size_t slot = first_dead != SIZE_MAX ? first_dead : i;
+    bool reuse = g_pool[slot].occupied;
     CharacterVisual *vis = vis_alloc(symbol, params);
     if (!vis) {
         return NULL;
@@ -261,12 +282,39 @@ CharacterVisual *vis_new(const char *symbol, const VisualParams *params) {
         return NULL;
     }
     memcpy(keycopy, key, klen);
-    g_pool[i].hash = h;
-    g_pool[i].key = keycopy;
-    g_pool[i].key_len = klen;
-    g_pool[i].vis = vis;
-    g_pool_len++;
+    g_pool[slot].hash = h;
+    g_pool[slot].key = keycopy;
+    g_pool[slot].key_len = klen;
+    g_pool[slot].vis = vis;
+    g_pool[slot].occupied = true;
+    if (!reuse) {
+        g_pool_used++;
+    }
+    g_pool_live++;
+    vis->pool_slot = slot;
     return vis;
+}
+
+CharacterVisual *vis_ref(CharacterVisual *vis) {
+    if (vis) {
+        vis->refcount++;
+    }
+    return vis;
+}
+
+void vis_unref(CharacterVisual *vis) {
+    if (!vis || --vis->refcount > 0) {
+        return;
+    }
+    if (g_pool && vis->pool_slot < g_pool_cap && g_pool[vis->pool_slot].vis == vis) {
+        VisPoolSlot *slot = &g_pool[vis->pool_slot];
+        free(slot->key);
+        slot->key = NULL;
+        slot->key_len = 0;
+        slot->vis = NULL;  // stays occupied so probing never stops early
+        g_pool_live--;
+    }
+    vis_destroy(vis);
 }
 
 // --- IndexDeque -----------------------------------------------------------
@@ -713,7 +761,9 @@ void animation_set_appearance(Animation *anim, bool uses_input_preexisting_color
             resolve_color_code(true, &effective.bg, anim->no_color, anim->use_xterm_colors, &params.bg_code);
     }
     vis_unref(anim->current_visual);
-    anim->current_visual = vis_new(use_symbol, &params);
+    // Not pooled: a character's live appearance is unique to it, so a lookup is
+    // pure overhead here (the reference makes the same call).
+    anim->current_visual = vis_alloc(use_symbol, &params);
 }
 
 const char *animation_new_scene(Animation *anim, bool is_looping, bool has_sync, SyncMetric sync, bool has_ease,
