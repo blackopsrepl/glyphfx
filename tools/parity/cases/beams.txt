@@ -1,0 +1,9 @@
+1 | |
+2 | | --beam-delay 2
+3 | --existing-color-handling dynamic |
+4 | --xterm-colors |
+5 | --canvas-width 20 --canvas-height 8 |
+6 | | --beam-gradient-stops ff0000 00ff00 --beam-gradient-steps 3
+7 | | --final-gradient-direction horizontal --final-wipe-speed 6
+8 | --existing-color-handling dynamic --xterm-colors | --beam-row-symbols X Y --beam-column-symbols A B --beam-row-speed-range 5-10 --beam-column-speed-range 5-10
+9 | | --beam-gradient-frames 1 --final-gradient-frames 1

@@ -1,0 +1,8 @@
+1 | |
+2 | | --spin-duration 8 --disperse-duration 8 --spin-disperse-cycles 2
+3 | --existing-color-handling dynamic | --ring-gap 0.2
+4 | --xterm-colors |
+5 | --canvas-width 20 --canvas-height 8 | --spin-duration 5 --disperse-duration 5 --spin-disperse-cycles 3
+6 | | --ring-colors ff0000 00ff00 0000ff --final-gradient-direction horizontal
+7 | | --spin-speed 0.5-0.5 --spin-duration 10 --disperse-duration 10 --spin-disperse-cycles 1
+8 | --existing-color-handling dynamic | --ring-gap 0.25 --final-gradient-steps 4

@@ -676,19 +676,19 @@ CharId *terminal_get_characters(const Terminal *t, Rng *rng, CharacterFilter fil
     if (filter.added_chars) cap += t->added_characters_len;
     CharId *all = malloc((cap ? cap : 1) * sizeof(CharId));
     size_t n = 0;
-    if (filter.input_chars) {
+    if (filter.input_chars && t->input_characters_len) {
         memcpy(all + n, t->input_characters, t->input_characters_len * sizeof(CharId));
         n += t->input_characters_len;
     }
-    if (filter.inner_fill_chars) {
+    if (filter.inner_fill_chars && t->inner_fill_characters_len) {
         memcpy(all + n, t->inner_fill_characters, t->inner_fill_characters_len * sizeof(CharId));
         n += t->inner_fill_characters_len;
     }
-    if (filter.outer_fill_chars) {
+    if (filter.outer_fill_chars && t->outer_fill_characters_len) {
         memcpy(all + n, t->outer_fill_characters, t->outer_fill_characters_len * sizeof(CharId));
         n += t->outer_fill_characters_len;
     }
-    if (filter.added_chars) {
+    if (filter.added_chars && t->added_characters_len) {
         memcpy(all + n, t->added_characters, t->added_characters_len * sizeof(CharId));
         n += t->added_characters_len;
     }

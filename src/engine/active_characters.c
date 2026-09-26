@@ -102,7 +102,9 @@ void ac_retain(ActiveCharacters *ac, bool (*keep)(CharId id, void *ctx), void *c
 
 void ac_snapshot(const ActiveCharacters *ac, CharId **out, size_t *out_len) {
     CharId *copy = malloc((ac->len ? ac->len : 1) * sizeof(CharId));
-    memcpy(copy, ac->items, ac->len * sizeof(CharId));
+    if (ac->len) {
+        memcpy(copy, ac->items, ac->len * sizeof(CharId));
+    }
     *out = copy;
     *out_len = ac->len;
 }

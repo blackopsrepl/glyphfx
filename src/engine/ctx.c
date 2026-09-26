@@ -377,8 +377,12 @@ void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id) {
             return;
         }
         if (p->loop_ && p->segments_len > 1) {
+            // Copy the id before deactivating: deactivate frees active_path.
+            char *loop_id = malloc(strlen(active) + 1);
+            strcpy(loop_id, active);
             motion_deactivate_path(&ch->motion, active);
-            engine_activate_path(ctx, effect, id, active);
+            engine_activate_path(ctx, effect, id, loop_id);
+            free(loop_id);
         } else {
             char *completed = malloc(strlen(active) + 1);
             strcpy(completed, active);
