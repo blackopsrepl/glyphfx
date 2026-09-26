@@ -13,6 +13,18 @@ static char *dup_cstr(const char *s) {
     return out;
 }
 
+// FNV-1a. Keys are short identifiers, so this is a few instructions and lets a
+// lookup skip strcmp for every non-matching entry (the common case: a character
+// asks a per-character map for a scene or path it does not have).
+static uint64_t str_hash(const char *s) {
+    uint64_t h = 1469598103934665603ULL;
+    for (; *s; s++) {
+        h ^= (unsigned char)*s;
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
 void om_init(OrdMap *m) {
     m->entries = NULL;
     m->len = 0;
@@ -32,8 +44,9 @@ size_t om_len(const OrdMap *m) {
 }
 
 long om_slot(const OrdMap *m, const char *key) {
+    uint64_t h = str_hash(key);
     for (size_t i = 0; i < m->len; i++) {
-        if (strcmp(m->entries[i].key, key) == 0) {
+        if (m->entries[i].hash == h && strcmp(m->entries[i].key, key) == 0) {
             return (long)i;
         }
     }
@@ -65,6 +78,7 @@ void om_insert(OrdMap *m, const char *key, void *value) {
         m->cap = cap;
     }
     m->entries[m->len].key = dup_cstr(key);
+    m->entries[m->len].hash = str_hash(key);
     m->entries[m->len].value = value;
     m->len++;
 }

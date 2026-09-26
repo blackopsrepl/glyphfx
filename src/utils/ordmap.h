@@ -6,9 +6,11 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 typedef struct {
-    char *key;  // owned
+    char *key;      // owned
+    uint64_t hash;  // cached hash of key, compared before strcmp
     void *value;
 } OrdEntry;
 
