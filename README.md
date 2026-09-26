@@ -24,12 +24,22 @@ plan. Implemented and mechanically verified so far:
   options, strict UTF-8 input, the CSI-only input emulator, canvas + anchoring,
   fill characters, neighbors, renderer, and the tty writer. Exit criterion met:
   `glyphfx --m0-dump` matches `ttfx --m0-dump` byte for byte across the
-  anchor/canvas/wrap/tab/existing-color matrix (306 cases, `make parity`).
+  anchor/canvas/wrap/tab/existing-color matrix (306 cases).
+- **M1 — engine core (partial).** Ordered map, geometry, gradient generation,
+  RNG, pycompat, xterm palette, strict UTF-8, clock, plus the animation scenes,
+  event tables with inline dispatch, active-character set, and the EngineCtx
+  stepping model. Pure-function goldens are taken from ttfx's own fixtures.
+  Easing (`make_easing`) and the eased/sync scene paths are not ported yet, and
+  path-based motion is stubbed; they land with the effects that need them.
+- **M2 — parity harness + first effect.** The generic effect harness plus
+  `randomsequence`, verified byte for byte against the ttfx oracle (frames and
+  full terminal stream). `make parity` runs the M0 matrix; the effect harness is
+  `tools/parity/run_effects.sh randomsequence`.
 
-Not yet implemented: the animation engine core (M1), the parity harness and
-first effect (M2), and the 37 effects with their full option surface (M3–M5).
-Until effects land, invoking one reports that it is not yet implemented. This
-README will track the milestone status as it advances.
+Not yet implemented: the remaining 36 effects and their full option surface
+(M3–M5), path motion and easing (M3+), and the CLI/runtime/release polish
+(M6–M8). Invoking an unported effect reports it is not yet available.
+
 
 ## Build
 
