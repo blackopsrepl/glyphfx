@@ -21,13 +21,13 @@ void sb_free(StrBuf *sb) {
     sb_init(sb);
 }
 
-void sb_reserve(StrBuf *sb, size_t extra) {
-    size_t need = sb->len + extra + 1;
-    if (need <= sb->cap) {
+void sb_grow(StrBuf *sb, size_t need) {
+    size_t required = need + 1;
+    if (required <= sb->cap) {
         return;
     }
     size_t cap = sb->cap ? sb->cap : 32;
-    while (cap < need) {
+    while (cap < required) {
         cap *= 2;
     }
     char *grown = realloc(sb->data, cap);
@@ -38,27 +38,8 @@ void sb_reserve(StrBuf *sb, size_t extra) {
     sb->cap = cap;
 }
 
-void sb_clear(StrBuf *sb) {
-    sb->len = 0;
-    if (sb->data) {
-        sb->data[0] = '\0';
-    }
-}
-
-void sb_push(StrBuf *sb, char c) {
-    sb_reserve(sb, 1);
-    sb->data[sb->len++] = c;
-    sb->data[sb->len] = '\0';
-}
-
-void sb_append(StrBuf *sb, const char *bytes, size_t len) {
-    if (len == 0) {
-        return;
-    }
-    sb_reserve(sb, len);
-    memcpy(sb->data + sb->len, bytes, len);
-    sb->len += len;
-    sb->data[sb->len] = '\0';
+void sb_reserve(StrBuf *sb, size_t extra) {
+    sb_grow(sb, sb->len + extra);
 }
 
 void sb_puts(StrBuf *sb, const char *s) {
