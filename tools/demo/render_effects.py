@@ -35,7 +35,11 @@ FONT_SIZE = 16
 DEFAULT_FG = (200, 200, 208)
 DEFAULT_BG = (18, 18, 26)
 FRAME_MS = 60
-HOLD_FRAMES = 8
+HOLD_FRAMES = 4
+# Frame budget per GIF. The reference gallery lands at ~47 frames of 60 ms
+# (~2.9 s), so a comparable budget keeps the two side by side on pace; long
+# animations are evenly down-sampled across their whole arc.
+SAMPLE_FRAMES = 44
 
 
 def load_palette():
@@ -258,33 +262,32 @@ def save_gif(frames, path):
     return True
 
 
-# (effect, extra args, sampling budget). The budget is a ceiling on how many
-# frames the GIF shows; longer animations are evenly down-sampled across their
-# whole arc, never cut to a prefix.
+# (effect, extra args). Every effect is sampled to SAMPLE_FRAMES after the full
+# animation is captured, so no GIF is a truncated prefix.
 EFFECTS = [
-    ("beams", [], 90), ("binarypath", [], 90), ("blackhole", [], 110), ("bouncyballs", [], 90),
-    ("bubbles", [], 90), ("burn", [], 90), ("colorshift", [], 70), ("crumble", [], 110),
-    ("decrypt", ["--typing-speed", "8"], 150), ("errorcorrect", [], 90), ("expand", [], 80),
-    ("fireworks", [], 90), ("highlight", [], 90), ("laseretch", [], 90),
-    ("matrix", ["--rain-time", "1"], 110), ("middleout", [], 80), ("orbittingvolley", [], 90),
-    ("overflow", [], 90), ("pour", [], 80), ("print", ["--print-speed", "6"], 140),
-    ("rain", [], 90), ("randomsequence", [], 90), ("rings", [], 90), ("scattered", [], 90),
-    ("slice", [], 80), ("slide", [], 80), ("smoke", [], 100), ("spotlights", ["--search-duration", "60"], 110),
-    ("spray", [], 90), ("swarm", [], 90), ("sweep", [], 90), ("synthgrid", [], 100),
-    ("thunderstorm", ["--storm-time", "1"], 110), ("unstable", [], 90),
-    ("vhstape", ["--total-glitch-time", "300"], 110), ("waves", [], 90), ("wipe", [], 120),
+    ("beams", []), ("binarypath", []), ("blackhole", []), ("bouncyballs", []),
+    ("bubbles", []), ("burn", []), ("colorshift", []), ("crumble", []),
+    ("decrypt", ["--typing-speed", "8"]), ("errorcorrect", []), ("expand", []),
+    ("fireworks", []), ("highlight", []), ("laseretch", []),
+    ("matrix", ["--rain-time", "1"]), ("middleout", []), ("orbittingvolley", []),
+    ("overflow", []), ("pour", []), ("print", ["--print-speed", "6"]),
+    ("rain", []), ("randomsequence", []), ("rings", []), ("scattered", []),
+    ("slice", []), ("slide", []), ("smoke", []), ("spotlights", ["--search-duration", "60"]),
+    ("spray", []), ("swarm", []), ("sweep", []), ("synthgrid", []),
+    ("thunderstorm", ["--storm-time", "1"]), ("unstable", []),
+    ("vhstape", ["--total-glitch-time", "300"]), ("waves", []), ("wipe", []),
 ]
 
-# The README hero: the same tight canvas, shown larger than the gallery cards.
-HERO = ("wipe", [], 140)
+# The README hero: a larger render of one effect, same tight canvas and budget.
+HERO = ("wipe", [])
 
 
-def render_one(name, extra, budget, cols, rows, palette, fonts, cell_w, cell_h, ascent, path):
+def render_one(name, extra, cols, rows, palette, fonts, cell_w, cell_h, ascent, path):
     raw = capture(name, extra, seed=7, cols=cols, rows=rows)
     if not raw:
         print(f"{name}: no frames")
         return
-    picked = sample_frames(raw, budget)
+    picked = sample_frames(raw, SAMPLE_FRAMES)
     frames = [f.decode("utf-8", "replace") for f in picked]
     images = [render_frame(f, palette, fonts, cell_w, cell_h, ascent) for f in frames]
     images += [images[-1]] * HOLD_FRAMES
@@ -300,13 +303,13 @@ def main():
     ascent, descent = fonts["r"].getmetrics()
     cell_h = ascent + descent
     os.makedirs(OUT_DIR, exist_ok=True)
-    for name, extra, budget in EFFECTS:
+    for name, extra in EFFECTS:
         if only and name not in only:
             continue
-        render_one(name, extra, budget, CANVAS_W, CANVAS_H, palette, fonts, cell_w, cell_h, ascent,
+        render_one(name, extra, CANVAS_W, CANVAS_H, palette, fonts, cell_w, cell_h, ascent,
                    os.path.join(OUT_DIR, name + ".gif"))
     if not only or "hero" in only:
-        render_one(HERO[0], HERO[1], HERO[2], CANVAS_W, CANVAS_H, palette, fonts, cell_w, cell_h, ascent,
+        render_one(HERO[0], HERO[1], CANVAS_W, CANVAS_H, palette, fonts, cell_w, cell_h, ascent,
                    os.path.join(OUT_DIR, "hero.gif"))
 
 
