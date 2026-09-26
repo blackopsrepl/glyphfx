@@ -1,0 +1,116 @@
+// Terminal: config, canvas assembly, character queries, renderer, tty writer.
+// Ported from the reference engine/terminal.py. A single Terminal owns both the
+// simulation and the tty side.
+#ifndef GLYPHFX_TERMINAL_H
+#define GLYPHFX_TERMINAL_H
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+
+#include "engine/animation.h"
+#include "engine/canvas.h"
+#include "engine/character.h"
+#include "engine/input.h"
+#include "utils/clock.h"
+#include "utils/graphics.h"
+
+typedef struct TerminalConfig {
+    int64_t tab_width;
+    bool xterm_colors;
+    bool no_color;
+    Color terminal_background_color;
+    ExistingColorHandling existing_color_handling;
+    bool wrap_text;
+    int64_t frame_rate;
+    int64_t canvas_width;
+    int64_t canvas_height;
+    Anchor anchor_canvas;
+    Anchor anchor_text;
+    bool ignore_terminal_dimensions;
+    bool reuse_canvas;
+    bool no_eol;
+    bool no_restore_cursor;
+} TerminalConfig;
+
+void terminal_config_default(TerminalConfig *config);
+
+typedef struct {
+    int64_t canvas_height;
+    int64_t canvas_width;
+    int64_t column_offset;
+    int64_t row_offset;
+    int64_t visible_top;
+    int64_t visible_bottom;
+    int64_t visible_right;
+    int64_t visible_left;
+} Layout;
+
+typedef struct {
+    TerminalConfig config;
+    Canvas canvas;
+    Arena arena;
+    uint32_t next_character_id;
+    ColorFrequency input_colors_frequency;
+    int64_t terminal_width;
+    int64_t terminal_height;
+    Layout layout;
+    int64_t *input_line_lengths;
+    size_t input_line_lengths_len;
+    int64_t canvas_column_offset;
+    int64_t canvas_row_offset;
+    int64_t visible_top;
+    int64_t visible_bottom;
+    int64_t visible_right;
+    int64_t visible_left;
+    CharId *input_characters;
+    size_t input_characters_len;
+    CharId *added_characters;
+    size_t added_characters_len;
+    // Dense coordinate map over [1..map_right] x [1..map_top]; CHAR_ID_NONE
+    // when empty. The reference uses an unordered map, but its keys are always
+    // in-canvas coordinates, so a dense table is behaviorally identical.
+    CharId *coord_map;
+    int64_t map_right;
+    int64_t map_top;
+    CharId *inner_fill_characters;
+    size_t inner_fill_characters_len;
+    CharId *outer_fill_characters;
+    size_t outer_fill_characters_len;
+    CharId *visible_characters;
+    size_t visible_characters_len;
+    size_t *visible_positions;
+    size_t visible_positions_len;
+    uint32_t *render_cells;
+    size_t render_cells_len;
+    char *move_cursor_to_top;
+    int64_t frame_rate;
+    double last_time_printed;
+    Clock clock;
+} Terminal;
+
+// Builds the terminal (preprocess + canvas + fill + neighbors). Returns 0 on
+// success, or a PreprocessError via *err. On success *err->status == OK.
+int terminal_new(Terminal *t, const char *input_data, const TerminalConfig *config, PreprocessError *err);
+void terminal_free(Terminal *t);
+
+CharId terminal_get_character_by_input_coord(const Terminal *t, Coord coord);
+void terminal_add_character(Terminal *t, const char *symbol, Coord coord);
+void terminal_set_character_visibility(Terminal *t, CharId id, bool is_visible);
+
+// Refreshes the cell buffer and returns the frame string (rows top-first,
+// '\n'-joined). Caller frees.
+char *terminal_get_formatted_output_string(Terminal *t);
+
+// --- tty side ---
+void terminal_prep_canvas(Terminal *t, FILE *out);
+void terminal_restore_cursor(Terminal *t, FILE *out, const char *end_symbol);
+void terminal_print_frame(Terminal *t, FILE *out, const char *output_string);
+void terminal_enforce_framerate(Terminal *t);
+void terminal_reset_canvas_area(Terminal *t, FILE *out);
+
+// shutil.get_terminal_size semantics: COLUMNS/LINES win; else the tty; else 80x24.
+void terminal_get_dimensions(int64_t *width, int64_t *height);
+
+#endif
