@@ -4,13 +4,13 @@
 #include <string.h>
 
 void ac_init(ActiveCharacters *ac) {
-    ac->items = NULL;
+    ac->bits = NULL;
+    ac->nwords = 0;
     ac->len = 0;
-    ac->cap = 0;
 }
 
 void ac_free(ActiveCharacters *ac) {
-    free(ac->items);
+    free(ac->bits);
     ac_init(ac);
 }
 
@@ -23,89 +23,100 @@ bool ac_is_empty(const ActiveCharacters *ac) {
 }
 
 void ac_clear(ActiveCharacters *ac) {
+    if (ac->bits) {
+        memset(ac->bits, 0, ac->nwords * sizeof(uint64_t));
+    }
     ac->len = 0;
 }
 
-static long ac_find(const ActiveCharacters *ac, CharId id) {
-    size_t lo = 0;
-    size_t hi = ac->len;
-    while (lo < hi) {
-        size_t mid = lo + (hi - lo) / 2;
-        if (ac->items[mid] < id) {
-            lo = mid + 1;
-        } else {
-            hi = mid;
-        }
+static void ac_ensure(ActiveCharacters *ac, CharId id) {
+    size_t word = (size_t)id >> 6;
+    if (word < ac->nwords) {
+        return;
     }
-    if (lo < ac->len && ac->items[lo] == id) {
-        return (long)lo;
+    size_t cap = ac->nwords ? ac->nwords : 64;
+    while (cap <= word) {
+        cap *= 2;
     }
-    return -1;
+    uint64_t *grown = realloc(ac->bits, cap * sizeof(uint64_t));
+    if (!grown) {
+        return;
+    }
+    memset(grown + ac->nwords, 0, (cap - ac->nwords) * sizeof(uint64_t));
+    ac->bits = grown;
+    ac->nwords = cap;
 }
 
 bool ac_contains(const ActiveCharacters *ac, CharId id) {
-    return ac_find(ac, id) >= 0;
+    size_t word = (size_t)id >> 6;
+    if (word >= ac->nwords) {
+        return false;
+    }
+    return (ac->bits[word] >> (id & 63)) & 1u;
 }
 
 bool ac_insert(ActiveCharacters *ac, CharId id) {
-    size_t lo = 0;
-    size_t hi = ac->len;
-    while (lo < hi) {
-        size_t mid = lo + (hi - lo) / 2;
-        if (ac->items[mid] < id) {
-            lo = mid + 1;
-        } else {
-            hi = mid;
-        }
-    }
-    if (lo < ac->len && ac->items[lo] == id) {
+    ac_ensure(ac, id);
+    size_t word = (size_t)id >> 6;
+    if (word >= ac->nwords) {
         return false;
     }
-    if (ac->len == ac->cap) {
-        size_t cap = ac->cap ? ac->cap * 2 : 16;
-        CharId *grown = realloc(ac->items, cap * sizeof(CharId));
-        if (!grown) {
-            return false;
-        }
-        ac->items = grown;
-        ac->cap = cap;
+    uint64_t mask = 1ULL << (id & 63);
+    if (ac->bits[word] & mask) {
+        return false;
     }
-    if (ac->len > lo) {
-        memmove(ac->items + lo + 1, ac->items + lo, (ac->len - lo) * sizeof(CharId));
-    }
-    ac->items[lo] = id;
+    ac->bits[word] |= mask;
     ac->len++;
     return true;
 }
 
 bool ac_remove(ActiveCharacters *ac, CharId id) {
-    long idx = ac_find(ac, id);
-    if (idx < 0) {
+    size_t word = (size_t)id >> 6;
+    if (word >= ac->nwords) {
         return false;
     }
-    if (ac->len > (size_t)idx + 1) {
-        memmove(ac->items + idx, ac->items + idx + 1, (ac->len - (size_t)idx - 1) * sizeof(CharId));
+    uint64_t mask = 1ULL << (id & 63);
+    if (!(ac->bits[word] & mask)) {
+        return false;
     }
+    ac->bits[word] &= ~mask;
     ac->len--;
     return true;
 }
 
 void ac_retain(ActiveCharacters *ac, bool (*keep)(CharId id, void *ctx), void *ctx) {
-    size_t out = 0;
-    for (size_t i = 0; i < ac->len; i++) {
-        if (keep(ac->items[i], ctx)) {
-            ac->items[out++] = ac->items[i];
+    for (size_t w = 0; w < ac->nwords; w++) {
+        uint64_t bits = ac->bits[w];
+        while (bits) {
+            unsigned b = (unsigned)__builtin_ctzll(bits);
+            CharId id = (CharId)((w << 6) | b);
+            if (!keep(id, ctx)) {
+                ac->bits[w] &= ~(1ULL << b);
+                ac->len--;
+            }
+            bits &= bits - 1;
         }
     }
-    ac->len = out;
+}
+
+void ac_snapshot_into(const ActiveCharacters *ac, CharId *dst) {
+    size_t k = 0;
+    for (size_t w = 0; w < ac->nwords; w++) {
+        uint64_t bits = ac->bits[w];
+        while (bits) {
+            unsigned b = (unsigned)__builtin_ctzll(bits);
+            dst[k++] = (CharId)((w << 6) | b);
+            bits &= bits - 1;
+        }
+    }
 }
 
 void ac_snapshot(const ActiveCharacters *ac, CharId **out, size_t *out_len) {
-    CharId *copy = malloc((ac->len ? ac->len : 1) * sizeof(CharId));
-    if (ac->len) {
-        memcpy(copy, ac->items, ac->len * sizeof(CharId));
+    CharId *a = malloc((ac->len ? ac->len : 1) * sizeof(CharId));
+    if (a) {
+        ac_snapshot_into(ac, a);
     }
-    *out = copy;
+    *out = a;
     *out_len = ac->len;
 }
 

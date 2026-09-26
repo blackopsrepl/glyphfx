@@ -602,7 +602,7 @@ void engine_update(EngineCtx *ctx, Effect *effect) {
     // Tick a snapshot of the active set: ticks can activate characters, which
     // would invalidate an in-place walk. Reuse one buffer across frames instead
     // of allocating the copy every frame.
-    size_t n = ctx->active_characters.len;
+    size_t n = ac_len(&ctx->active_characters);
     if (n > ctx->scratch_len) {
         CharId *grown = realloc(ctx->scratch, (n ? n : 1) * sizeof(CharId));
         if (!grown) {
@@ -612,7 +612,7 @@ void engine_update(EngineCtx *ctx, Effect *effect) {
         ctx->scratch_len = n;
     }
     if (n) {
-        memcpy(ctx->scratch, ctx->active_characters.items, n * sizeof(CharId));
+        ac_snapshot_into(&ctx->active_characters, ctx->scratch);
     }
     for (size_t i = 0; i < n; i++) {
         engine_tick(ctx, effect, ctx->scratch[i]);

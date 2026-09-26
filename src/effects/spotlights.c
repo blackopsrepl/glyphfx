@@ -280,8 +280,11 @@ static void illuminate_chars(Spotlights *st, EngineCtx *ctx, int64_t range_) {
         coordvec_free(&circle);
     }
 
-    for (size_t i = 0; i < st->illuminated_chars.len; i++) {
-        CharId id = st->illuminated_chars.items[i];
+    CharId *prev_ids = NULL;
+    size_t prev_len = 0;
+    ac_snapshot(&st->illuminated_chars, &prev_ids, &prev_len);
+    for (size_t i = 0; i < prev_len; i++) {
+        CharId id = prev_ids[i];
         if (ac_contains(&chars_in_range, id)) {
             continue;
         }
@@ -293,9 +296,13 @@ static void illuminate_chars(Spotlights *st, EngineCtx *ctx, int64_t range_) {
         bool uses_pre = ch->uses_input_preexisting_colors;
         animation_set_appearance(&ch->animation, uses_pre, ch->input_symbol, &colors);
     }
+    free(prev_ids);
 
-    for (size_t i = 0; i < chars_in_range.len; i++) {
-        CharId id = chars_in_range.items[i];
+    CharId *range_ids = NULL;
+    size_t range_len = 0;
+    ac_snapshot(&chars_in_range, &range_ids, &range_len);
+    for (size_t i = 0; i < range_len; i++) {
+        CharId id = range_ids[i];
         Coord input_coord = ctx->terminal.arena.items[id].input_coord;
         double distance = INFINITY;
         for (size_t j = 0; j < st->spotlights_len; j++) {
@@ -326,6 +333,7 @@ static void illuminate_chars(Spotlights *st, EngineCtx *ctx, int64_t range_) {
         bool uses_pre = ch->uses_input_preexisting_colors;
         animation_set_appearance(&ch->animation, uses_pre, ch->input_symbol, &colors);
     }
+    free(range_ids);
 
     ActiveCharacters old = st->illuminated_chars;
     st->illuminated_chars = chars_in_range;
