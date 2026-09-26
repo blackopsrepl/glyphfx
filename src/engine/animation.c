@@ -76,12 +76,11 @@ void vis_format(CharacterVisual *vis) {
     vis->formatted_len = strlen(vis->formatted);
 }
 
-CharacterVisual *vis_new(const char *symbol, const VisualParams *params) {
+static CharacterVisual *vis_alloc(const char *symbol, const VisualParams *params) {
     CharacterVisual *vis = calloc(1, sizeof(CharacterVisual));
     if (!vis) {
         return NULL;
     }
-    vis->refcount = 1;
     vis->symbol = dup_cstr(symbol);
     vis->bold = params->bold;
     vis->dim = params->dim;
@@ -113,17 +112,161 @@ static void vis_destroy(CharacterVisual *vis) {
     free(vis);
 }
 
-CharacterVisual *vis_ref(CharacterVisual *vis) {
-    if (vis) {
-        vis->refcount++;
+// --- visual pool ----------------------------------------------------------
+// A visual is immutable once built, so every distinct appearance maps to one
+// shared instance. The pool owns them for the process lifetime; nothing is
+// refcounted, which deletes the hottest per-tick instruction in the stepper.
+
+typedef struct {
+    uint64_t hash;
+    char *key;
+    size_t key_len;
+    CharacterVisual *vis;
+} VisPoolSlot;
+
+static VisPoolSlot *g_pool;
+static size_t g_pool_cap;
+static size_t g_pool_len;
+static bool g_pool_atexit;
+
+static uint64_t hash_bytes(const char *p, size_t n) {
+    uint64_t h = 1469598103934665603ULL;
+    for (size_t i = 0; i < n; i++) {
+        h ^= (unsigned char)p[i];
+        h *= 1099511628211ULL;
     }
-    return vis;
+    return h;
 }
 
-void vis_unref(CharacterVisual *vis) {
-    if (vis && --vis->refcount == 0) {
-        vis_destroy(vis);
+static size_t key_put(char *buf, size_t n, const void *p, size_t k) {
+    memcpy(buf + n, p, k);
+    return n + k;
+}
+
+static size_t key_u8(char *buf, size_t n, uint8_t v) {
+    buf[n] = (char)v;
+    return n + 1;
+}
+
+static size_t key_color(char *buf, size_t n, const Color *c) {
+    n = key_u8(buf, n, c->is_xterm);
+    n = key_u8(buf, n, c->xterm);
+    uint8_t hl = c->hex_len;
+    if (hl > sizeof(c->hex)) {
+        hl = sizeof(c->hex);
     }
+    n = key_u8(buf, n, hl);
+    n = key_put(buf, n, c->hex, hl);
+    n = key_put(buf, n, c->rgb, 3);
+    return n;
+}
+
+static size_t key_code(char *buf, size_t n, const ColorCode *c) {
+    n = key_u8(buf, n, (uint8_t)c->kind);
+    n = key_u8(buf, n, c->xterm);
+    n = key_put(buf, n, c->hex, sizeof(c->hex));
+    return n;
+}
+
+static size_t vis_key(char *buf, const char *symbol, const VisualParams *p) {
+    size_t n = 0;
+    size_t sl = strlen(symbol);
+    n = key_put(buf, n, symbol, sl);
+    n = key_u8(buf, n, 0);
+    n = key_u8(buf, n, p->bold);
+    n = key_u8(buf, n, p->dim);
+    n = key_u8(buf, n, p->italic);
+    n = key_u8(buf, n, p->underline);
+    n = key_u8(buf, n, p->blink);
+    n = key_u8(buf, n, p->reverse);
+    n = key_u8(buf, n, p->hidden);
+    n = key_u8(buf, n, p->strike);
+    n = key_u8(buf, n, p->has_colors);
+    n = key_u8(buf, n, p->colors.has_fg);
+    n = key_color(buf, n, &p->colors.fg);
+    n = key_u8(buf, n, p->colors.has_bg);
+    n = key_color(buf, n, &p->colors.bg);
+    n = key_u8(buf, n, p->has_fg_code);
+    n = key_code(buf, n, &p->fg_code);
+    n = key_u8(buf, n, p->has_bg_code);
+    n = key_code(buf, n, &p->bg_code);
+    return n;
+}
+
+void vis_pool_reset(void) {
+    for (size_t i = 0; i < g_pool_cap; i++) {
+        if (g_pool[i].vis) {
+            vis_destroy(g_pool[i].vis);
+            free(g_pool[i].key);
+        }
+    }
+    free(g_pool);
+    g_pool = NULL;
+    g_pool_cap = 0;
+    g_pool_len = 0;
+}
+
+static void vis_pool_grow(void) {
+    size_t old_cap = g_pool_cap;
+    VisPoolSlot *old = g_pool;
+    g_pool_cap = old_cap ? old_cap * 2 : 16;
+    g_pool = calloc(g_pool_cap, sizeof(VisPoolSlot));
+    g_pool_len = 0;
+    if (!g_pool) {
+        return;
+    }
+    for (size_t i = 0; i < old_cap; i++) {
+        if (old[i].vis) {
+            size_t mask = g_pool_cap - 1;
+            size_t j = old[i].hash & mask;
+            while (g_pool[j].vis) {
+                j = (j + 1) & mask;
+            }
+            g_pool[j] = old[i];
+            g_pool_len++;
+        }
+    }
+    free(old);
+}
+
+CharacterVisual *vis_new(const char *symbol, const VisualParams *params) {
+    char key[256];
+    size_t klen = vis_key(key, symbol, params);
+    uint64_t h = hash_bytes(key, klen);
+    if (!g_pool_atexit) {
+        atexit(vis_pool_reset);
+        g_pool_atexit = true;
+    }
+    if ((g_pool_len + 1) * 2 >= g_pool_cap) {
+        vis_pool_grow();
+        if (!g_pool) {
+            return NULL;
+        }
+    }
+    size_t mask = g_pool_cap - 1;
+    size_t i = h & mask;
+    while (g_pool[i].vis) {
+        if (g_pool[i].hash == h && g_pool[i].key_len == klen && memcmp(g_pool[i].key, key, klen) == 0) {
+            return g_pool[i].vis;
+        }
+        i = (i + 1) & mask;
+    }
+    CharacterVisual *vis = vis_alloc(symbol, params);
+    if (!vis) {
+        return NULL;
+    }
+    char *keycopy = malloc(klen);
+    if (!keycopy) {
+        vis_destroy(vis);
+        return NULL;
+    }
+    memcpy(keycopy, key, klen);
+    g_pool[i].hash = h;
+    g_pool[i].key = keycopy;
+    g_pool[i].key_len = klen;
+    g_pool[i].vis = vis;
+    g_pool_len++;
+    return vis;
 }
 
 // --- IndexDeque -----------------------------------------------------------
