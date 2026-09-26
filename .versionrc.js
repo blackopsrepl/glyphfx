@@ -5,6 +5,9 @@ module.exports = {
   tagPrefix: 'v',
   releaseCommitMessageFormat: 'chore(release): {{currentTag}}',
   bumpFiles: [{ filename: 'VERSION', type: 'plain-text' }],
+  commitUrlFormat: 'https://github.com/blackopsrepl/glyphfx/commit/{{hash}}',
+  compareUrlFormat: 'https://github.com/blackopsrepl/glyphfx/compare/{{previousTag}}...{{currentTag}}',
+  issueUrlFormat: 'https://github.com/blackopsrepl/glyphfx/issues/{{id}}',
   header:
     '# Changelog\n\nAll notable changes to glyphfx are documented here. ' +
     'This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.\n',
