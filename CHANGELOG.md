@@ -2,6 +2,26 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
 
+## [0.1.3](https://github.com/blackopsrepl/glyphfx/compare/v0.1.2...v0.1.3) (2026-09-26)
+
+### Performance
+
+* **engine:** stamp the render grid instead of clearing it ([2d14816](https://github.com/blackopsrepl/glyphfx/commit/2d1481653816eeb547a78610bb0ebfcda73c4eac))
+* **motion:** resolve the active path once per step ([5b87c7d](https://github.com/blackopsrepl/glyphfx/commit/5b87c7dd673da0b5f3af3f5391b1b5e59fc90664))
+
+### CI
+
+* **perf:** add a fail-closed performance regression gate ([2b34689](https://github.com/blackopsrepl/glyphfx/commit/2b346892fcecf7146dba0716edc8e2ccdb97a456))
+* **perf:** drop the stale tolerance wording ([ff29840](https://github.com/blackopsrepl/glyphfx/commit/ff29840f760e62eb6482e97e3b78c82e08078e29))
+* **perf:** gate at zero tolerance ([eb8d60f](https://github.com/blackopsrepl/glyphfx/commit/eb8d60f4655cfb501145e415845e4ce01ffb8f35))
+* **perf:** remove the regression tolerance entirely ([99693ca](https://github.com/blackopsrepl/glyphfx/commit/99693ca35e56aa662f7157d3e4b2ccd6fbfc2969))
+* **perf:** widen the gate's noise budget to 15%+30ms ([cca1b7b](https://github.com/blackopsrepl/glyphfx/commit/cca1b7b3918573a8602a98e48bcee4d4a25343a1))
+
+### Documentation
+
+* **readme:** full 37-effect performance matrix and repo facts ([ab9fd35](https://github.com/blackopsrepl/glyphfx/commit/ab9fd3562dc53ed4a2b7ad445c52d6600b61ed90))
+* refresh the 37-effect performance matrix ([1b01a2e](https://github.com/blackopsrepl/glyphfx/commit/1b01a2e3d047e01e03b4e34c38aa72d21238b5af))
+
 ## [0.1.2](https://github.com/blackopsrepl/glyphfx/compare/v0.1.1...v0.1.2) (2026-09-26)
 
 ### Bug Fixes
