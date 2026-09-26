@@ -1,0 +1,12 @@
+# laseretch parity cases.
+# format: <seed> | <terminal options> | <effect options>
+42  |      |
+7   |      |
+123 |      |
+999 | --existing-color-handling dynamic |
+42  | --xterm-colors |
+42  | --canvas-width 20 --canvas-height 8 |
+42  |      | --etch-speed 2 --etch-delay 0
+42  |      | --etch-pattern row_top_to_bottom
+42  |      | --spark-cooling-frames 3 --cool-gradient-stops FF0000 00FF00 --spark-gradient-stops FFFFFF 000000
+42  | --existing-color-handling dynamic | --laser-gradient-stops FF0000 0000FF --final-gradient-stops FF0000 00FF00 0000FF --final-gradient-steps 4 --final-gradient-direction diagonal
