@@ -771,7 +771,7 @@ static int blackhole_explode(Blackhole *st, EngineCtx *ctx, Effect *self) {
     return rc;
 }
 
-static char *blackhole_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *blackhole_next_frame(Effect *self, EngineCtx *ctx) {
     Blackhole *st = self->state;
     if (!ac_is_empty(&ctx->active_characters) || st->phase != BH_COMPLETE) {
         switch (st->phase) {

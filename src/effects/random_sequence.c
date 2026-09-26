@@ -232,7 +232,7 @@ static int rs_build(Effect *self, EngineCtx *ctx) {
     return 0;
 }
 
-static char *rs_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *rs_next_frame(Effect *self, EngineCtx *ctx) {
     RandomSequenceState *st = self->state;
     if (st->pending_len == 0 && ac_is_empty(&ctx->active_characters)) {
         return NULL;

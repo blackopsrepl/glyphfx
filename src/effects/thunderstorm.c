@@ -569,7 +569,7 @@ static void lightning_strike(Effect *self, EngineCtx *ctx) {
 
     for (size_t i = 0; i < st->pending_strike_chars_len; i++) {
         CharId strike_char = st->pending_strike_chars[i];
-        char *symbol = dup_cstr(ctx->terminal.arena.items[strike_char].animation.current_visual.symbol);
+        char *symbol = dup_cstr(ctx->terminal.arena.items[strike_char].animation.current_visual->symbol);
         bool uses_pre = ctx->terminal.arena.items[strike_char].uses_input_preexisting_colors;
 
         const char *flash_scn = animation_new_scene(&ctx->terminal.arena.items[strike_char].animation, false, false,
@@ -1014,7 +1014,7 @@ static int thunderstorm_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *thunderstorm_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *thunderstorm_next_frame(Effect *self, EngineCtx *ctx) {
     Thunderstorm *st = self->state;
     if (ac_is_empty(&ctx->active_characters) && st->phase == PHASE_COMPLETE) {
         return NULL;

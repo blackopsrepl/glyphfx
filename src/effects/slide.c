@@ -362,7 +362,7 @@ static void slide_retain_active(Slide *st) {
     st->active_len = out;
 }
 
-static char *slide_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *slide_next_frame(Effect *self, EngineCtx *ctx) {
     Slide *st = self->state;
     bool pending_remaining = st->pending_head < st->pending_len;
     if (pending_remaining || !ac_is_empty(&ctx->active_characters) || st->active_len > 0) {

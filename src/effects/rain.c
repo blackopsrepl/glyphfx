@@ -344,7 +344,7 @@ static int rain_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *rain_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *rain_next_frame(Effect *self, EngineCtx *ctx) {
     Rain *st = self->state;
     if (st->groups_head < st->groups_len || !ac_is_empty(&ctx->active_characters) || st->pending_len > 0) {
         if (st->pending_len == 0 && st->groups_head < st->groups_len) {

@@ -440,6 +440,7 @@ void terminal_free(Terminal *t) {
     free(t->visible_positions);
     free(t->render_cells);
     free(t->move_cursor_to_top);
+    sb_free(&t->output_buffer);
     memset(t, 0, sizeof(*t));
 }
 
@@ -531,16 +532,17 @@ static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_heig
     *out_height = height;
 }
 
-char *terminal_get_formatted_output_string(Terminal *t) {
-    static const char SPACES[64] = "                                                                ";
+const char *terminal_get_formatted_output_string(Terminal *t) {
+    static const char SPACES[] = "                                                                ";  // 64 spaces
+    const size_t BLOCK = sizeof(SPACES) - 1;
     size_t width = 0;
     size_t height = 0;
     update_render_cells(t, &width, &height);
-    StrBuf sb;
-    sb_init(&sb);
+    StrBuf *sb = &t->output_buffer;
+    sb_clear(sb);
     for (size_t row_index = height; row_index-- > 0;) {
         if (row_index + 1 < height) {
-            sb_push(&sb, '\n');
+            sb_push(sb, '\n');
         }
         const uint32_t *row = &t->render_cells[row_index * width];
         size_t col = 0;
@@ -553,19 +555,19 @@ char *terminal_get_formatted_output_string(Terminal *t) {
                 }
                 size_t remaining = run;
                 while (remaining > 0) {
-                    size_t take = remaining > sizeof(SPACES) ? sizeof(SPACES) : remaining;
-                    sb_append(&sb, SPACES, take);
+                    size_t take = remaining > BLOCK ? BLOCK : remaining;
+                    sb_append(sb, SPACES, take);
                     remaining -= take;
                 }
                 col += run;
             } else {
-                const CharacterVisual *vis = &t->arena.items[cell].animation.current_visual;
-                sb_append(&sb, vis->formatted, vis->formatted_len);
+                const CharacterVisual *vis = t->arena.items[cell].animation.current_visual;
+                sb_append(sb, vis->formatted, vis->formatted_len);
                 col++;
             }
         }
     }
-    return sb_take(&sb);
+    return sb->data ? sb->data : "";
 }
 
 // --- tty side -------------------------------------------------------------

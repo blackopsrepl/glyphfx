@@ -419,7 +419,7 @@ static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *orbittingvolley_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *orbittingvolley_next_frame(Effect *self, EngineCtx *ctx) {
     OrbittingVolley *st = self->state;
     OrbittingVolleyConfig *cfg = &st->config;
     bool any_magazine = false;

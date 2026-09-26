@@ -474,9 +474,9 @@ static void unstable_retain_by_predicate(EngineCtx *ctx, bool reassembly) {
     free(retained);
 }
 
-static char *unstable_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *unstable_next_frame(Effect *self, EngineCtx *ctx) {
     Unstable *st = self->state;
-    char *next_frame = NULL;
+    const char *next_frame = NULL;
 
     if (st->phase == UNSTABLE_RUMBLE) {
         if (st->current_rumble_steps < st->max_rumble_steps) {

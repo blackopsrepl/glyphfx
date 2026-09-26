@@ -532,7 +532,7 @@ static int fireworks_build(Effect *self, EngineCtx *ctx) {
     return prepare_scenes(st, self, ctx);
 }
 
-static char *fireworks_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *fireworks_next_frame(Effect *self, EngineCtx *ctx) {
     Fireworks *st = self->state;
     if (st->shells_len > 0 || !ac_is_empty(&ctx->active_characters)) {
         if (st->shells_len > 0 && st->launch_delay <= 0) {

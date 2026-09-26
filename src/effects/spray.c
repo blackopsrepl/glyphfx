@@ -279,7 +279,7 @@ static int spray_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *spray_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *spray_next_frame(Effect *self, EngineCtx *ctx) {
     Spray *st = self->state;
     if (st->pending_len > 0 || !ac_is_empty(&ctx->active_characters)) {
         if (st->pending_len > 0) {

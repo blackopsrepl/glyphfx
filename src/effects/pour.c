@@ -321,7 +321,7 @@ static int pour_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *pour_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *pour_next_frame(Effect *self, EngineCtx *ctx) {
     Pour *st = self->state;
     bool pending_remaining = st->pending_head < st->pending_len;
     size_t current_remaining = st->current.len - st->current_index;

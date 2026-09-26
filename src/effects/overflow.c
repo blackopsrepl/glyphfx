@@ -283,9 +283,9 @@ static int overflow_build(Effect *self, EngineCtx *ctx) {
             CharId id = row->items[k];
             EffectCharacter *ch = &ctx->terminal.arena.items[id];
             // The reference clones current_character_visual.symbol before the
-            // call; set_appearance frees current_visual.symbol, so an alias
+            // call; set_appearance frees current_visual->symbol, so an alias
             // would be a use-after-free.
-            const char *current_symbol = ch->animation.current_visual.symbol;
+            const char *current_symbol = ch->animation.current_visual->symbol;
             char *current_symbol_copy = malloc(strlen(current_symbol) + 1);
             strcpy(current_symbol_copy, current_symbol);
             bool uses_pre = ch->uses_input_preexisting_colors;
@@ -344,7 +344,7 @@ static int overflow_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *overflow_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *overflow_next_frame(Effect *self, EngineCtx *ctx) {
     Overflow *st = self->state;
     if (!pending_is_empty(st)) {
         if (st->delay == 0) {

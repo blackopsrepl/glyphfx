@@ -41,7 +41,8 @@ typedef struct {
     ColorCode bg_code;
 } VisualParams;
 
-typedef struct {
+typedef struct CharacterVisual {
+    int refcount;
     char *symbol;  // owned
     bool bold;
     bool dim;  // stored but never emitted, faithfully
@@ -61,15 +62,15 @@ typedef struct {
     size_t formatted_len;
 } CharacterVisual;
 
-void vis_init(CharacterVisual *vis, const char *symbol, const VisualParams *params);
-void vis_init_plain(CharacterVisual *vis, const char *symbol);
-void vis_free(CharacterVisual *vis);
-void vis_copy(CharacterVisual *dst, const CharacterVisual *src);
-void vis_move(CharacterVisual *dst, CharacterVisual *src);
-void vis_format(CharacterVisual *vis);
+// Reference-counted so scene stepping shares a frame's visual instead of
+// deep-copying its strings every tick (as ttfx's Rc does).
+CharacterVisual *vis_new(const char *symbol, const VisualParams *params);
+CharacterVisual *vis_new_plain(const char *symbol);
+CharacterVisual *vis_ref(CharacterVisual *vis);
+void vis_unref(CharacterVisual *vis);
 
 typedef struct {
-    CharacterVisual visual;
+    CharacterVisual *visual;
     int64_t duration;
     int64_t ticks_elapsed;
 } Frame;
@@ -121,6 +122,8 @@ struct Easing;
 typedef struct {
     OrdMap scenes;  // char* -> Scene*
     char *active_scene;  // owned copy of the active scene id, or NULL
+    size_t active_scene_slot;  // cached OrdMap slot for the active scene
+    bool active_scene_slot_valid;
     bool use_xterm_colors;
     bool no_color;
     ExistingColorHandling existing_color_handling;
@@ -131,7 +134,7 @@ typedef struct {
     Color input_bg_color;
     bool input_bold;
     int64_t active_scene_current_step;
-    CharacterVisual current_visual;
+    CharacterVisual *current_visual;
 } Animation;
 
 void animation_init(Animation *anim, const char *input_symbol);
@@ -149,8 +152,10 @@ void animation_clear_scenes(Animation *anim);
 // Scene operations.
 void scene_free(Scene *scene);
 int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const VisualParams *params);
-int scene_activate(const Scene *scene, CharacterVisual *out);
-void scene_get_next_visual(Scene *scene, CharacterVisual *out);
+// Returns 0 on success; sets the active frame's visual (borrowed) and its
+// all_frames index.
+int scene_activate(const Scene *scene, CharacterVisual **out, size_t *frame_index);
+void scene_get_next_visual(Scene *scene, CharacterVisual **out, size_t *frame_index);
 int scene_apply_gradient_to_symbols(Scene *scene, const char *const *symbols, size_t n_symbols, int64_t duration,
                                     const Gradient *fg, const Gradient *bg);
 void scene_reset(Scene *scene);

@@ -544,7 +544,7 @@ static int errorcorrect_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *errorcorrect_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *errorcorrect_next_frame(Effect *self, EngineCtx *ctx) {
     ErrorCorrect *st = self->state;
     if (st->swapped_len > 0 && st->swap_delay == 0) {
         SwapPair pair = st->swapped[0];

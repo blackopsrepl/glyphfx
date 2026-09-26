@@ -96,10 +96,9 @@ static int run_m0_dump(const char *input, const CliConfig *cfg) {
             terminal_set_character_visibility(&terminal, id, true);
         }
     }
-    char *frame = terminal_get_formatted_output_string(&terminal);
+    const char *frame = terminal_get_formatted_output_string(&terminal);
     fputs(frame, stdout);
     fputc('\n', stdout);
-    free(frame);
     terminal_free(&terminal);
     return 0;
 }
@@ -278,28 +277,35 @@ int main(int argc, char **argv) {
         }
         if (cfg.parity_dump) {
             int run_rc = effect_dump(effect, &ctx, cfg.has_max_frames, cfg.max_frames);
-            effect->ops->destroy(effect);
-            engine_ctx_free(&ctx);
             if (run_rc != 0) {
+                effect->ops->destroy(effect);
+                engine_ctx_free(&ctx);
                 fputs("Error: effect execution failed.\n", stderr);
                 exit_code = 1;
             }
+            // On success the process is exiting: skip the arena teardown, as
+            // ttfx does; freeing tens of thousands of visuals is pure exit
+            // latency.
             break;
         }
         RunOutcome outcome = RUN_COMPLETE;
         int run_rc = effect_run(effect, &ctx, tty_output, &outcome);
         rng = ctx.rng;
-        effect->ops->destroy(effect);
-        engine_ctx_free(&ctx);
         if (run_rc != 0) {
+            effect->ops->destroy(effect);
+            engine_ctx_free(&ctx);
             fputs("Error: effect execution failed.\n", stderr);
             exit_code = 1;
             break;
         }
         if (outcome == RUN_RESIZED) {
+            // Rebuild in place: this engine is dropped normally.
+            effect->ops->destroy(effect);
+            engine_ctx_free(&ctx);
             config.reuse_canvas = false;
             continue;
         }
+        // Final exit: leave the engine to the process teardown.
         if (outcome == RUN_INTERRUPTED) {
             exit_code = 1;
         }

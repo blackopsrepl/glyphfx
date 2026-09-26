@@ -275,7 +275,7 @@ static int middleout_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *middleout_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *middleout_next_frame(Effect *self, EngineCtx *ctx) {
     Middleout *st = self->state;
     if (st->phase == MIDDLEOUT_PHASE_CENTER && ac_is_empty(&ctx->active_characters)) {
         st->phase = MIDDLEOUT_PHASE_FULL;

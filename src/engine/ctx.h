@@ -33,7 +33,7 @@ void engine_step_animation(EngineCtx *ctx, Effect *effect, CharId id);
 void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id);
 void engine_tick(EngineCtx *ctx, Effect *effect, CharId id);
 void engine_update(EngineCtx *ctx, Effect *effect);
-char *engine_frame(EngineCtx *ctx);
+const char *engine_frame(EngineCtx *ctx);
 void engine_handle_event(EngineCtx *ctx, Effect *effect, CharId id, Event event, const CallerKey *caller);
 void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char *path_id);
 // Builds the waypoint caller key used to register/match segment events.

@@ -591,7 +591,7 @@ static int laseretch_build(Effect *self, EngineCtx *ctx) {
     return 0;
 }
 
-static char *laseretch_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *laseretch_next_frame(Effect *self, EngineCtx *ctx) {
     LaserEtch *st = self->state;
     bool has_pending = st->pending_head < st->pending_len;
     if (!has_pending && ac_is_empty(&ctx->active_characters)) {

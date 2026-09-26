@@ -423,7 +423,7 @@ static bool burn_is_burnable(EngineCtx *ctx, CharId id) {
            burn_has_input_colors(ctx, id);
 }
 
-static char *burn_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *burn_next_frame(Effect *self, EngineCtx *ctx) {
     Burn *st = self->state;
     bool has_pending = st->char_link_order_head < st->char_link_order_len;
     if (has_pending || !ac_is_empty(&ctx->active_characters)) {

@@ -142,6 +142,7 @@ struct Terminal {
     size_t visible_positions_len;
     uint32_t *render_cells;
     size_t render_cells_len;
+    StrBuf output_buffer;  // reused across frames
     char *move_cursor_to_top;
     int64_t frame_rate;
     double last_time_printed;
@@ -161,7 +162,7 @@ void terminal_set_character_visibility(Terminal *t, CharId id, bool is_visible);
 
 // Refreshes the cell buffer and returns the frame string (rows top-first,
 // '\n'-joined). Caller frees.
-char *terminal_get_formatted_output_string(Terminal *t);
+const char *terminal_get_formatted_output_string(Terminal *t);
 
 // --- tty side ---
 void terminal_prep_canvas(Terminal *t, FILE *out);

@@ -718,7 +718,7 @@ static int vhstape_build(Effect *self, EngineCtx *ctx) {
     return 0;
 }
 
-static char *vhstape_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *vhstape_next_frame(Effect *self, EngineCtx *ctx) {
     VhsTape *st = self->state;
     if (st->phase == VHS_COMPLETE && ac_is_empty(&ctx->active_characters)) {
         return NULL;

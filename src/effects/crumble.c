@@ -522,7 +522,7 @@ static int crumble_build(Effect *self, EngineCtx *ctx) {
     return 0;
 }
 
-static char *crumble_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *crumble_next_frame(Effect *self, EngineCtx *ctx) {
     Crumble *st = self->state;
     if (st->stage != CRUMBLE_COMPLETE) {
         switch (st->stage) {

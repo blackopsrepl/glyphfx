@@ -758,7 +758,7 @@ static int rings_build(Effect *self, EngineCtx *ctx) {
     return 0;
 }
 
-static char *rings_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *rings_next_frame(Effect *self, EngineCtx *ctx) {
     Rings *st = self->state;
     RingsConfig *cfg = &st->config;
     if (st->phase == RINGS_COMPLETE) {

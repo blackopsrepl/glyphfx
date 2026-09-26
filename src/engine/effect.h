@@ -12,7 +12,7 @@ typedef struct Effect Effect;
 typedef struct {
     int (*build)(Effect *self, struct EngineCtx *ctx);
     // Returns a malloc'd frame string, or NULL when the effect is finished.
-    char *(*next_frame)(Effect *self, struct EngineCtx *ctx);
+    const char *(*next_frame)(Effect *self, struct EngineCtx *ctx);
     void (*destroy)(Effect *self);
     void (*dispatch_callback)(Effect *self, struct EngineCtx *ctx, CharId character, const EffectCallback *cb);
 } EffectOps;

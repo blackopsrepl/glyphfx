@@ -208,7 +208,7 @@ static int highlight_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *highlight_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *highlight_next_frame(Effect *self, EngineCtx *ctx) {
     Highlight *st = self->state;
     bool easer_complete = sequence_easer_is_complete(&st->easer);
     if (!ac_is_empty(&ctx->active_characters) || !easer_complete) {

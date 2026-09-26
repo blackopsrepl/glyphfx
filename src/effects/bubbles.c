@@ -617,7 +617,7 @@ static int bubbles_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *bubbles_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *bubbles_next_frame(Effect *self, EngineCtx *ctx) {
     Bubbles *st = self->state;
     if (st->animating_bubbles.len > 0 || !ac_is_empty(&ctx->active_characters) || st->bubbles.len > 0) {
         if (st->bubbles.len > 0 && st->steps_since_last_bubble >= st->config.bubble_delay) {

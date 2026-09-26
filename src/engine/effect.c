@@ -13,13 +13,12 @@ int effect_dump(Effect *effect, EngineCtx *ctx, bool has_max_frames, uint64_t ma
         return -1;
     }
     uint64_t count = 0;
-    char *frame;
+    const char *frame;
     while ((frame = effect->ops->next_frame(effect, ctx)) != NULL) {
         size_t len = strlen(frame);
         printf("%zu\n", len);
         fwrite(frame, 1, len, stdout);
         fputc('\n', stdout);
-        free(frame);
         count++;
         if (has_max_frames && count >= max_frames) {
             break;
@@ -52,6 +51,12 @@ int effect_run(Effect *effect, EngineCtx *ctx, bool tty_output, RunOutcome *out_
     if (effect->ops->build(effect, ctx) != 0) {
         return -1;
     }
+    // Batch the whole frame (its embedded newlines would otherwise force a
+    // write per line on a line-buffered tty); still flush once per frame.
+    if (tty_output) {
+        static char out_buffer[1 << 16];
+        setvbuf(stdout, out_buffer, _IOFBF, sizeof(out_buffer));
+    }
     RunOutcome outcome = RUN_COMPLETE;
     int write_error = 0;
     terminal_prep_canvas(&ctx->terminal, stdout);
@@ -61,18 +66,16 @@ int effect_run(Effect *effect, EngineCtx *ctx, bool tty_output, RunOutcome *out_
             outcome = stop;
             break;
         }
-        char *frame = effect->ops->next_frame(effect, ctx);
+        const char *frame = effect->ops->next_frame(effect, ctx);
         if (!frame) {
             break;
         }
         stop = requested_stop(ctx, tty_output);
         if (stop != RUN_COMPLETE) {
             outcome = stop;
-            free(frame);
             break;
         }
         terminal_print_frame(&ctx->terminal, stdout, frame);
-        free(frame);
         if (ferror(stdout)) {
             write_error = 1;
             break;

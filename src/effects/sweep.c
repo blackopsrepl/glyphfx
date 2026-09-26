@@ -276,7 +276,7 @@ static int sweep_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *sweep_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *sweep_next_frame(Effect *self, EngineCtx *ctx) {
     Sweep *st = self->state;
     if (!ac_is_empty(&ctx->active_characters) || !st->complete) {
         SequenceStep step = sequence_easer_step(&st->easer);

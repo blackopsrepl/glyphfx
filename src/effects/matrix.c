@@ -290,7 +290,7 @@ static void rain_fade_last_character(RainColumn *rc, EngineCtx *ctx, const Color
     size_t idx = rng_choice_index(&ctx->rng, tail_len);
     Color darker_color = color_adjust_brightness(&tail[idx], 0.65);
     CharId target = rc->visible[0];
-    char *symbol = dup_cstr(ctx->terminal.arena.items[target].animation.current_visual.symbol);
+    char *symbol = dup_cstr(ctx->terminal.arena.items[target].animation.current_visual->symbol);
     ColorPair colors;
     memset(&colors, 0, sizeof(colors));
     colors.has_fg = true;
@@ -355,7 +355,7 @@ static void rain_tick(RainColumn *rc, EngineCtx *ctx, const MatrixConfig *cfg, c
             if (rc->visible_len > 0) {
                 CharId previous_character = rc->visible[rc->visible_len - 1];
                 char *prev_symbol =
-                    dup_cstr(ctx->terminal.arena.items[previous_character].animation.current_visual.symbol);
+                    dup_cstr(ctx->terminal.arena.items[previous_character].animation.current_visual->symbol);
                 Color fg = rain_colors[rng_choice_index(&ctx->rng, rain_colors_len)];
                 ColorPair colors;
                 memset(&colors, 0, sizeof(colors));
@@ -368,7 +368,7 @@ static void rain_tick(RainColumn *rc, EngineCtx *ctx, const MatrixConfig *cfg, c
             id_push(&rc->visible, &rc->visible_len, &rc->visible_cap, next_char);
         } else if (rc->visible_len > 0) {
             CharId last_char = rc->visible[rc->visible_len - 1];
-            CharacterVisual *visual = &ctx->terminal.arena.items[last_char].animation.current_visual;
+            CharacterVisual *visual = ctx->terminal.arena.items[last_char].animation.current_visual;
             bool last_is_highlight = visual->has_colors && visual->colors.has_fg &&
                                      color_eq(&visual->colors.fg, &cfg->highlight_color);
             if (last_is_highlight) {
@@ -420,7 +420,7 @@ static void rain_tick(RainColumn *rc, EngineCtx *ctx, const MatrixConfig *cfg, c
             continue;
         }
 
-        CharacterVisual *visual = &ctx->terminal.arena.items[character].animation.current_visual;
+        CharacterVisual *visual = ctx->terminal.arena.items[character].animation.current_visual;
         bool symbol_unchanged = !has_next_symbol || (visual->symbol && strcmp(next_symbol, visual->symbol) == 0);
         bool color_unchanged =
             !has_next_color ||
@@ -436,7 +436,7 @@ static void rain_tick(RainColumn *rc, EngineCtx *ctx, const MatrixConfig *cfg, c
             colors.fg = next_color;
             matrix_set_appearance(ctx, character, next_symbol, &colors);
         } else if (has_next_symbol) {
-            CharacterVisual *v = &ctx->terminal.arena.items[character].animation.current_visual;
+            CharacterVisual *v = ctx->terminal.arena.items[character].animation.current_visual;
             ColorPair colors;
             memset(&colors, 0, sizeof(colors));
             if (v->has_colors && v->colors.has_fg) {
@@ -445,7 +445,7 @@ static void rain_tick(RainColumn *rc, EngineCtx *ctx, const MatrixConfig *cfg, c
             }
             matrix_set_appearance(ctx, character, next_symbol, &colors);
         } else {
-            CharacterVisual *v = &ctx->terminal.arena.items[character].animation.current_visual;
+            CharacterVisual *v = ctx->terminal.arena.items[character].animation.current_visual;
             char *symbol = dup_cstr(v->symbol);
             ColorPair colors;
             memset(&colors, 0, sizeof(colors));
@@ -656,7 +656,7 @@ static int matrix_build(Effect *self, EngineCtx *ctx) {
     return 0;
 }
 
-static char *matrix_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *matrix_next_frame(Effect *self, EngineCtx *ctx) {
     Matrix *st = self->state;
     MatrixConfig *cfg = &st->config;
 

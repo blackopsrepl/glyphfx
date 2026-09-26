@@ -660,7 +660,7 @@ static int synthgrid_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *synthgrid_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *synthgrid_next_frame(Effect *self, EngineCtx *ctx) {
     SynthGrid *st = self->state;
     if (!(st->pending_len > 0 || !ac_is_empty(&ctx->active_characters) || st->phase != SG_COMPLETE)) {
         return NULL;

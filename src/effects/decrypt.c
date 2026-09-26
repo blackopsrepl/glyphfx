@@ -425,7 +425,7 @@ static int decrypt_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *decrypt_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *decrypt_next_frame(Effect *self, EngineCtx *ctx) {
     Decrypt *st = self->state;
     if (st->phase == DECRYPT_TYPING) {
         if (st->typing_head < st->typing_len || !ac_is_empty(&ctx->active_characters)) {

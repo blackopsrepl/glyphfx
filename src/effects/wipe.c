@@ -149,7 +149,7 @@ static int wipe_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *wipe_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *wipe_next_frame(Effect *self, EngineCtx *ctx) {
     Wipe *st = self->state;
     bool easer_complete = sequence_easer_is_complete(&st->easer);
     if (ac_is_empty(&ctx->active_characters) && easer_complete) {

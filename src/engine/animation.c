@@ -36,6 +36,9 @@ static bool resolve_color_code(bool has_color, const Color *color, bool no_color
 void vis_format(CharacterVisual *vis) {
     StrBuf sb;
     sb_init(&sb);
+    // Worst case is several attributes plus 24-bit fg and bg; reserve once so
+    // the appends below never grow.
+    sb_reserve(&sb, 96);
     if (vis->bold) {
         sb_puts(&sb, ANSI_BOLD);
     }
@@ -73,8 +76,12 @@ void vis_format(CharacterVisual *vis) {
     vis->formatted_len = strlen(vis->formatted);
 }
 
-void vis_init(CharacterVisual *vis, const char *symbol, const VisualParams *params) {
-    memset(vis, 0, sizeof(*vis));
+CharacterVisual *vis_new(const char *symbol, const VisualParams *params) {
+    CharacterVisual *vis = calloc(1, sizeof(CharacterVisual));
+    if (!vis) {
+        return NULL;
+    }
+    vis->refcount = 1;
     vis->symbol = dup_cstr(symbol);
     vis->bold = params->bold;
     vis->dim = params->dim;
@@ -91,35 +98,32 @@ void vis_init(CharacterVisual *vis, const char *symbol, const VisualParams *para
     vis->has_bg_code = params->has_bg_code;
     vis->bg_code = params->bg_code;
     vis_format(vis);
+    return vis;
 }
 
-void vis_init_plain(CharacterVisual *vis, const char *symbol) {
+CharacterVisual *vis_new_plain(const char *symbol) {
     VisualParams params;
     memset(&params, 0, sizeof(params));
-    vis_init(vis, symbol, &params);
+    return vis_new(symbol, &params);
 }
 
-void vis_free(CharacterVisual *vis) {
+static void vis_destroy(CharacterVisual *vis) {
     free(vis->symbol);
     free(vis->formatted);
-    vis->symbol = NULL;
-    vis->formatted = NULL;
+    free(vis);
 }
 
-void vis_copy(CharacterVisual *dst, const CharacterVisual *src) {
-    *dst = *src;
-    dst->symbol = src->symbol ? dup_cstr(src->symbol) : NULL;
-    dst->formatted = src->formatted ? dup_cstr(src->formatted) : NULL;
-    dst->formatted_len = src->formatted_len;
-}
-
-void vis_move(CharacterVisual *dst, CharacterVisual *src) {
-    if (dst == src) {
-        return;
+CharacterVisual *vis_ref(CharacterVisual *vis) {
+    if (vis) {
+        vis->refcount++;
     }
-    vis_free(dst);
-    *dst = *src;
-    memset(src, 0, sizeof(*src));
+    return vis;
+}
+
+void vis_unref(CharacterVisual *vis) {
+    if (vis && --vis->refcount == 0) {
+        vis_destroy(vis);
+    }
 }
 
 // --- IndexDeque -----------------------------------------------------------
@@ -231,7 +235,7 @@ void scene_free(Scene *scene) {
         return;
     }
     for (size_t i = 0; i < scene->all_frames_len; i++) {
-        vis_free(&scene->all_frames[i].visual);
+        vis_unref(scene->all_frames[i].visual);
     }
     free(scene->all_frames);
     free(scene->scene_id);
@@ -276,7 +280,7 @@ int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const Vi
     size_t frame_index = scene->all_frames_len++;
     Frame *frame = &scene->all_frames[frame_index];
     memset(frame, 0, sizeof(*frame));
-    vis_init(&frame->visual, symbol, &params);
+    frame->visual = vis_new(symbol, &params);
     frame->duration = duration;
     frame->ticks_elapsed = 0;
     iq_push_back(&scene->frames, frame_index);
@@ -296,21 +300,27 @@ int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const Vi
     return 0;
 }
 
-int scene_activate(const Scene *scene, CharacterVisual *out) {
+int scene_activate(const Scene *scene, CharacterVisual **out, size_t *frame_index) {
     size_t head;
     if (!iq_peek_front(&scene->frames, &head)) {
+        *out = NULL;
+        *frame_index = 0;
         return -1;
     }
-    vis_copy(out, &scene->all_frames[head].visual);
+    *out = scene->all_frames[head].visual;
+    *frame_index = head;
     return 0;
 }
 
-void scene_get_next_visual(Scene *scene, CharacterVisual *out) {
+void scene_get_next_visual(Scene *scene, CharacterVisual **out, size_t *frame_index) {
     size_t head;
     if (!iq_peek_front(&scene->frames, &head)) {
+        *out = NULL;
+        *frame_index = 0;
         return;
     }
-    vis_copy(out, &scene->all_frames[head].visual);
+    *out = scene->all_frames[head].visual;
+    *frame_index = head;
     scene->all_frames[head].ticks_elapsed += 1;
     if (scene->all_frames[head].ticks_elapsed == scene->all_frames[head].duration) {
         scene->all_frames[head].ticks_elapsed = 0;
@@ -514,7 +524,7 @@ void animation_init(Animation *anim, const char *input_symbol) {
     om_init(&anim->scenes);
     anim->input_symbol = dup_cstr(input_symbol);
     anim->existing_color_handling = EXISTING_COLOR_IGNORE;
-    vis_init_plain(&anim->current_visual, input_symbol);
+    anim->current_visual = vis_new_plain(input_symbol);
 }
 
 void animation_free(Animation *anim) {
@@ -524,7 +534,7 @@ void animation_free(Animation *anim) {
     om_free(&anim->scenes);
     free(anim->input_symbol);
     free(anim->active_scene);
-    vis_free(&anim->current_visual);
+    vis_unref(anim->current_visual);
     memset(anim, 0, sizeof(*anim));
 }
 
@@ -559,11 +569,8 @@ void animation_set_appearance(Animation *anim, bool uses_input_preexisting_color
         params.has_bg_code =
             resolve_color_code(true, &effective.bg, anim->no_color, anim->use_xterm_colors, &params.bg_code);
     }
-    free(anim->current_visual.symbol);
-    free(anim->current_visual.formatted);
-    anim->current_visual.symbol = NULL;
-    anim->current_visual.formatted = NULL;
-    vis_init(&anim->current_visual, use_symbol, &params);
+    vis_unref(anim->current_visual);
+    anim->current_visual = vis_new(use_symbol, &params);
 }
 
 const char *animation_new_scene(Animation *anim, bool is_looping, bool has_sync, SyncMetric sync, bool has_ease,
@@ -601,7 +608,9 @@ bool animation_active_scene_is_complete(const Animation *anim) {
     if (!anim->active_scene) {
         return true;
     }
-    Scene *scene = (Scene *)om_get(&anim->scenes, anim->active_scene);
+    Scene *scene = anim->active_scene_slot_valid
+                       ? (Scene *)om_value_at(&anim->scenes, anim->active_scene_slot)
+                       : (Scene *)om_get(&anim->scenes, anim->active_scene);
     if (!scene) {
         return true;
     }
@@ -611,6 +620,9 @@ bool animation_active_scene_is_complete(const Animation *anim) {
 Scene *animation_active_scene(Animation *anim) {
     if (!anim->active_scene) {
         return NULL;
+    }
+    if (anim->active_scene_slot_valid) {
+        return (Scene *)om_value_at(&anim->scenes, anim->active_scene_slot);
     }
     return (Scene *)om_get(&anim->scenes, anim->active_scene);
 }

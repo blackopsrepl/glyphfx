@@ -307,7 +307,7 @@ static int binarypath_build(Effect *self, EngineCtx *ctx) {
 
     for (size_t i = 0; i < characters_len; i++) {
         CharId id = characters[i];
-        const char *symbol = ctx->terminal.arena.items[id].animation.current_visual.symbol;
+        const char *symbol = ctx->terminal.arena.items[id].animation.current_visual->symbol;
         Coord input_coord = ctx->terminal.arena.items[id].input_coord;
         uint32_t code_point = first_codepoint(symbol);
         char binary_string[64];
@@ -400,7 +400,7 @@ static int binarypath_build(Effect *self, EngineCtx *ctx) {
                 &cfg->binary_colors.items[rng_choice_index(&ctx->rng, cfg->binary_colors.len)];
             {
                 EffectCharacter *ch = &ctx->terminal.arena.items[bin_char];
-                char *symbol = bp_dup(ch->animation.current_visual.symbol);
+                char *symbol = bp_dup(ch->animation.current_visual->symbol);
                 bool uses_pre = ch->uses_input_preexisting_colors;
                 const char *scene_name = animation_new_scene(
                     &ctx->terminal.arena.items[bin_char].animation, false, false, SYNC_DISTANCE, false,
@@ -583,7 +583,7 @@ static int binarypath_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *binarypath_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *binarypath_next_frame(Effect *self, EngineCtx *ctx) {
     BinaryPath *st = self->state;
     if (!st->complete || !ac_is_empty(&ctx->active_characters)) {
         if (st->phase == BINARY_TRAVEL) {

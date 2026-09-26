@@ -313,7 +313,7 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *smoke_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *smoke_next_frame(Effect *self, EngineCtx *ctx) {
     Smoke *st = self->state;
     BreadthFirst *fill_alg = &st->fill_alg;
     if (!fill_alg->complete || !ac_is_empty(&ctx->active_characters)) {

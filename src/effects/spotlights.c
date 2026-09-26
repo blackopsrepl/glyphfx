@@ -464,7 +464,7 @@ static int spotlights_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *spotlights_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *spotlights_next_frame(Effect *self, EngineCtx *ctx) {
     Spotlights *st = self->state;
     if (!st->complete) {
         illuminate_chars(st, ctx, st->illuminate_range);

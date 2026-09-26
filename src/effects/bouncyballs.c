@@ -349,7 +349,7 @@ static int bouncyballs_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *bouncyballs_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *bouncyballs_next_frame(Effect *self, EngineCtx *ctx) {
     BouncyBalls *st = self->state;
     bool groups_remaining = st->groups_head < st->groups_len;
     if (groups_remaining || !ac_is_empty(&ctx->active_characters) || st->pending_len > 0) {

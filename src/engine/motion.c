@@ -251,11 +251,13 @@ void motion_deactivate_path(Motion *m, const char *path_id) {
     if (!path_id) {
         free(m->active_path);
         m->active_path = NULL;
+        m->active_path_slot_valid = false;
         return;
     }
     if (m->active_path && strcmp(m->active_path, path_id) == 0) {
         free(m->active_path);
         m->active_path = NULL;
+        m->active_path_slot_valid = false;
     }
 }
 
@@ -266,4 +268,5 @@ void motion_clear_paths(Motion *m) {
     om_clear(&m->paths);
     free(m->active_path);
     m->active_path = NULL;
+    m->active_path_slot_valid = false;
 }

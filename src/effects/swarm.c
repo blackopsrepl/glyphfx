@@ -681,7 +681,7 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
     return 0;
 }
 
-static char *swarm_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *swarm_next_frame(Effect *self, EngineCtx *ctx) {
     Swarm *st = self->state;
     if (st->swarms_len > 0 || !ac_is_empty(&ctx->active_characters)) {
         if (st->swarms_len > 0 && st->call_next) {

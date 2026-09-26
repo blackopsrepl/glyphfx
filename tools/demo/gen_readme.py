@@ -91,17 +91,17 @@ All 37, each with a full option surface (`glyphfx <effect> --help`).
 
 ## Benchmarks
 
-Startup (median of 300 runs of `glyphfx --version`): **0.36 ms**. On a
-160&times;40 canvas with pacing disabled (`--frame-rate 0`), best of three:
+Startup (median of 300 runs of `glyphfx --version`): **0.33 ms**. On an
+80&times;24 canvas with pacing disabled (`--frame-rate 0`), best of three:
 
 | effect | frames | ms/frame | fps |
 |---|---:|---:|---:|
-| blackhole | 300 | 0.020 | 50,148 |
-| slide | 110 | 0.046 | 21,656 |
-| waves | 300 | 0.061 | 16,291 |
-| matrix | 300 | 0.086 | 11,599 |
-| rings | 300 | 0.153 | 6,534 |
-| beams | 300 | 0.782 | 1,279 |
+| blackhole | 300 | 0.014 | 71,429 |
+| slide | 110 | 0.027 | 37,037 |
+| matrix | 300 | 0.035 | 28,571 |
+| waves | 300 | 0.037 | 27,027 |
+| rings | 300 | 0.047 | 21,277 |
+| beams | 300 | 0.166 | 6,024 |
 
 Reproduce with `python3 tools/tests/bench.py`.
 

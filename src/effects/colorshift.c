@@ -356,7 +356,7 @@ static int colorshift_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *colorshift_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *colorshift_next_frame(Effect *self, EngineCtx *ctx) {
     if (!ac_is_empty(&ctx->active_characters)) {
         engine_update(ctx, self);
         return engine_frame(ctx);

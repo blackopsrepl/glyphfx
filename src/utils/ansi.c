@@ -55,29 +55,53 @@ ColorCode colorcode_xterm(uint8_t code) {
     return cc;
 }
 
-static void push_decimal(StrBuf *out, int value) {
-    char buf[8];
-    (void)snprintf(buf, sizeof(buf), "%d", value);
-    sb_puts(out, buf);
+// Digits without going through core::fmt / snprintf: every restyled character
+// reassembles its SGR string, so this is on the effect-build hot path.
+// Writes the decimal digits of a non-negative int, returns the count.
+static size_t put_uint(char *p, int value) {
+    if (value == 0) {
+        p[0] = '0';
+        return 1;
+    }
+    char digits[12];
+    int n = 0;
+    while (value > 0) {
+        digits[n++] = (char)('0' + value % 10);
+        value /= 10;
+    }
+    for (int i = 0; i < n; i++) {
+        p[i] = digits[n - 1 - i];
+    }
+    return (size_t)n;
 }
 
+// Builds the whole SGR sequence in a stack buffer and appends it once; every
+// restyled character reassembles its SGR string, so this is a hot path.
 static void sgr_color(const ColorCode *code, int location, StrBuf *out) {
-    sb_puts(out, "\x1b[");
-    push_decimal(out, location);
+    char buf[48];
+    size_t n = 0;
+    buf[n++] = '\x1b';
+    buf[n++] = '[';
+    n += put_uint(buf + n, location);
     if (code->kind == COLORCODE_RGB) {
         uint8_t rgb[3];
         hex6_channels(code->hex, rgb);
-        sb_puts(out, ";2;");
-        push_decimal(out, rgb[0]);
-        sb_push(out, ';');
-        push_decimal(out, rgb[1]);
-        sb_push(out, ';');
-        push_decimal(out, rgb[2]);
+        buf[n++] = ';';
+        buf[n++] = '2';
+        buf[n++] = ';';
+        n += put_uint(buf + n, rgb[0]);
+        buf[n++] = ';';
+        n += put_uint(buf + n, rgb[1]);
+        buf[n++] = ';';
+        n += put_uint(buf + n, rgb[2]);
     } else {
-        sb_puts(out, ";5;");
-        push_decimal(out, code->xterm);
+        buf[n++] = ';';
+        buf[n++] = '5';
+        buf[n++] = ';';
+        n += put_uint(buf + n, code->xterm);
     }
-    sb_push(out, 'm');
+    buf[n++] = 'm';
+    sb_append(out, buf, n);
 }
 
 void ansi_fg(const ColorCode *code, StrBuf *out) {
@@ -89,9 +113,21 @@ void ansi_bg(const ColorCode *code, StrBuf *out) {
 }
 
 void ansi_move_cursor_up(StrBuf *out, int64_t y) {
-    char buf[32];
-    (void)snprintf(buf, sizeof(buf), "\x1b[%lldA", (long long)y);
-    sb_puts(out, buf);
+    sb_puts(out, "\x1b[");
+    if (y == 0) {
+        sb_push(out, '0');
+    } else {
+        char digits[24];
+        int n = 0;
+        while (y > 0) {
+            digits[n++] = (char)('0' + (int)(y % 10));
+            y /= 10;
+        }
+        while (n > 0) {
+            sb_push(out, digits[--n]);
+        }
+    }
+    sb_push(out, 'A');
 }
 
 static const char *strip_prefix(const char *s, const char *prefix) {

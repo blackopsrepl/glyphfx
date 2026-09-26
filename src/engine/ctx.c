@@ -215,6 +215,8 @@ void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char 
     free(ch->motion.active_path);
     ch->motion.active_path = malloc(strlen(path_id) + 1);
     strcpy(ch->motion.active_path, path_id);
+    ch->motion.active_path_slot = (size_t)om_slot(&ch->motion.paths, path_id);
+    ch->motion.active_path_slot_valid = true;
 
     p->total_distance += distance_to_first;
     if (p->has_origin_segment) {
@@ -248,7 +250,20 @@ void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char 
 }
 
 static Coord path_step(EngineCtx *ctx, Effect *effect, CharId id, const char *path_id) {
-    Path *p = (Path *)om_get(&ctx->terminal.arena.items[id].motion.paths, path_id);
+    size_t slot = ctx->terminal.arena.items[id].motion.active_path_slot;
+    bool slot_valid = ctx->terminal.arena.items[id].motion.active_path_slot_valid;
+    Path *p = slot_valid ? (Path *)om_value_at(&ctx->terminal.arena.items[id].motion.paths, slot) : NULL;
+    if (!p) {
+        long s = om_slot(&ctx->terminal.arena.items[id].motion.paths, path_id);
+        if (s < 0) {
+            return ctx->terminal.arena.items[id].motion.current_coord;
+        }
+        slot = (size_t)s;
+        slot_valid = true;
+        ctx->terminal.arena.items[id].motion.active_path_slot = slot;
+        ctx->terminal.arena.items[id].motion.active_path_slot_valid = true;
+        p = (Path *)om_value_at(&ctx->terminal.arena.items[id].motion.paths, slot);
+    }
     if (!p) {
         return ctx->terminal.arena.items[id].motion.current_coord;
     }
@@ -264,7 +279,7 @@ static Coord path_step(EngineCtx *ctx, Effect *effect, CharId id, const char *pa
     long active = -1;
     size_t i = 0;
     for (;;) {
-        p = (Path *)om_get(&ctx->terminal.arena.items[id].motion.paths, path_id);
+        p = slot_valid ? (Path *)om_value_at(&ctx->terminal.arena.items[id].motion.paths, slot) : NULL;
         if (!p || i >= p->segments_len) {
             break;
         }
@@ -301,7 +316,7 @@ static Coord path_step(EngineCtx *ctx, Effect *effect, CharId id, const char *pa
                     engine_handle_event(ctx, effect, id, EVENT_SEGMENT_ENTERED, &key);
                     caller_key_free(&key);
                 }
-                p = (Path *)om_get(&ctx->terminal.arena.items[id].motion.paths, path_id);
+                p = slot_valid ? (Path *)om_value_at(&ctx->terminal.arena.items[id].motion.paths, slot) : NULL;
                 if (!p) {
                     return ctx->terminal.arena.items[id].motion.current_coord;
                 }
@@ -316,7 +331,7 @@ static Coord path_step(EngineCtx *ctx, Effect *effect, CharId id, const char *pa
         }
         i += 1;
     }
-    p = (Path *)om_get(&ctx->terminal.arena.items[id].motion.paths, path_id);
+    p = slot_valid ? (Path *)om_value_at(&ctx->terminal.arena.items[id].motion.paths, slot) : NULL;
     if (!p || p->segments_len == 0) {
         return ctx->terminal.arena.items[id].motion.current_coord;
     }
@@ -347,7 +362,9 @@ void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id) {
         return;
     }
     const char *active = ch->motion.active_path;
-    Path *p = (Path *)om_get(&ch->motion.paths, active);
+    Path *p = ch->motion.active_path_slot_valid
+                  ? (Path *)om_value_at(&ch->motion.paths, ch->motion.active_path_slot)
+                  : (Path *)om_get(&ch->motion.paths, active);
     if (!p || p->segments_len == 0) {
         return;
     }
@@ -359,7 +376,9 @@ void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id) {
     if (!active) {
         return;
     }
-    p = (Path *)om_get(&ch->motion.paths, active);
+    p = ch->motion.active_path_slot_valid
+            ? (Path *)om_value_at(&ch->motion.paths, ch->motion.active_path_slot)
+            : (Path *)om_get(&ch->motion.paths, active);
     if (!p) {
         return;
     }
@@ -400,22 +419,35 @@ void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id) {
 
 // --- animation ------------------------------------------------------------
 
+// Copies the source visual into the character only when the source frame
+// changed; retains the boxed value semantics effects rely on.
+static void set_current_visual(EngineCtx *ctx, CharId id, const CharacterVisual *src) {
+    Animation *anim = &ctx->terminal.arena.items[id].animation;
+    if (!src || anim->current_visual == src) {
+        return;
+    }
+    vis_unref(anim->current_visual);
+    anim->current_visual = vis_ref((CharacterVisual *)src);
+}
+
 void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char *scene_id) {
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
     Scene *scene = (Scene *)om_get(&ch->animation.scenes, scene_id);
     if (!scene) {
         return;
     }
-    CharacterVisual tmp;
-    memset(&tmp, 0, sizeof(tmp));
-    if (scene_activate(scene, &tmp) != 0) {
+    CharacterVisual *src = NULL;
+    size_t fidx = 0;
+    if (scene_activate(scene, &src, &fidx) != 0) {
         return;
     }
     free(ch->animation.active_scene);
     ch->animation.active_scene = malloc(strlen(scene_id) + 1);
     strcpy(ch->animation.active_scene, scene_id);
+    ch->animation.active_scene_slot = (size_t)om_slot(&ch->animation.scenes, scene_id);
+    ch->animation.active_scene_slot_valid = true;
     ch->animation.active_scene_current_step = 0;
-    vis_move(&ch->animation.current_visual, &tmp);
+    set_current_visual(ctx, id, src);
     if (observes_event(ctx, id, EVENT_SCENE_ACTIVATED)) {
         CallerKey key = scene_caller(scene_id);
         engine_handle_event(ctx, effect, id, EVENT_SCENE_ACTIVATED, &key);
@@ -427,11 +459,13 @@ void engine_deactivate_scene(EngineCtx *ctx, CharId id, const char *scene_id) {
     if (!scene_id) {
         free(anim->active_scene);
         anim->active_scene = NULL;
+        anim->active_scene_slot_valid = false;
         return;
     }
     if (anim->active_scene && strcmp(anim->active_scene, scene_id) == 0) {
         free(anim->active_scene);
         anim->active_scene = NULL;
+        anim->active_scene_slot_valid = false;
     }
 }
 
@@ -444,6 +478,7 @@ static void complete_scene_if_finished(EngineCtx *ctx, Effect *effect, CharId id
         scene_reset(scene);
         free(anim->active_scene);
         anim->active_scene = NULL;
+        anim->active_scene_slot_valid = false;
     }
     if (observes_event(ctx, id, EVENT_SCENE_COMPLETE)) {
         CallerKey key = scene_caller(scene->scene_id);
@@ -471,7 +506,7 @@ static void step_synced_scene(EngineCtx *ctx, CharId id, Scene *scene, SyncMetri
     if (!has_path_state) {
         size_t last;
         if (iq_back(&scene->frames, &last)) {
-            vis_copy(&ch->animation.current_visual, &scene->all_frames[last].visual);
+            set_current_visual(ctx, id, scene->all_frames[last].visual);
         }
         iq_append(&scene->played_frames, &scene->frames);
         return;
@@ -495,12 +530,11 @@ static void step_synced_scene(EngineCtx *ctx, CharId id, Scene *scene, SyncMetri
     if (frame_index < 0) frame_index = 0;
     size_t pos;
     if (iq_at(&scene->frames, (size_t)frame_index, &pos)) {
-        vis_copy(&ch->animation.current_visual, &scene->all_frames[pos].visual);
+        set_current_visual(ctx, id, scene->all_frames[pos].visual);
     }
 }
 
 static void step_eased_scene(EngineCtx *ctx, CharId id, Scene *scene) {
-    EffectCharacter *ch = &ctx->terminal.arena.items[id];
     double elapsed_step_ratio = (double)scene->easing_current_step / (double)scene->easing_total_steps;
     double easing_factor = easing_ease(&scene->ease, elapsed_step_ratio);
     int64_t final_frame_index = (scene->easing_total_steps - 1) > 0 ? (scene->easing_total_steps - 1) : 0;
@@ -509,7 +543,7 @@ static void step_eased_scene(EngineCtx *ctx, CharId id, Scene *scene) {
     if (frame_index < 0) frame_index = 0;
     if ((size_t)frame_index < scene->frame_index_map_len) {
         size_t frame = scene->frame_index_map[frame_index];
-        vis_copy(&ch->animation.current_visual, &scene->all_frames[frame].visual);
+        set_current_visual(ctx, id, scene->all_frames[frame].visual);
     }
     scene->easing_current_step += 1;
     if (scene->easing_current_step == scene->easing_total_steps) {
@@ -526,7 +560,7 @@ void engine_step_animation(EngineCtx *ctx, Effect *effect, CharId id) {
     if (!anim->active_scene) {
         return;
     }
-    Scene *scene = (Scene *)om_get(&anim->scenes, anim->active_scene);
+    Scene *scene = animation_active_scene(anim);
     if (!scene || iq_len(&scene->frames) == 0) {
         return;
     }
@@ -535,10 +569,10 @@ void engine_step_animation(EngineCtx *ctx, Effect *effect, CharId id) {
     } else if (scene->has_ease) {
         step_eased_scene(ctx, id, scene);
     } else {
-        CharacterVisual tmp;
-        memset(&tmp, 0, sizeof(tmp));
-        scene_get_next_visual(scene, &tmp);
-        vis_move(&anim->current_visual, &tmp);
+        CharacterVisual *src = NULL;
+        size_t fidx = 0;
+        scene_get_next_visual(scene, &src, &fidx);
+        set_current_visual(ctx, id, src);
     }
     complete_scene_if_finished(ctx, effect, id, scene);
 }
@@ -564,7 +598,7 @@ void engine_update(EngineCtx *ctx, Effect *effect) {
     ac_retain(&ctx->active_characters, retain_keep, ctx);
 }
 
-char *engine_frame(EngineCtx *ctx) {
+const char *engine_frame(EngineCtx *ctx) {
     if (clock_is_real(&ctx->clock) && ctx->terminal.config.frame_rate != 0) {
         terminal_enforce_framerate(&ctx->terminal);
     }

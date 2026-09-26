@@ -375,7 +375,7 @@ static int print_build(Effect *self, EngineCtx *ctx) {
     return 0;
 }
 
-static char *print_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *print_next_frame(Effect *self, EngineCtx *ctx) {
     Print *st = self->state;
     PrintConfig *cfg = &st->config;
 

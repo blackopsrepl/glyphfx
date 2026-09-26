@@ -56,6 +56,8 @@ typedef struct {
     Coord current_coord;
     Coord previous_coord;
     char *active_path;  // owned, or NULL
+    size_t active_path_slot;  // cached OrdMap slot for the active path
+    bool active_path_slot_valid;
     char *completed_path;  // owned, or NULL
 } Motion;
 

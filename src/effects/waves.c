@@ -322,7 +322,7 @@ static int waves_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *waves_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *waves_next_frame(Effect *self, EngineCtx *ctx) {
     Waves *st = self->state;
     if (st->pending_head < st->pending.len || !ac_is_empty(&ctx->active_characters)) {
         if (st->pending_head < st->pending.len) {

@@ -522,7 +522,7 @@ static int beams_build(Effect *self, EngineCtx *ctx) {
     return 0;
 }
 
-static char *beams_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *beams_next_frame(Effect *self, EngineCtx *ctx) {
     Beams *st = self->state;
     BeamsConfig *cfg = &st->config;
     if (st->phase != BEAMS_COMPLETE || !ac_is_empty(&ctx->active_characters)) {

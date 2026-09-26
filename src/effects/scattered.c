@@ -211,7 +211,7 @@ static int scattered_build(Effect *self, EngineCtx *ctx) {
     return rc;
 }
 
-static char *scattered_next_frame(Effect *self, EngineCtx *ctx) {
+static const char *scattered_next_frame(Effect *self, EngineCtx *ctx) {
     Scattered *st = self->state;
     if (!ac_is_empty(&ctx->active_characters)) {
         if (st->initial_hold_frames != 0) {
