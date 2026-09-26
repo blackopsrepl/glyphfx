@@ -8,39 +8,41 @@ cat banner.txt | glyphfx beams
 fortune | glyphfx --random-effect
 ```
 
-glyphfx is a pure-C17 implementation of the Rust binary
-[ttfx](https://github.com/omacom/ttfx). It is a parity port: given the same
-input, configuration, and seed, glyphfx emits byte-identical frames and a
-byte-identical terminal stream. Behavior is specified by the ttfx binary, not
-reinterpreted. libc and libm are the only dependencies.
+glyphfx is a terminal text-effects engine written in C17. It builds against
+libc and libm only — no ncurses, no config parser, no RNG library — and all 37
+effects, the animation engine, and the command-line surface are implemented
+here. Given the same input, options, and seed as ttfx it emits byte-identical
+frames and a byte-identical terminal stream; that compatibility is verified
+mechanically in CI, not asserted.
 
 ## Status
 
-The engine and all 37 effects are implemented and verified byte for byte
-against the ttfx oracle, including the full CLI option surface, signal and
-resize handling, and the terminal byte stream. The verification suites:
+Engine and effects are complete and checked against the ttfx binary:
 
 - `make check` — pure-function, geometry, gradient, and RNG goldens.
-- `make parity` — the M0 input/canvas/anchoring option matrix.
+- `make parity` — the M0 input/canvas/anchoring option matrix (306 cases).
 - `make effects` — every effect's frame stream across seeds and configs.
 - `tools/tests/cli_corpus.sh` — exit codes and stdout/stderr routing.
 - `tools/tests/tty_compare.py` — the full pty prep+frames+teardown stream.
 - `tools/tests/tty_signals.py` — SIGINT/SIGTERM/close/resize behavior.
 
-Byte-exact parity is pinned to Linux/glibc; builds and the unit tests also run
-on macOS.
+Byte-exact comparison is pinned to Linux/glibc; builds and the unit tests also
+run on macOS.
 
 ## Build
 
 ```sh
 make            # build/glyphfx
 make check      # C unit tests (pure-function, geometry, gradient, RNG goldens)
-make effects    # byte-exact effect parity against the ttfx oracle
-make parity     # byte-exact M0 option-matrix parity
+make effects    # byte-exact effect comparison against the ttfx binary
+make parity     # byte-exact M0 option-matrix comparison
 make debug      # ASan/UBSan build
+make install    # PREFIX=/usr/local by default
+make static     # static link (build/glyphfx-static)
 ```
 
-The oracle is a local ttfx checkout, fetched on demand and gitignored:
+The comparison oracle is a local ttfx checkout, fetched on demand and
+gitignored:
 
 ```sh
 tools/parity/fetch_reference.sh

@@ -1,5 +1,8 @@
-glyphfx is a C17 port of ttfx. ttfx is a Rust port of TerminalTextEffects.
-The provenance chain:
+# Attribution
+
+glyphfx implements the terminal text-effects design and command-line surface of
+ttfx, which in turn implements TerminalTextEffects. The relevant licenses and
+copyrights:
 
     TerminalTextEffects
     https://github.com/ChrisBuilds/terminaltexteffects
@@ -9,8 +12,5 @@ The provenance chain:
     https://github.com/omacom/ttfx
     MIT License, Copyright (c) 2026 37signals / omacom-io
 
-The effect set, the animation engine's design, and the command-line interface
-originate with those projects. glyphfx reproduces ttfx's behavior, including
-its rendering quirks, and is validated against the ttfx binary.
-
-ttfx is not vendored here; tools/parity/fetch_reference.sh clones it on demand.
+glyphfx is an independent C17 implementation validated against the ttfx binary.
+ttfx is not vendored; tools/parity/fetch_reference.sh clones it on demand.
