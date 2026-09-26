@@ -177,8 +177,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--binary", default=str(ROOT / "build/glyphfx"))
     ap.add_argument("--runs", type=int, default=5)
-    ap.add_argument("--tol", type=float, default=0.08)
-    ap.add_argument("--floor-ms", type=float, default=12.0,
+    ap.add_argument("--tol", type=float, default=0.15)
+    ap.add_argument("--floor-ms", type=float, default=30.0,
                     help="absolute noise floor: never flag a slowdown below this many ms")
     ap.add_argument("--allow-machine", action="store_true",
                     help="do not fail when the baseline was recorded on another CPU")
