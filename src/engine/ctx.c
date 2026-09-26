@@ -142,9 +142,24 @@ void engine_handle_event(EngineCtx *ctx, Effect *effect, CharId id, Event event,
             return;
         }
         const EventAction *action = event_handler_action(handler, (size_t)entry, action_index);
-        // Copy: a callback may append actions and reallocate the list.
+        // A dispatched action can append to the entry and reallocate its action
+        // list, so the action cannot be read across the dispatch. Non-callbacks
+        // only need the id to survive; keep it on the stack instead of a heap
+        // deep copy. Callbacks own argument strings, so those are deep-copied.
+        char id_buf[256];
         EventAction local;
-        event_action_copy(&local, action);
+        bool deep = false;
+        size_t id_len = action->id ? strlen(action->id) : 0;
+        if (action->kind == ACTION_CALLBACK || id_len >= sizeof(id_buf)) {
+            event_action_copy(&local, action);
+            deep = true;
+        } else {
+            local = *action;
+            if (action->id) {
+                memcpy(id_buf, action->id, id_len + 1);
+                local.id = id_buf;
+            }
+        }
         switch (local.kind) {
             case ACTION_ACTIVATE_SCENE:
                 engine_activate_scene(ctx, effect, id, local.id);
@@ -175,7 +190,9 @@ void engine_handle_event(EngineCtx *ctx, Effect *effect, CharId id, Event event,
                 }
                 break;
         }
-        event_action_free(&local);
+        if (deep) {
+            event_action_free(&local);
+        }
     }
 }
 
