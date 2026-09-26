@@ -453,6 +453,7 @@ void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char
     strcpy(ch->animation.active_scene, scene_id);
     ch->animation.active_scene_slot = (size_t)om_slot(&ch->animation.scenes, scene_id);
     ch->animation.active_scene_slot_valid = true;
+    ch->animation.active_scene_ref = scene;
     ch->animation.active_scene_current_step = 0;
     set_current_visual(ctx, id, src);
     if (observes_event(ctx, id, EVENT_SCENE_ACTIVATED)) {
@@ -467,12 +468,14 @@ void engine_deactivate_scene(EngineCtx *ctx, CharId id, const char *scene_id) {
         free(anim->active_scene);
         anim->active_scene = NULL;
         anim->active_scene_slot_valid = false;
+        anim->active_scene_ref = NULL;
         return;
     }
     if (anim->active_scene && strcmp(anim->active_scene, scene_id) == 0) {
         free(anim->active_scene);
         anim->active_scene = NULL;
         anim->active_scene_slot_valid = false;
+        anim->active_scene_ref = NULL;
     }
 }
 
@@ -486,6 +489,7 @@ static void complete_scene_if_finished(EngineCtx *ctx, Effect *effect, CharId id
         free(anim->active_scene);
         anim->active_scene = NULL;
         anim->active_scene_slot_valid = false;
+        anim->active_scene_ref = NULL;
     }
     if (observes_event(ctx, id, EVENT_SCENE_COMPLETE)) {
         CallerKey key = scene_caller(scene->scene_id);

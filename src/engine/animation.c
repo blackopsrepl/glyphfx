@@ -751,9 +751,11 @@ bool animation_active_scene_is_complete(const Animation *anim) {
     if (!anim->active_scene) {
         return true;
     }
-    Scene *scene = anim->active_scene_slot_valid
-                       ? (Scene *)om_value_at(&anim->scenes, anim->active_scene_slot)
-                       : (Scene *)om_get(&anim->scenes, anim->active_scene);
+    const Scene *scene = anim->active_scene_ref;
+    if (!scene) {
+        scene = anim->active_scene_slot_valid ? (const Scene *)om_value_at(&anim->scenes, anim->active_scene_slot)
+                                              : (const Scene *)om_get(&anim->scenes, anim->active_scene);
+    }
     if (!scene) {
         return true;
     }
@@ -761,6 +763,9 @@ bool animation_active_scene_is_complete(const Animation *anim) {
 }
 
 Scene *animation_active_scene(Animation *anim) {
+    if (anim->active_scene_ref) {
+        return anim->active_scene_ref;
+    }
     if (!anim->active_scene) {
         return NULL;
     }
@@ -775,4 +780,6 @@ void animation_clear_scenes(Animation *anim) {
         scene_free((Scene *)om_value_at(&anim->scenes, i));
     }
     om_clear(&anim->scenes);
+    anim->active_scene_ref = NULL;
+    anim->active_scene_slot_valid = false;
 }

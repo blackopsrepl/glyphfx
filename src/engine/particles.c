@@ -92,6 +92,8 @@ static void reset_particle(EngineCtx *ctx, CharId id, ParticleReset reset) {
     if (reset.deactivate_scene) {
         free(ch->animation.active_scene);
         ch->animation.active_scene = NULL;
+        ch->animation.active_scene_slot_valid = false;
+        ch->animation.active_scene_ref = NULL;
     }
     if (reset.clear_paths) {
         motion_clear_paths(&ch->motion);
@@ -182,6 +184,8 @@ void particle_pool_reclaim(ParticlePool *pool, EngineCtx *ctx, CharId id, bool h
         motion_deactivate_path(&ch->motion, NULL);
         free(ch->animation.active_scene);
         ch->animation.active_scene = NULL;
+        ch->animation.active_scene_slot_valid = false;
+        ch->animation.active_scene_ref = NULL;
     }
     ac_remove(&ctx->active_characters, id);
     if (!available_contains(pool, id)) {

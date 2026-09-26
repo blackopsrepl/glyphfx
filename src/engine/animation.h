@@ -130,6 +130,7 @@ typedef struct {
     char *active_scene;  // owned copy of the active scene id, or NULL
     size_t active_scene_slot;  // cached OrdMap slot for the active scene
     bool active_scene_slot_valid;
+    Scene *active_scene_ref;  // borrowed; the scene active_scene names, or NULL
     bool use_xterm_colors;
     bool no_color;
     ExistingColorHandling existing_color_handling;
