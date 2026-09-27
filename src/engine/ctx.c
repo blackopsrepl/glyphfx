@@ -9,6 +9,7 @@
 #include "engine/motion.h"
 #include "utils/pycompat.h"
 #include "utils/strhash.h"
+#include "utils/strtab.h"
 
 int engine_ctx_init(EngineCtx *ctx, const char *input_data, const TerminalConfig *config, Rng rng, Clock clock,
                     PreprocessError *err) {
@@ -234,8 +235,7 @@ void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char 
 
     Segment new_origin;
     memset(&new_origin, 0, sizeof(new_origin));
-    new_origin.start.waypoint_id = malloc(7);
-    strcpy(new_origin.start.waypoint_id, "origin");
+    new_origin.start.waypoint_id = strtab_intern("origin");
     new_origin.start.coord = current;
     waypoint_copy(&new_origin.end, first);
     new_origin.distance = distance_to_first;

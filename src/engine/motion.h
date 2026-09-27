@@ -12,7 +12,7 @@
 #include "utils/ordmap.h"
 
 typedef struct {
-    char *waypoint_id;  // owned
+    const char *waypoint_id;  // interned, shared, never freed per-waypoint
     Coord coord;
     bool has_bezier;
     Coord *bezier;  // owned

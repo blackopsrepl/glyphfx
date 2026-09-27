@@ -6,6 +6,7 @@
 
 #include "utils/geometry.h"
 #include "utils/pycompat.h"
+#include "utils/strtab.h"
 
 static char *dup_cstr(const char *s) {
     size_t len = strlen(s);
@@ -18,14 +19,14 @@ static char *dup_cstr(const char *s) {
 }
 
 void waypoint_free(Waypoint *w) {
-    free(w->waypoint_id);
+    // waypoint_id is interned and shared; the table owns it.
     free(w->bezier);
     memset(w, 0, sizeof(*w));
 }
 
 void waypoint_copy(Waypoint *dst, const Waypoint *src) {
     memset(dst, 0, sizeof(*dst));
-    dst->waypoint_id = src->waypoint_id ? dup_cstr(src->waypoint_id) : NULL;
+    dst->waypoint_id = src->waypoint_id;
     dst->coord = src->coord;
     dst->has_bezier = src->has_bezier;
     if (src->has_bezier && src->bezier_len) {
@@ -160,14 +161,14 @@ int path_new_waypoint(Path *p, Coord coord, const Coord *bezier, size_t bezier_l
             }
             current_id++;
         }
-        wp.waypoint_id = dup_cstr(candidate);
+        wp.waypoint_id = strtab_intern(candidate);
     } else {
         for (size_t i = 0; i < p->waypoints_len; i++) {
             if (p->waypoints[i].waypoint_id && strcmp(p->waypoints[i].waypoint_id, waypoint_id) == 0) {
                 return -1;
             }
         }
-        wp.waypoint_id = dup_cstr(waypoint_id);
+        wp.waypoint_id = strtab_intern(waypoint_id);
     }
     wp.coord = coord;
     if (bezier && bezier_len > 0) {
