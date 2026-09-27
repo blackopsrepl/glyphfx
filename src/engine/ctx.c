@@ -43,12 +43,12 @@ static bool observes_event(const EngineCtx *ctx, CharId id, Event event) {
     return event_handler_subscribes(&ctx->terminal.arena.items[id].event_handler, event);
 }
 
-static CallerKey scene_caller(const char *id) {
+static CallerKey scene_caller(const Scene *scene) {
     CallerKey key;
     memset(&key, 0, sizeof(key));
     key.kind = CALLER_SCENE;
-    key.id = (char *)id;
-    key.id_handle = strtab_handle(id);
+    key.id = scene->scene_id;
+    key.id_handle = strtab_handle(scene->scene_id);
     return key;
 }
 
@@ -483,7 +483,7 @@ void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char
     ch->animation.active_scene_current_step = 0;
     set_current_visual(ctx, id, src);
     if (observes_event(ctx, id, EVENT_SCENE_ACTIVATED)) {
-        CallerKey key = scene_caller(scene_id);
+        CallerKey key = scene_caller(scene);
         engine_handle_event(ctx, effect, id, EVENT_SCENE_ACTIVATED, &key);
     }
 }
@@ -518,7 +518,7 @@ static void complete_scene_if_finished(EngineCtx *ctx, Effect *effect, CharId id
         anim->active_scene_ref = NULL;
     }
     if (observes_event(ctx, id, EVENT_SCENE_COMPLETE)) {
-        CallerKey key = scene_caller(scene->scene_id);
+        CallerKey key = scene_caller(scene);
         engine_handle_event(ctx, effect, id, EVENT_SCENE_COMPLETE, &key);
     }
 }

@@ -9,6 +9,7 @@
 #include "utils/strbuf.h"
 #include "utils/strhash.h"
 #include "utils/pycompat.h"
+#include "utils/strtab.h"
 
 static char *dup_cstr(const char *s) {
     size_t len = strlen(s);
