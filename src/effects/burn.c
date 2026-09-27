@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "effects/registry.h"
+#include "engine/render_log.h"
 #include "engine/animation.h"
 #include "engine/ctx.h"
 #include "engine/motion.h"
@@ -142,6 +143,7 @@ static void burn_initialize_smoke(void *user, EngineCtx *ctx, CharId id) {
         gradient_free(&gradient);
     }
     ctx->terminal.arena.items[id].layer = 2;
+    renderer_layer(id, 2);
     free(input_symbol);
 }
 

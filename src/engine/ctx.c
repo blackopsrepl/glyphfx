@@ -7,6 +7,7 @@
 
 #include "engine/canvas.h"
 #include "engine/motion.h"
+#include "engine/render_log.h"
 #include "utils/pycompat.h"
 #include "utils/strhash.h"
 #include "utils/strtab.h"
@@ -181,6 +182,7 @@ void engine_handle_event(EngineCtx *ctx, Effect *effect, CharId id, Event event,
             }
             case ACTION_SET_LAYER:
                 ctx->terminal.arena.items[id].layer = local.layer;
+                renderer_layer(id, local.layer);
                 break;
             case ACTION_SET_COORDINATE:
                 motion_set_coordinate(&ctx->terminal.arena.items[id].motion, local.coord);
@@ -269,6 +271,7 @@ void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char 
     }
     if (p->has_layer) {
         ch->layer = p->layer;
+        renderer_layer(id, p->layer);
     }
     segment_free(&new_origin);
     if (observes_event(ctx, id, EVENT_PATH_ACTIVATED)) {
@@ -401,7 +404,7 @@ void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id) {
     }
     Coord new_coord = path_step(ctx, effect, id, active);
     ch = &ctx->terminal.arena.items[id];
-    ch->motion.current_coord = new_coord;
+    motion_set_coordinate(&ch->motion, new_coord);
 
     active = ch->motion.active_path;
     if (!active) {
@@ -459,6 +462,7 @@ static void set_current_visual(EngineCtx *ctx, CharId id, const CharacterVisual 
     }
     vis_unref(anim->current_visual);
     anim->current_visual = vis_ref((CharacterVisual *)src);
+    renderer_handle(id, anim->current_visual ? anim->current_visual->version : 0);
 }
 
 void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char *scene_id) {

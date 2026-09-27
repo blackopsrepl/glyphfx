@@ -1,4 +1,5 @@
 #include "engine/terminal.h"
+#include "engine/render_log.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -441,6 +442,9 @@ void terminal_free(Terminal *t) {
     free(t->cell_version);
     free(t->prev_cells);
     free(t->prev_version);
+    free(t->cell_head);
+    free(t->cell_next);
+    free(t->cell_of_char);
     if (t->row_bytes) {
         for (size_t i = 0; i < t->cache_height; i++) {
             free(t->row_bytes[i]);
@@ -478,6 +482,7 @@ void terminal_set_character_visibility(Terminal *t, CharId id, bool is_visible) 
         return;
     }
     t->arena.items[index].is_visible = is_visible;
+    renderer_move(id, t->arena.items[index].motion.current_coord);
     if (t->arena.len > t->visible_positions_len) {
         size_t old = t->visible_positions_len;
         t->visible_positions = realloc(t->visible_positions, t->arena.len * sizeof(size_t));
@@ -531,44 +536,231 @@ static bool g_render_verify;
 static void row_cache_ensure(Terminal *t, size_t width, size_t height);
 static void row_cache_invalidate(Terminal *t);
 
-static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_height) {
-    size_t width = t->visible_right > 0 ? (size_t)t->visible_right : 0;
-    size_t height = t->visible_top > 0 ? (size_t)t->visible_top : 0;
-    size_t cell_count = width * height;
-    row_cache_ensure(t, width, height);
-    if (cell_count > t->render_cells_len) {
-        t->render_cells = realloc(t->render_cells, cell_count * sizeof(uint32_t));
-        t->render_cells_len = cell_count;
+// --- incremental grid -----------------------------------------------------
+
+// Painter order: (layer, character_id) maximum wins a contested cell.
+static inline bool grid_beats(const Terminal *t, CharId a, CharId b) {
+    int64_t la = t->arena.items[a].layer;
+    int64_t lb = t->arena.items[b].layer;
+    return la > lb || (la == lb && t->arena.items[a].character_id > t->arena.items[b].character_id);
+}
+
+// Re-picks a cell's owner among its occupants (one left, appeared, or changed
+// layer) and refreshes the version the row cache compares.
+static void cell_rewin(Terminal *t, int64_t cell, size_t width) {
+    (void)width;
+    int32_t best = -1;
+    for (int32_t o = t->cell_head[cell]; o >= 0; o = t->cell_next[o]) {
+        if (best < 0 || grid_beats(t, (CharId)o, (CharId)best)) {
+            best = o;
+        }
     }
-    // Clearing with a vector memset costs less than stamping a second epoch
-    // array in the paint loop and re-reading it in the write loop (the
-    // reference settles the same trade on the side of one array).
-    t->painted_cells = 0;
-    if (cell_count) {
-        memset(t->render_cells, 0xFF, cell_count * sizeof(uint32_t));
+    uint32_t owner = best < 0 ? RENDER_EMPTY : (uint32_t)best;
+    if (t->render_cells[cell] == owner) {
+        return;
+    }
+    if (t->render_cells[cell] == RENDER_EMPTY) {
+        t->painted_cells++;
+    } else if (owner == RENDER_EMPTY) {
+        t->painted_cells--;
+    }
+    t->render_cells[cell] = owner;
+    if (owner == RENDER_EMPTY) {
+        t->cell_version[cell] = 0;
+    } else {
+        const CharacterVisual *vis = t->arena.items[owner].animation.current_visual;
+        t->cell_version[cell] = vis ? vis->version : 0;
+    }
+}
+
+// MOVE record: leave the old cell (rewinning it when it was owned) and join
+// the new one.
+static void grid_move(Terminal *t, CharId id, int32_t new_cell, size_t width) {
+    int32_t old = t->cell_of_char[id];
+    if (old == new_cell) {
+        return;
+    }
+    if (old >= 0) {
+        int32_t *link = &t->cell_head[old];
+        while (*link != (int32_t)id) {
+            link = &t->cell_next[*link];
+        }
+        *link = t->cell_next[id];
+        if (t->render_cells[old] == (uint32_t)id) {
+            cell_rewin(t, old, width);
+        }
+    }
+    t->cell_of_char[id] = new_cell;
+    if (new_cell >= 0) {
+        t->cell_next[id] = t->cell_head[new_cell];
+        t->cell_head[new_cell] = (int32_t)id;
+        uint32_t *owner = &t->render_cells[new_cell];
+        if (*owner == RENDER_EMPTY || grid_beats(t, id, (CharId)*owner)) {
+            if (*owner == RENDER_EMPTY) {
+                t->painted_cells++;
+            }
+            *owner = (uint32_t)id;
+            const CharacterVisual *vis = t->arena.items[id].animation.current_visual;
+            t->cell_version[new_cell] = vis ? vis->version : 0;
+        }
+    }
+}
+
+// Replay the frame's records in order, each carrying the value at the moment
+// of the mutation.
+static void grid_replay(Terminal *t, size_t width) {
+    for (uint32_t i = 0; i < g_rlog.len; i++) {
+        uint64_t rec = g_rlog.buf[i];
+        uint32_t slot = (uint32_t)(rec & RLOG_SLOT_MASK);
+        uint32_t kind = (uint32_t)((rec >> 30) & 3u);
+        uint32_t value = (uint32_t)(rec >> 32);
+        if ((size_t)slot >= t->arena.len) {
+            continue;
+        }
+        CharId id = (CharId)slot;
+        if (kind == RLOG_MOVE) {
+            grid_move(t, id, (int32_t)value, width);
+        } else if (kind == RLOG_HANDLE) {
+            int32_t cell = t->cell_of_char[id];
+            if (cell >= 0 && t->render_cells[cell] == slot && t->cell_version[cell] != value) {
+                t->cell_version[cell] = value;
+            }
+        } else {
+            int32_t cell = t->cell_of_char[id];
+            if (cell >= 0) {
+                cell_rewin(t, cell, width);
+            }
+        }
+    }
+}
+
+// Full repaint from the arena. `lists` also rebuilds the occupant lists and
+// per-character mirrors the replay needs.
+static void grid_walk(Terminal *t, size_t width, size_t height, bool lists) {
+    size_t cell_count = width * height;
+    memset(t->render_cells, 0xFF, cell_count * sizeof(uint32_t));
+    size_t painted = 0;
+    if (lists) {
+        memset(t->cell_head, 0xFF, cell_count * sizeof(int32_t));
+        for (size_t id = 0; id < t->arena.len; id++) {
+            t->cell_of_char[id] = -1;
+        }
     }
     for (size_t i = 0; i < t->visible_characters_len; i++) {
         CharId id = t->visible_characters[i];
         EffectCharacter *ch = &t->arena.items[id];
         int64_t row = ch->motion.current_coord.row + t->canvas_row_offset;
         int64_t column = ch->motion.current_coord.column + t->canvas_column_offset;
-        if (t->visible_bottom <= row && row <= t->visible_top && t->visible_left <= column &&
-            column <= t->visible_right) {
-            uint32_t *cell = &t->render_cells[(size_t)(row - 1) * width + (size_t)(column - 1)];
-            if (*cell != RENDER_EMPTY) {
-                EffectCharacter *painted = &t->arena.items[*cell];
-                if (ch->layer <= painted->layer &&
-                    (ch->layer != painted->layer || ch->character_id <= painted->character_id)) {
-                    continue;
-                }
-            }
-            *cell = (uint32_t)id;
-            if (t->cache_on) {
-                const CharacterVisual *vis = ch->animation.current_visual;
-                t->cell_version[(size_t)(cell - t->render_cells)] = vis ? vis->version : 0;
-                t->painted_cells++;
-            }
+        if (!(t->visible_bottom <= row && row <= t->visible_top && t->visible_left <= column &&
+              column <= t->visible_right)) {
+            continue;
         }
+        int64_t cell = (row - 1) * (int64_t)width + (column - 1);
+        if (lists) {
+            t->cell_of_char[id] = (int32_t)cell;
+            t->cell_next[id] = t->cell_head[cell];
+            t->cell_head[cell] = (int32_t)id;
+        }
+        uint32_t *owner = &t->render_cells[cell];
+        if (*owner == RENDER_EMPTY) {
+            *owner = (uint32_t)id;
+        } else if (*owner != (uint32_t)id) {
+            if (!grid_beats(t, id, (CharId)*owner)) {
+                continue;
+            }
+            *owner = (uint32_t)id;
+        }
+        // The version grid only feeds the row cache; skip its load and store
+        // while the cache is off so a repaint costs what it always did.
+        if (t->cache_on) {
+            const CharacterVisual *vis = ch->animation.current_visual;
+            t->cell_version[cell] = vis ? vis->version : 0;
+            painted++;
+        }
+    }
+    t->painted_cells = painted;
+    t->grid_ready = true;
+}
+
+// Characters may be added mid-run; the per-character arrays are arena-dense.
+static void grid_grow_chars(Terminal *t) {
+    if (t->arena.len <= t->grid_chars_len) {
+        return;
+    }
+    size_t cap = t->grid_chars_len ? t->grid_chars_len : 64;
+    while (cap < t->arena.len) {
+        cap *= 2;
+    }
+    int32_t *next = realloc(t->cell_next, cap * sizeof(int32_t));
+    if (!next) {
+        return;
+    }
+    t->cell_next = next;
+    int32_t *of = realloc(t->cell_of_char, cap * sizeof(int32_t));
+    if (!of) {
+        return;
+    }
+    t->cell_of_char = of;
+    for (size_t id = t->grid_chars_len; id < cap; id++) {
+        t->cell_next[id] = -1;
+        t->cell_of_char[id] = -1;
+    }
+    t->grid_chars_len = cap;
+    t->grid_ready = false;
+    t->lists_valid = false;
+    g_rlog.on = false;
+}
+
+static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_height) {
+    size_t width = t->visible_right > 0 ? (size_t)t->visible_right : 0;
+    size_t height = t->visible_top > 0 ? (size_t)t->visible_top : 0;
+    size_t cell_count = width * height;
+    row_cache_ensure(t, width, height);
+    grid_grow_chars(t);
+    if (cell_count > t->render_cells_len) {
+        t->render_cells = realloc(t->render_cells, cell_count * sizeof(uint32_t));
+        t->render_cells_len = cell_count;
+    }
+    render_log_bind(t);
+    bool overflow = g_rlog.overflow;
+    if (t->grid_incremental && t->grid_ready && t->lists_valid && !overflow) {
+        // Few mutations: the change log keeps the grid current and the paint
+        // walk is skipped entirely (the asm renderer's log replay).
+        grid_replay(t, width);
+    } else {
+        bool lists = t->grid_incremental || t->want_lists;
+        grid_walk(t, width, height, lists);
+        t->lists_valid = lists;
+        t->want_lists = false;
+    }
+    g_rlog.len = 0;
+    g_rlog.overflow = false;
+    // Mode selection. A frame that overflowed the log while replaying shows the
+    // grid is changing faster than a log can carry it, so the walk takes over.
+    // From the walk, one cheap probe frame (small cap, no list rebuild) decides
+    // whether replaying would pay; heavy effects pay only that probe.
+    if (t->grid_incremental) {
+        if (overflow) {
+            t->grid_incremental = false;
+            t->lists_valid = false;
+            t->walk_frames = 0;
+        }
+    } else if (t->probing) {
+        t->probing = false;
+        if (!overflow) {
+            t->grid_incremental = true;
+            t->want_lists = true;
+        } else {
+            t->walk_frames = 0;
+        }
+    } else if (++t->walk_frames >= 32) {
+        t->probing = true;
+    }
+    g_rlog.on = t->probing || (t->grid_incremental && t->lists_valid);
+    uint32_t limit = (uint32_t)(t->visible_characters_len / 4 + 64);
+    g_rlog.limit = limit;
+    while (g_rlog.cap < limit) {
+        render_log_grow();
     }
     *out_width = width;
     *out_height = height;
@@ -619,6 +811,9 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
     free(t->cell_version);
     free(t->prev_cells);
     free(t->prev_version);
+    free(t->cell_head);
+    free(t->cell_next);
+    free(t->cell_of_char);
     if (t->row_bytes) {
         for (size_t i = 0; i < t->cache_height; i++) {
             free(t->row_bytes[i]);
@@ -630,6 +825,16 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
     t->cell_version = malloc((cells ? cells : 1) * sizeof(uint32_t));
     t->prev_cells = malloc((cells ? cells : 1) * sizeof(uint32_t));
     t->prev_version = malloc((cells ? cells : 1) * sizeof(uint32_t));
+    t->cell_head = malloc((cells ? cells : 1) * sizeof(int32_t));
+    t->cell_next = malloc((t->arena.len ? t->arena.len : 1) * sizeof(int32_t));
+    t->cell_of_char = malloc((t->arena.len ? t->arena.len : 1) * sizeof(int32_t));
+    t->grid_chars_len = t->arena.len;
+    t->grid_ready = false;
+    t->lists_valid = false;
+    t->want_lists = false;
+    t->grid_incremental = false;
+    t->walk_frames = 0;
+    t->probing = false;
     t->row_bytes = calloc(height ? height : 1, sizeof(char *));
     t->row_lens = calloc(height ? height : 1, sizeof(size_t));
     t->row_caps = calloc(height ? height : 1, sizeof(size_t));

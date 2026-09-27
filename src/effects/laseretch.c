@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "effects/registry.h"
+#include "engine/render_log.h"
 #include "engine/animation.h"
 #include "engine/ctx.h"
 #include "engine/motion.h"
@@ -161,6 +162,7 @@ static void laseretch_initialize_spark(void *user, EngineCtx *ctx, CharId spark)
     SparkInit *init = user;
     EffectCharacter *ch = &ctx->terminal.arena.items[spark];
     ch->layer = 2;
+    renderer_layer(spark, 2);
     size_t sym_len = strlen(ch->input_symbol);
     char *input_symbol = malloc(sym_len + 1);
     strcpy(input_symbol, ch->input_symbol);
@@ -336,6 +338,7 @@ static Laser *laseretch_make_laser(Effect *self, EngineCtx *ctx) {
         const char *symbol = laser->beam_chars_len == 0 ? "*" : "/";
         CharId char_id = terminal_add_character(&ctx->terminal, symbol, coord_new(col, row));
         ctx->terminal.arena.items[char_id].layer = 2;
+        renderer_layer(char_id, 2);
         terminal_set_character_visibility(&ctx->terminal, char_id, true);
         row += 1;
         col += 1;

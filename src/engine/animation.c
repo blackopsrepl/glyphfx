@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "utils/hexterm.h"
+#include "engine/render_log.h"
 #include "utils/strbuf.h"
 #include "utils/strhash.h"
 
@@ -866,12 +867,14 @@ void animation_set_appearance(Animation *anim, bool uses_input_preexisting_color
         }
         vis_format(cur);
         cur->version = ++g_vis_version;
+        renderer_handle((CharId)anim->render_id, cur->version);
         return;
     }
     vis_unref(anim->current_visual);
     // Not pooled: a character's live appearance is unique to it, so a lookup is
     // pure overhead here (the reference makes the same call).
     anim->current_visual = vis_alloc(use_symbol, &params);
+    renderer_handle((CharId)anim->render_id, anim->current_visual ? anim->current_visual->version : 0);
 }
 
 const char *animation_new_scene(Animation *anim, bool is_looping, bool has_sync, SyncMetric sync, bool has_ease,

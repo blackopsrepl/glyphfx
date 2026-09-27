@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "utils/geometry.h"
+#include "engine/render_log.h"
 #include "utils/pycompat.h"
 #include "utils/strtab.h"
 
@@ -201,6 +202,7 @@ void motion_init(Motion *m, Coord input_coord) {
     om_init(&m->paths);
     m->current_coord = input_coord;
     m->previous_coord = coord_new(-1, -1);
+    m->render_id = -1;
 }
 
 void motion_free(Motion *m) {
@@ -215,6 +217,9 @@ void motion_free(Motion *m) {
 
 void motion_set_coordinate(Motion *m, Coord coord) {
     m->current_coord = coord;
+    if (m->render_id >= 0) {
+        renderer_move((CharId)m->render_id, coord);
+    }
 }
 
 int motion_new_path(Motion *m, double speed, bool has_ease, Easing ease, bool has_layer, int64_t layer,

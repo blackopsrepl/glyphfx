@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "effects/registry.h"
+#include "engine/render_log.h"
 #include "engine/animation.h"
 #include "engine/ctx.h"
 #include "engine/motion.h"
@@ -299,6 +300,7 @@ static int sg_make_grid_line(SynthGrid *st, EngineCtx *ctx, Effect *effect, Coor
         }
         engine_activate_scene(ctx, effect, id, grid_scn);
         ctx->terminal.arena.items[id].layer = 2;
+        renderer_layer(id, 2);
         motion_set_coordinate(&ctx->terminal.arena.items[id].motion, coord);
         idvec_push(&out->collapsed, &out->collapsed_len, &out->collapsed_cap, id);
     }

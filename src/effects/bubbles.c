@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "effects/registry.h"
+#include "engine/render_log.h"
 #include "engine/animation.h"
 #include "engine/canvas.h"
 #include "engine/character.h"
@@ -466,6 +467,7 @@ static int bubbles_build(Effect *self, EngineCtx *ctx) {
             st->final_present[id] = true;
         }
         ctx->terminal.arena.items[id].layer = 1;
+        renderer_layer(id, 1);
 
         const char *pop_1_scene = animation_new_scene(&ctx->terminal.arena.items[id].animation, false, false,
                                                       SYNC_DISTANCE, false, no_ease, "pop_1", uses_pre);

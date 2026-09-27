@@ -19,11 +19,13 @@ void character_init(EffectCharacter *ch, uint32_t character_id, const char *symb
     ch->input_symbol = dup_cstr(symbol);
     ch->input_coord = coord_new(column, row);
     motion_init(&ch->motion, coord_new(column, row));
+    ch->motion.render_id = (int32_t)character_id;
     ch->north = CHAR_ID_NONE;
     ch->east = CHAR_ID_NONE;
     ch->south = CHAR_ID_NONE;
     ch->west = CHAR_ID_NONE;
     animation_init(&ch->animation, symbol);
+    ch->animation.render_id = (int32_t)character_id;
 }
 
 void character_free(EffectCharacter *ch) {

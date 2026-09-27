@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "effects/registry.h"
+#include "engine/render_log.h"
 #include "engine/animation.h"
 #include "engine/ctx.h"
 #include "engine/motion.h"
@@ -341,6 +342,7 @@ static void initialize_raindrop(void *user, EngineCtx *ctx, CharId id) {
     (void)user;
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
     ch->layer = 1;
+    renderer_layer(id, 1);
     char *input_symbol = dup_cstr(ch->input_symbol);
     bool uses_pre = ch->uses_input_preexisting_colors;
     ColorPair colors;
@@ -356,6 +358,7 @@ static void initialize_spark(void *user, EngineCtx *ctx, CharId id) {
     SparkInit *init = user;
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
     ch->layer = 2;
+    renderer_layer(id, 2);
     char *input_symbol = dup_cstr(ch->input_symbol);
     bool uses_pre = ch->uses_input_preexisting_colors;
     Easing ease = easing_named(EASE_IN_CIRC);
@@ -597,6 +600,7 @@ static void lightning_strike(Effect *self, EngineCtx *ctx) {
             scene_add_frame(scene, symbol, 2, &vp);
         }
         ctx->terminal.arena.items[strike_char].layer = 1;
+        renderer_layer(strike_char, 1);
 
         CallerKey flash_caller;
         memset(&flash_caller, 0, sizeof(flash_caller));

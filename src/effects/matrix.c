@@ -250,7 +250,8 @@ static void rain_setup_column(RainColumn *rc, EngineCtx *ctx, const MatrixConfig
         CharId id = rc->characters[i];
         terminal_set_character_visibility(&ctx->terminal, id, false);
         id_push(&rc->pending, &rc->pending_len, &rc->pending_cap, id);
-        ctx->terminal.arena.items[id].motion.current_coord = ctx->terminal.arena.items[id].input_coord;
+        motion_set_coordinate(&ctx->terminal.arena.items[id].motion,
+                              ctx->terminal.arena.items[id].input_coord);
     }
     rc->visible_len = 0;
     if (rc->phase == COLUMN_FILL) {
@@ -321,7 +322,7 @@ static void rain_drop_column(RainColumn *rc, EngineCtx *ctx) {
         CharId character = rc->visible[i];
         Motion *motion = &ctx->terminal.arena.items[character].motion;
         Coord current = motion->current_coord;
-        motion->current_coord = coord_new(current.column, current.row - 1);
+        motion_set_coordinate(motion, coord_new(current.column, current.row - 1));
         if (motion->current_coord.row < canvas_bottom) {
             terminal_set_character_visibility(&ctx->terminal, character, false);
         } else {

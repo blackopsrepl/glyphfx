@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "effects/registry.h"
+#include "engine/render_log.h"
 #include "engine/animation.h"
 #include "engine/canvas.h"
 #include "engine/character.h"
@@ -396,6 +397,7 @@ static int binarypath_build(Effect *self, EngineCtx *ctx) {
             }
             engine_activate_path(ctx, self, bin_char, path_id);
             ctx->terminal.arena.items[bin_char].layer = 1;
+            renderer_layer(bin_char, 1);
             const Color *color =
                 &cfg->binary_colors.items[rng_choice_index(&ctx->rng, cfg->binary_colors.len)];
             {

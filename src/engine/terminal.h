@@ -142,6 +142,20 @@ struct Terminal {
     size_t visible_positions_len;
     uint32_t *render_cells;
     size_t render_cells_len;
+    // Incremental grid state (the asm renderer's owner grid, occupant lists
+    // and per-character mirrors). When mutations are few, the change log
+    // maintains this grid and the paint walk is skipped entirely.
+    int32_t *cell_head;      // per cell: first occupant, or -1
+    int32_t *cell_next;      // per character: next occupant in its cell
+    int32_t *cell_of_char;   // per character: its cell, or -1
+    int64_t *cell_layer;     // per character: layer at the last replay
+    size_t grid_chars_len;
+    bool grid_ready;
+    bool lists_valid;
+    bool want_lists;
+    bool grid_incremental;
+    size_t walk_frames;
+    bool probing;
     // Frame cache: a row whose cell owners and visual versions all match the
     // previous emitted frame is copied from its cached bytes, not re-formatted
     // (the asm renderer's row buffers). The version grid identifies rendered

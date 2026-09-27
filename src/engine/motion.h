@@ -52,6 +52,7 @@ typedef struct {
 } Path;
 
 typedef struct {
+    int32_t render_id;  // arena index, for the renderer's change log
     OrdMap paths;  // char* -> Path*
     Coord current_coord;
     Coord previous_coord;

@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "effects/registry.h"
+#include "engine/render_log.h"
 #include "engine/animation.h"
 #include "engine/ctx.h"
 #include "engine/events.h"
@@ -368,6 +369,7 @@ static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
         for (int i = 0; i < 4 && rc == 0; i++) {
             CharId character = terminal_add_character(&ctx->terminal, symbols[i], coords[i]);
             ctx->terminal.arena.items[character].layer = 2;
+            renderer_layer(character, 2);
             terminal_set_character_visibility(&ctx->terminal, character, true);
             ac_insert(&ctx->active_characters, character);
             OvLauncher launcher;

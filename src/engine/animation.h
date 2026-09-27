@@ -156,6 +156,7 @@ typedef struct {
     bool input_bold;
     int64_t active_scene_current_step;
     CharacterVisual *current_visual;
+    int32_t render_id;  // arena index, for the renderer's change log
 } Animation;
 
 void animation_init(Animation *anim, const char *input_symbol);
