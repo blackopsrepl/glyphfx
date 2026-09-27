@@ -223,7 +223,8 @@ static void path_insert_segment_front(Path *p, const Segment *seg) {
 
 void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char *path_id) {
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
-    Path *p = (Path *)om_get(&ch->motion.paths, path_id);
+    long slot = om_slot(&ch->motion.paths, path_id);
+    Path *p = slot < 0 ? NULL : (Path *)om_value_at(&ch->motion.paths, (size_t)slot);
     if (!p || p->waypoints_len == 0) {
         return;
     }
@@ -244,7 +245,7 @@ void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char 
     free(ch->motion.active_path);
     ch->motion.active_path = malloc(strlen(path_id) + 1);
     strcpy(ch->motion.active_path, path_id);
-    ch->motion.active_path_slot = (size_t)om_slot(&ch->motion.paths, path_id);
+    ch->motion.active_path_slot = (size_t)slot;
     ch->motion.active_path_slot_valid = true;
 
     p->total_distance += distance_to_first;
@@ -465,7 +466,8 @@ static void set_current_visual(EngineCtx *ctx, CharId id, VisualHandle src) {
 
 void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char *scene_id) {
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
-    Scene *scene = (Scene *)om_get(&ch->animation.scenes, scene_id);
+    long scene_slot = om_slot(&ch->animation.scenes, scene_id);
+    Scene *scene = scene_slot < 0 ? NULL : (Scene *)om_value_at(&ch->animation.scenes, (size_t)scene_slot);
     if (!scene) {
         return;
     }
@@ -477,7 +479,7 @@ void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char
     free(ch->animation.active_scene);
     ch->animation.active_scene = malloc(strlen(scene_id) + 1);
     strcpy(ch->animation.active_scene, scene_id);
-    ch->animation.active_scene_slot = (size_t)om_slot(&ch->animation.scenes, scene_id);
+    ch->animation.active_scene_slot = (size_t)scene_slot;
     ch->animation.active_scene_slot_valid = true;
     ch->animation.active_scene_ref = scene;
     ch->animation.active_scene_current_step = 0;
