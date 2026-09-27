@@ -48,7 +48,7 @@ static CallerKey scene_caller(const char *id) {
     memset(&key, 0, sizeof(key));
     key.kind = CALLER_SCENE;
     key.id = (char *)id;
-    key.id_hash = str_hash64(id);
+    key.id_handle = strtab_handle(id);
     return key;
 }
 
@@ -57,7 +57,7 @@ static CallerKey path_caller(const char *id) {
     memset(&key, 0, sizeof(key));
     key.kind = CALLER_PATH;
     key.id = (char *)id;
-    key.id_hash = str_hash64(id);
+    key.id_handle = strtab_handle(id);
     return key;
 }
 
@@ -65,11 +65,10 @@ void engine_caller_from_waypoint(const Waypoint *wp, CallerKey *out) {
     memset(out, 0, sizeof(*out));
     out->kind = CALLER_WAYPOINT;
     out->waypoint.coord = wp->coord;
-    out->waypoint.waypoint_id = wp->waypoint_id ? malloc(strlen(wp->waypoint_id) + 1) : NULL;
-    if (out->waypoint.waypoint_id) {
-        strcpy(out->waypoint.waypoint_id, wp->waypoint_id);
-        out->waypoint.waypoint_id_hash = str_hash64(out->waypoint.waypoint_id);
-    }
+    // The waypoint's name is already interned, so its handle is a lookup by
+    // pointer, not a copy; matching then compares the handle and the controls.
+    out->waypoint.waypoint_id = (char *)wp->waypoint_id;
+    out->waypoint.waypoint_handle = wp->waypoint_id ? strtab_handle(wp->waypoint_id) : 0;
     if (wp->bezier_len) {
         out->waypoint.bezier = malloc(wp->bezier_len * sizeof(Coord));
         memcpy(out->waypoint.bezier, wp->bezier, wp->bezier_len * sizeof(Coord));

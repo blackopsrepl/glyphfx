@@ -28,18 +28,22 @@ typedef enum {
     CALLER_WAYPOINT,
 } CallerKind;
 
+// Event callers are identified by interned name handles (plan 7.2): a scene
+// or path caller by its name's handle, a waypoint caller by its name handle
+// plus the coordinate and Bezier controls the reference compares. The strings
+// themselves are borrowed from the intern table, never owned here.
 typedef struct {
     Coord coord;
-    char *waypoint_id;  // owned
-    uint64_t waypoint_id_hash;
-    Coord *bezier;      // owned, may be NULL
+    char *waypoint_id;     // name; borrowed
+    uint32_t waypoint_handle;  // its interned identity; 0 until filled
+    Coord *bezier;         // owned, may be NULL
     size_t bezier_len;
 } WaypointKey;
 
 typedef struct {
     CallerKind kind;
-    char *id;  // owned; scene or path id (NULL for waypoint)
-    uint64_t id_hash;
+    char *id;          // scene/path name; owned when it came from a registration
+    uint32_t id_handle;  // its interned identity; 0 until the engine fills it
     WaypointKey waypoint;
 } CallerKey;
 

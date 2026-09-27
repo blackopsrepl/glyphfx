@@ -7,8 +7,14 @@
 #define GLYPHFX_STRTAB_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 // Returns the shared copy of s (NULL passes through).
 const char *strtab_intern(const char *s);
+// A dense identity for a name, assigned in first-seen order and stable for the
+// process lifetime; 0 means "no name". Event keys compare handles instead of
+// strings (plan 7.2), so a lookup is an integer compare.
+uint32_t strtab_handle(const char *s);
+const char *strtab_name(uint32_t handle);
 
 #endif

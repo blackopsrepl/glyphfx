@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "utils/strhash.h"
+#include "utils/strtab.h"
 
 static char *dup_cstr(const char *s) {
     if (!s) {
@@ -19,8 +20,6 @@ static char *dup_cstr(const char *s) {
 }
 
 void caller_key_free(CallerKey *key) {
-    free(key->id);
-    free(key->waypoint.waypoint_id);
     free(key->waypoint.bezier);
     memset(key, 0, sizeof(*key));
 }
@@ -28,13 +27,17 @@ void caller_key_free(CallerKey *key) {
 void caller_key_copy(CallerKey *dst, const CallerKey *src) {
     memset(dst, 0, sizeof(*dst));
     dst->kind = src->kind;
-    dst->id = dup_cstr(src->id);
-    dst->id_hash = dst->id ? str_hash64(dst->id) : 0;
+    // The stored key needs a stable name: effects build caller keys from stack
+    // buffers, so the copy interns the name (which is process-lifetime) and
+    // keys on its handle. Equal handles mean equal names.
+    dst->id = (char *)strtab_intern(src->id);
+    dst->id_handle = src->id_handle ? src->id_handle : strtab_handle(src->id);
     if (src->kind == CALLER_WAYPOINT) {
         dst->waypoint.coord = src->waypoint.coord;
-        dst->waypoint.waypoint_id = dup_cstr(src->waypoint.waypoint_id);
-        dst->waypoint.waypoint_id_hash =
-            dst->waypoint.waypoint_id ? str_hash64(dst->waypoint.waypoint_id) : 0;
+        dst->waypoint.waypoint_id = (char *)strtab_intern(src->waypoint.waypoint_id);
+        dst->waypoint.waypoint_handle = src->waypoint.waypoint_handle
+                                            ? src->waypoint.waypoint_handle
+                                            : strtab_handle(src->waypoint.waypoint_id);
         dst->waypoint.bezier_len = src->waypoint.bezier_len;
         if (src->waypoint.bezier_len) {
             dst->waypoint.bezier = malloc(src->waypoint.bezier_len * sizeof(Coord));
@@ -53,8 +56,11 @@ bool caller_key_matches(const CallerKey *a, const CallerKey *b) {
             if (!a->id || !b->id) {
                 return false;
             }
-            if (a->id_hash && b->id_hash && a->id_hash != b->id_hash) {
-                return false;
+            // Both handles are set once a key has passed through the engine,
+            // so a scan compares integers; the string compare is the fallback
+            // for a raw effect-built key.
+            if (a->id_handle && b->id_handle) {
+                return a->id_handle == b->id_handle;
             }
             return strcmp(a->id, b->id) == 0;
         case CALLER_WAYPOINT:
@@ -69,12 +75,11 @@ bool caller_key_matches(const CallerKey *a, const CallerKey *b) {
                     return false;
                 }
             }
-            if (a->waypoint.waypoint_id == NULL || b->waypoint.waypoint_id == NULL) {
-                return a->waypoint.waypoint_id == b->waypoint.waypoint_id;
+            if (a->waypoint.waypoint_handle && b->waypoint.waypoint_handle) {
+                return a->waypoint.waypoint_handle == b->waypoint.waypoint_handle;
             }
-            if (a->waypoint.waypoint_id_hash && b->waypoint.waypoint_id_hash &&
-                a->waypoint.waypoint_id_hash != b->waypoint.waypoint_id_hash) {
-                return false;
+            if (!a->waypoint.waypoint_id || !b->waypoint.waypoint_id) {
+                return a->waypoint.waypoint_id == b->waypoint.waypoint_id;
             }
             return strcmp(a->waypoint.waypoint_id, b->waypoint.waypoint_id) == 0;
     }
@@ -84,16 +89,6 @@ bool caller_key_matches(const CallerKey *a, const CallerKey *b) {
 // Shallow copy with the id hashes filled in, so caller_key_matches can reject a
 // non-matching entry with an integer compare instead of strcmp. The string
 // pointers are borrowed, not owned.
-static void caller_key_hashed(const CallerKey *in, CallerKey *out) {
-    *out = *in;
-    if (!out->id_hash && in->id) {
-        out->id_hash = str_hash64(in->id);
-    }
-    if (!out->waypoint.waypoint_id_hash && in->waypoint.waypoint_id) {
-        out->waypoint.waypoint_id_hash = str_hash64(in->waypoint.waypoint_id);
-    }
-}
-
 void effect_callback_free(EffectCallback *cb) {
     for (size_t i = 0; i < cb->args_len; i++) {
         if (cb->args[i].kind == CALLBACK_STR) {
@@ -161,8 +156,7 @@ bool event_handler_subscribes(const EventHandler *h, Event event) {
 }
 
 static RegisteredEvent *find_entry(EventHandler *h, Event event, const CallerKey *caller) {
-    CallerKey q;
-    caller_key_hashed(caller, &q);
+    CallerKey q = *caller;
     for (size_t i = 0; i < h->len; i++) {
         if (h->entries[i].event == event && caller_key_matches(&h->entries[i].caller, &q)) {
             return &h->entries[i];
@@ -241,8 +235,7 @@ long event_handler_actions_index(const EventHandler *h, Event event, const Calle
     if (!event_handler_subscribes(h, event)) {
         return -1;
     }
-    CallerKey q;
-    caller_key_hashed(caller, &q);
+    CallerKey q = *caller;
     for (size_t i = 0; i < h->len; i++) {
         if (h->entries[i].event == event && caller_key_matches(&h->entries[i].caller, &q)) {
             return (long)i;
