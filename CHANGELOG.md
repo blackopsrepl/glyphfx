@@ -2,6 +2,13 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
 
+## [0.3.3](https://github.com/blackopsrepl/glyphfx/compare/v0.3.2...v0.3.3) (2026-09-27)
+
+### Bug Fixes
+
+* **tools:** let the perf gate re-baseline a verified output change ([5589191](https://github.com/blackopsrepl/glyphfx/commit/5589191ca7940332fb01bdb391547458a4949591))
+* **visual:** fully define ColorCode hex so interning is deterministic ([adae87f](https://github.com/blackopsrepl/glyphfx/commit/adae87fdd8598214000062f86503e9633ffecb4a))
+
 ## [0.3.2](https://github.com/blackopsrepl/glyphfx/compare/v0.3.1...v0.3.2) (2026-09-27)
 
 ### Bug Fixes
