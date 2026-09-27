@@ -2,6 +2,14 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
 
+## [0.1.7](https://github.com/blackopsrepl/glyphfx/compare/v0.1.6...v0.1.7) (2026-09-27)
+
+### Performance
+
+* **bubbles:** keep each bubble's circle trig instead of recomputing it ([3624c08](https://github.com/blackopsrepl/glyphfx/commit/3624c08753b805bee5b82cfdcfd09d415e9c9bfe))
+* **burn:** share the smoke fade frames across particles ([68d343d](https://github.com/blackopsrepl/glyphfx/commit/68d343daedf4ecfb5964d8d716caa965b6ee582b))
+* **print:** memoize head scenes by symbol and final color ([000427e](https://github.com/blackopsrepl/glyphfx/commit/000427e7696250f062d9837d8da7bd5d8bb3cc34))
+
 ## [0.1.6](https://github.com/blackopsrepl/glyphfx/compare/v0.1.5...v0.1.6) (2026-09-27)
 
 ### Performance
