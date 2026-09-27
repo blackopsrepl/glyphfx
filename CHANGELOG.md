@@ -2,6 +2,12 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
 
+## [0.3.2](https://github.com/blackopsrepl/glyphfx/compare/v0.3.1...v0.3.2) (2026-09-27)
+
+### Bug Fixes
+
+* **animation:** reset the eased step when a scene resets ([02d5a36](https://github.com/blackopsrepl/glyphfx/commit/02d5a36b23be1008894909c23106d1a383e77c4b))
+
 ## [0.3.1](https://github.com/blackopsrepl/glyphfx/compare/v0.3.0...v0.3.1) (2026-09-27)
 
 ### Performance
