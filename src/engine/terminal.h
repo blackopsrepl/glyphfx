@@ -160,6 +160,7 @@ struct Terminal {
     // previous emitted frame is copied from its cached bytes, not re-formatted
     // (the asm renderer's row buffers). The version grid identifies rendered
     // byte content exactly, so no mutation hooks are needed.
+    const struct CharacterVisual **cell_visual;  // winning visual per cell (handle grid)
     uint32_t *cell_version;   // this frame's winning visual version per cell
     uint32_t *prev_cells;     // last emitted frame's owner per cell
     uint32_t *prev_version;   // last emitted frame's version per cell

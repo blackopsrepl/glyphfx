@@ -439,6 +439,7 @@ void terminal_free(Terminal *t) {
     free(t->visible_characters);
     free(t->visible_positions);
     free(t->render_cells);
+    free(t->cell_visual);
     free(t->cell_version);
     free(t->prev_cells);
     free(t->prev_version);
@@ -566,9 +567,11 @@ static void cell_rewin(Terminal *t, int64_t cell, size_t width) {
     }
     t->render_cells[cell] = owner;
     if (owner == RENDER_EMPTY) {
+        t->cell_visual[cell] = NULL;
         t->cell_version[cell] = 0;
     } else {
         const CharacterVisual *vis = t->arena.items[owner].animation.current_visual;
+        t->cell_visual[cell] = vis;
         t->cell_version[cell] = vis ? vis->version : 0;
     }
 }
@@ -601,6 +604,7 @@ static void grid_move(Terminal *t, CharId id, int32_t new_cell, size_t width) {
             }
             *owner = (uint32_t)id;
             const CharacterVisual *vis = t->arena.items[id].animation.current_visual;
+            t->cell_visual[new_cell] = vis;
             t->cell_version[new_cell] = vis ? vis->version : 0;
         }
     }
@@ -622,8 +626,13 @@ static void grid_replay(Terminal *t, size_t width) {
             grid_move(t, id, (int32_t)value, width);
         } else if (kind == RLOG_HANDLE) {
             int32_t cell = t->cell_of_char[id];
-            if (cell >= 0 && t->render_cells[cell] == slot && t->cell_version[cell] != value) {
-                t->cell_version[cell] = value;
+            if (cell >= 0 && t->render_cells[cell] == slot) {
+                // The serialized bytes come from the character's current visual;
+                // the logged version only drives the row cache's change test.
+                t->cell_visual[cell] = t->arena.items[id].animation.current_visual;
+                if (t->cell_version[cell] != value) {
+                    t->cell_version[cell] = value;
+                }
             }
         } else {
             int32_t cell = t->cell_of_char[id];
@@ -670,10 +679,11 @@ static void grid_walk(Terminal *t, size_t width, size_t height, bool lists) {
             }
             *owner = (uint32_t)id;
         }
+        const CharacterVisual *vis = ch->animation.current_visual;
+        t->cell_visual[cell] = vis;
         // The version grid only feeds the row cache; skip its load and store
         // while the cache is off so a repaint costs what it always did.
         if (t->cache_on) {
-            const CharacterVisual *vis = ch->animation.current_visual;
             t->cell_version[cell] = vis ? vis->version : 0;
             painted++;
         }
@@ -785,7 +795,7 @@ static void serialize_row(const Terminal *t, size_t row_index, size_t width, Str
             }
             col += run;
         } else {
-            const CharacterVisual *vis = t->arena.items[row[col]].animation.current_visual;
+            const CharacterVisual *vis = t->cell_visual[row_index * width + col];
             if (vis->formatted_heap) {
                 sb_append(dst, vis->formatted_heap, vis->formatted_len);
             } else {
@@ -808,6 +818,7 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
     if (t->cache_width == width && t->cache_height == height) {
         return;
     }
+    free(t->cell_visual);
     free(t->cell_version);
     free(t->prev_cells);
     free(t->prev_version);
@@ -822,6 +833,7 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
         free(t->row_lens);
         free(t->row_caps);
     }
+    t->cell_visual = malloc((cells ? cells : 1) * sizeof(*t->cell_visual));
     t->cell_version = malloc((cells ? cells : 1) * sizeof(uint32_t));
     t->prev_cells = malloc((cells ? cells : 1) * sizeof(uint32_t));
     t->prev_version = malloc((cells ? cells : 1) * sizeof(uint32_t));
