@@ -143,6 +143,8 @@ static uint64_t key_hash(const uint64_t *w) {
 }
 
 static void key_build(const struct VisualParams *p, const char *symbol) {
+    // Interned so that a symbol pointer identifies its string: the key stores
+    // the pointer, and equal keys must mean equal bytes.
     const char *interned = strtab_intern(symbol ? symbol : "");
     uint64_t *w = (uint64_t *)g_hdr;
     w[0] = (uint64_t)(uintptr_t)interned;
@@ -172,7 +174,7 @@ static void header_put_color(char *at, const Color *c) {
 }
 
 static void logical_build(const struct VisualParams *p, const char *symbol) {
-    const char *interned = strtab_intern(symbol ? symbol : "");
+    const char *interned = strtab_intern(symbol ? symbol : "");  // stable, keyed by pointer
     memcpy(g_hdr + VH_SYMBOL, &interned, sizeof(interned));
     g_hdr[VH_DIM] = p->dim ? 1 : 0;
     uint8_t attrs = 0;
@@ -259,7 +261,6 @@ VisualHandle visual_make(const char *symbol, const struct VisualParams *p) {
         return 0;
     }
     key_build(p, symbol);
-    logical_build(p, symbol);
     uint64_t hash = key_hash((const uint64_t *)g_hdr);
     uint32_t i = (uint32_t)hash & g_table_mask;
     for (;;) {
@@ -283,6 +284,7 @@ VisualHandle visual_make(const char *symbol, const struct VisualParams *p) {
     }
     char *rec = (char *)g_visual_pool + base;
     char *bytes = rec + VH_SIZE;
+    logical_build(p, symbol);          // only on a miss
     memcpy(rec, g_hdr, VH_SIZE);
     memcpy(bytes, g_fmt, len);
     memset(bytes + len, 0, VISUAL_SLACK);

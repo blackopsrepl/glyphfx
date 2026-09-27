@@ -50,8 +50,7 @@ static Scene *scene_new(const char *scene_id, bool is_looping, bool has_sync, Sy
     scene->sync = sync;
     scene->has_ease = has_ease;
     scene->ease = ease;
-    iq_init(&scene->frames);
-    iq_init(&scene->played_frames);
+    scene->head = 0;
     return scene;
 }
 
@@ -64,8 +63,6 @@ void scene_free(Scene *scene) {
     free(scene->all_frames);
     free(scene->scene_id);
     free(scene->frame_index_map);
-    iq_free(&scene->frames);
-    iq_free(&scene->played_frames);
     free(scene);
 }
 
@@ -107,7 +104,6 @@ int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const Vi
     frame->visual = visual_make(symbol, &params);
     frame->duration = duration;
     frame->ticks_elapsed = 0;
-    iq_push_back(&scene->frames, frame_index);
     for (int64_t i = 0; i < duration; i++) {
         if (scene->frame_index_map_len == scene->frame_index_map_cap) {
             size_t cap = scene->frame_index_map_cap ? scene->frame_index_map_cap * 2 : 16;
@@ -144,7 +140,6 @@ int scene_append_frames(Scene *dst, const Scene *src) {
         frame->visual = from->visual;
         frame->duration = from->duration;
         frame->ticks_elapsed = 0;
-        iq_push_back(&dst->frames, frame_index);
         for (int64_t k = 0; k < frame->duration; k++) {
             if (dst->frame_index_map_len == dst->frame_index_map_cap) {
                 size_t cap = dst->frame_index_map_cap ? dst->frame_index_map_cap * 2 : 16;
@@ -214,13 +209,6 @@ bool iq_pop_front(IndexDeque *q, size_t *out) {
     return true;
 }
 
-static bool iq_peek_front(const IndexDeque *q, size_t *out) {
-    if (q->len == 0) {
-        return false;
-    }
-    *out = q->items[q->head];
-    return true;
-}
 
 bool iq_at(const IndexDeque *q, size_t index, size_t *out) {
     if (index >= q->len) {
@@ -247,20 +235,19 @@ void iq_append(IndexDeque *dst, IndexDeque *src) {
 
 
 int scene_activate(const Scene *scene, VisualHandle *out, size_t *frame_index) {
-    size_t head;
-    if (!iq_peek_front(&scene->frames, &head)) {
+    if (scene->head >= scene->all_frames_len) {
         *out = 0;
         *frame_index = 0;
         return -1;
     }
-    *out = scene->all_frames[head].visual;
-    *frame_index = head;
+    *out = scene->all_frames[scene->head].visual;
+    *frame_index = scene->head;
     return 0;
 }
 
 void scene_get_next_visual(Scene *scene, VisualHandle *out, size_t *frame_index) {
-    size_t head;
-    if (!iq_peek_front(&scene->frames, &head)) {
+    size_t head = scene->head;
+    if (head >= scene->all_frames_len) {
         *out = 0;
         *frame_index = 0;
         return;
@@ -270,23 +257,18 @@ void scene_get_next_visual(Scene *scene, VisualHandle *out, size_t *frame_index)
     scene->all_frames[head].ticks_elapsed += 1;
     if (scene->all_frames[head].ticks_elapsed == scene->all_frames[head].duration) {
         scene->all_frames[head].ticks_elapsed = 0;
-        size_t popped = 0;
-        (void)iq_pop_front(&scene->frames, &popped);
-        iq_push_back(&scene->played_frames, popped);
-        if (scene->is_looping && iq_len(&scene->frames) == 0) {
-            iq_append(&scene->frames, &scene->played_frames);
+        scene->head = head + 1;
+        if (scene->is_looping && scene->head >= scene->all_frames_len) {
+            scene->head = 0;
         }
     }
 }
 
 void scene_reset(Scene *scene) {
-    size_t idx;
-    while (iq_pop_front(&scene->frames, &idx)) {
-        scene->all_frames[idx].ticks_elapsed = 0;
-        iq_push_back(&scene->played_frames, idx);
+    scene->head = 0;
+    for (size_t i = 0; i < scene->all_frames_len; i++) {
+        scene->all_frames[i].ticks_elapsed = 0;
     }
-    iq_append(&scene->frames, &scene->played_frames);
-    scene->easing_current_step = 0;
 }
 
 static size_t count_codepoints(const char *s) {
@@ -649,7 +631,7 @@ bool animation_active_scene_is_complete(const Animation *anim) {
     if (!scene) {
         return true;
     }
-    return iq_len(&scene->frames) == 0 || scene->is_looping;
+    return scene->head >= scene->all_frames_len || scene->is_looping;
 }
 
 Scene *animation_active_scene(Animation *anim) {

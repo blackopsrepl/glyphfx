@@ -507,7 +507,7 @@ void engine_deactivate_scene(EngineCtx *ctx, CharId id, const char *scene_id) {
 }
 
 static void complete_scene_if_finished(EngineCtx *ctx, Effect *effect, CharId id, Scene *scene) {
-    if (!(iq_len(&scene->frames) == 0 || scene->is_looping)) {
+    if (!(scene->head >= scene->all_frames_len || scene->is_looping)) {
         return;
     }
     Animation *anim = &ctx->terminal.arena.items[id].animation;
@@ -547,14 +547,14 @@ static void step_synced_scene(EngineCtx *ctx, CharId id, Scene *scene, SyncMetri
         }
     }
     if (!has_path_state) {
-        size_t last;
-        if (iq_back(&scene->frames, &last)) {
-            set_current_visual(ctx, id, scene->all_frames[last].visual);
+        // No path to track: show the last remaining frame and consume the rest.
+        if (scene->head < scene->all_frames_len) {
+            set_current_visual(ctx, id, scene->all_frames[scene->all_frames_len - 1].visual);
         }
-        iq_append(&scene->played_frames, &scene->frames);
+        scene->head = scene->all_frames_len;
         return;
     }
-    int64_t final_frame_index = (int64_t)iq_len(&scene->frames) - 1;
+    int64_t final_frame_index = (int64_t)(scene->all_frames_len - scene->head) - 1;
     double progress_ratio;
     if (sync == SYNC_STEP) {
         int64_t cs = current_step > 1 ? current_step : 1;
@@ -571,9 +571,8 @@ static void step_synced_scene(EngineCtx *ctx, CharId id, Scene *scene, SyncMetri
     int64_t frame_index = py_round_half_even((double)final_frame_index * progress_ratio);
     if (frame_index > final_frame_index) frame_index = final_frame_index;
     if (frame_index < 0) frame_index = 0;
-    size_t pos;
-    if (iq_at(&scene->frames, (size_t)frame_index, &pos)) {
-        set_current_visual(ctx, id, scene->all_frames[pos].visual);
+    if (scene->head + (size_t)frame_index < scene->all_frames_len) {
+        set_current_visual(ctx, id, scene->all_frames[scene->head + (size_t)frame_index].visual);
     }
 }
 
@@ -588,7 +587,7 @@ static void step_eased_scene(EngineCtx *ctx, CharId id, Scene *scene) {
         if (scene->is_looping) {
             scene->easing_current_step = 0;
         } else {
-            iq_append(&scene->played_frames, &scene->frames);
+            scene->head = scene->all_frames_len;
         }
     }
 }
@@ -599,7 +598,7 @@ void engine_step_animation(EngineCtx *ctx, Effect *effect, CharId id) {
         return;
     }
     Scene *scene = animation_active_scene(anim);
-    if (!scene || iq_len(&scene->frames) == 0) {
+    if (!scene || scene->head >= scene->all_frames_len) {
         return;
     }
     if (scene->has_sync) {

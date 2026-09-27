@@ -94,8 +94,11 @@ typedef struct {
     Frame *all_frames;
     size_t all_frames_len;
     size_t all_frames_cap;
-    IndexDeque frames;        // remaining frame indices
-    IndexDeque played_frames; // played frame indices
+    // The remaining queue is just a head index into all_frames: frames retire
+    // in order, reset restores the original order, and the synced/eased steps
+    // index the remaining queue without reordering it. Reaching all_frames_len
+    // is "no remaining frames"; a looping scene wraps the head to 0.
+    size_t head;
     size_t *frame_index_map;  // tick index -> frame index
     size_t frame_index_map_len;
     size_t frame_index_map_cap;
