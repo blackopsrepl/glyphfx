@@ -2,6 +2,14 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
 
+## [0.1.8](https://github.com/blackopsrepl/glyphfx/compare/v0.1.7...v0.1.8) (2026-09-27)
+
+### Performance
+
+* **laseretch:** share the spark cooling frames across sparks ([9865775](https://github.com/blackopsrepl/glyphfx/commit/9865775b53084d6c2768d2e9c7bb3c943b3e498a))
+* **render:** copy unchanged rows from cached bytes ([4b9a46e](https://github.com/blackopsrepl/glyphfx/commit/4b9a46e389ee43140690e9ece138f4a89f0a7349))
+* **render:** gate the row cache by painted density, abandon hopeless probes ([037e1fd](https://github.com/blackopsrepl/glyphfx/commit/037e1fd4e0d1ab42699300914e1bbd18b9d2ed79))
+
 ## [0.1.7](https://github.com/blackopsrepl/glyphfx/compare/v0.1.6...v0.1.7) (2026-09-27)
 
 ### Performance
