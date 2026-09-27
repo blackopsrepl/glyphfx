@@ -7,6 +7,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 typedef struct {
     uint64_t s[4];
@@ -40,10 +42,53 @@ static inline double rng_random(Rng *rng) {
     return (double)v * (1.0 / 9007199254740992.0);  // 1 / 2^53
 }
 
-int64_t rng_randint(Rng *rng, int64_t a, int64_t b);
-int64_t rng_randrange(Rng *rng, int64_t a, int64_t b);
-// choice over an array of nbytes-wide elements; returns the chosen index.
-size_t rng_choice_index(Rng *rng, size_t len);
+// The rejection sampler is the parity contract, so it stays scalar; it is
+// inlined only to remove the call that dominated a one-draw-per-character
+// effect (matrix, synthgrid).
+static inline uint64_t rng_randbelow(Rng *rng, uint64_t n) {
+    if (n == 0) {
+        fputs("glyphfx: randbelow(0)\n", stderr);
+        abort();
+    }
+    // n == 1 makes n - 1 zero, where __builtin_clzll is undefined; the
+    // reference takes one bit there (getrandbits(1) rejecting a 1), so the
+    // width is 1. The reference's leading_zeros64(0) is 64, giving the same.
+    uint64_t nm1 = n - 1;
+    int bits = nm1 == 0 ? 1 : 64 - __builtin_clzll(nm1);
+    if (bits < 1) {
+        bits = 1;
+    }
+    for (;;) {
+        uint64_t r = rng_next_u64(rng) >> (64 - bits);
+        if (r < n) {
+            return r;
+        }
+    }
+}
+
+static inline size_t rng_choice_index(Rng *rng, size_t len) {
+    if (len == 0) {
+        fputs("glyphfx: choice on empty sequence\n", stderr);
+        abort();
+    }
+    return (size_t)rng_randbelow(rng, (uint64_t)len);
+}
+
+static inline int64_t rng_randint(Rng *rng, int64_t a, int64_t b) {
+    if (a > b) {
+        fputs("glyphfx: randint range empty\n", stderr);
+        abort();
+    }
+    return a + (int64_t)rng_randbelow(rng, (uint64_t)(b - a) + 1);
+}
+
+static inline int64_t rng_randrange(Rng *rng, int64_t a, int64_t b) {
+    if (a >= b) {
+        fputs("glyphfx: randrange range empty\n", stderr);
+        abort();
+    }
+    return a + (int64_t)rng_randbelow(rng, (uint64_t)(b - a));
+}
 double rng_uniform(Rng *rng, double a, double b);
 void rng_shuffle(Rng *rng, void *base, size_t count, size_t elem_size);
 
