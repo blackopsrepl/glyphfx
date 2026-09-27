@@ -2,6 +2,20 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
 
+## [0.1.6](https://github.com/blackopsrepl/glyphfx/compare/v0.1.5...v0.1.6) (2026-09-27)
+
+### Performance
+
+* **animation:** restyle the live visual in place when uniquely owned ([858e7bb](https://github.com/blackopsrepl/glyphfx/commit/858e7bb977621c5cb545012a0f4becced6372031))
+* **motion:** intern waypoint identity strings ([2a10272](https://github.com/blackopsrepl/glyphfx/commit/2a102726215fc7d77296ea5ec5e1a94fcef333fb))
+* **ordmap:** index large maps for O(1) string lookup ([0548a0f](https://github.com/blackopsrepl/glyphfx/commit/0548a0fd5c90881bc2d3b605bc538f332fcc4caf))
+* **render:** one cell array with an empty sentinel instead of epoch stamps ([2101c14](https://github.com/blackopsrepl/glyphfx/commit/2101c14b0c3e7fc728dac703d60ab21fab2736ad))
+* **smoke:** share the template smoke scene and keyed paint runs ([630611b](https://github.com/blackopsrepl/glyphfx/commit/630611b87c908e44fd2e9a6b5a30b3ad245d01d1))
+
+### Documentation
+
+* target the ttfx asm engine, retire the rust-parity framing ([9a4bf6b](https://github.com/blackopsrepl/glyphfx/commit/9a4bf6b104b69748af7eec75282d7dade6ee3c14))
+
 ## [0.1.5](https://github.com/blackopsrepl/glyphfx/compare/v0.1.4...v0.1.5) (2026-09-26)
 
 ### Performance
