@@ -574,12 +574,7 @@ static void step_synced_scene(EngineCtx *ctx, CharId id, Scene *scene, SyncMetri
 }
 
 static void step_eased_scene(EngineCtx *ctx, CharId id, Scene *scene) {
-    double elapsed_step_ratio = (double)scene->easing_current_step / (double)scene->easing_total_steps;
-    double easing_factor = easing_ease(&scene->ease, elapsed_step_ratio);
-    int64_t final_frame_index = (scene->easing_total_steps - 1) > 0 ? (scene->easing_total_steps - 1) : 0;
-    int64_t frame_index = py_round_half_even(easing_factor * (double)final_frame_index);
-    if (frame_index > final_frame_index) frame_index = final_frame_index;
-    if (frame_index < 0) frame_index = 0;
+    int64_t frame_index = eased_frame_index(&scene->ease, scene->easing_total_steps, scene->easing_current_step);
     if ((size_t)frame_index < scene->frame_index_map_len) {
         size_t frame = scene->frame_index_map[frame_index];
         set_current_visual(ctx, id, scene->all_frames[frame].visual);

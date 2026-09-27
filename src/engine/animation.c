@@ -8,6 +8,7 @@
 #include "engine/render_log.h"
 #include "utils/strbuf.h"
 #include "utils/strhash.h"
+#include "utils/pycompat.h"
 
 static char *dup_cstr(const char *s) {
     size_t len = strlen(s);
@@ -220,6 +221,86 @@ static uint64_t vis_hash(const char *symbol, const VisKey *k) {
 // Exact appearance comparison: one memcmp over the packed key plus the symbol.
 static bool vis_matches(const CharacterVisual *v, const char *symbol, const VisKey *k) {
     return memcmp(&v->key, k, sizeof(*k)) == 0 && strcmp(v->symbol, symbol) == 0;
+}
+
+// --- eased frame-index memo -----------------------------------------------
+// step_eased_scene evaluates an easing curve and rounds to a frame index once
+// per character per tick. Both the curve and the rounding depend only on the
+// scene's easing and step count, so one table per distinct (ease, total_steps)
+// serves every character and removes the libm call from the hot path.
+typedef struct {
+    Easing ease;
+    int64_t total;
+    int32_t *vals;
+    size_t len;
+    size_t cap;
+} EasedSeq;
+
+static EasedSeq *g_eseq;
+static size_t g_eseq_len;
+static size_t g_eseq_cap;
+
+static int32_t eased_compute(const Easing *e, int64_t total, int64_t step) {
+    int64_t final = total > 1 ? total - 1 : 0;
+    double ratio = (double)step / (double)total;
+    int64_t idx = py_round_half_even(easing_ease(e, ratio) * (double)final);
+    if (idx > final) {
+        idx = final;
+    }
+    if (idx < 0) {
+        idx = 0;
+    }
+    return (int32_t)idx;
+}
+
+int64_t eased_frame_index(const Easing *ease, int64_t total_steps, int64_t step) {
+    if (total_steps <= 0 || step < 0) {
+        return 0;
+    }
+    EasedSeq *seq = NULL;
+    for (size_t i = 0; i < g_eseq_len; i++) {
+        if (g_eseq[i].total == total_steps && g_eseq[i].ease.kind == ease->kind &&
+            g_eseq[i].ease.x1 == ease->x1 && g_eseq[i].ease.y1 == ease->y1 &&
+            g_eseq[i].ease.x2 == ease->x2 && g_eseq[i].ease.y2 == ease->y2) {
+            seq = &g_eseq[i];
+            break;
+        }
+    }
+    if (!seq) {
+        if (g_eseq_len == g_eseq_cap) {
+            size_t cap = g_eseq_cap ? g_eseq_cap * 2 : 8;
+            EasedSeq *grown = realloc(g_eseq, cap * sizeof(*grown));
+            if (!grown) {
+                return eased_compute(ease, total_steps, step);
+            }
+            g_eseq = grown;
+            g_eseq_cap = cap;
+        }
+        seq = &g_eseq[g_eseq_len++];
+        memset(seq, 0, sizeof(*seq));
+        seq->ease = *ease;
+        seq->total = total_steps;
+    }
+    size_t want = (size_t)step + 1;
+    if (want > seq->len) {
+        if (want > seq->cap) {
+            size_t cap = seq->cap ? seq->cap : 16;
+            while (cap < want) {
+                cap *= 2;
+            }
+            int32_t *grown = realloc(seq->vals, cap * sizeof(*grown));
+            if (!grown) {
+                return eased_compute(ease, total_steps, step);
+            }
+            seq->vals = grown;
+            seq->cap = cap;
+        }
+        for (size_t i = seq->len; i < want; i++) {
+            seq->vals[i] = eased_compute(ease, total_steps, (int64_t)i);
+        }
+        seq->len = want;
+    }
+    return seq->vals[step];
 }
 
 void vis_pool_reset(void) {

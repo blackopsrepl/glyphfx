@@ -126,6 +126,12 @@ typedef struct {
     int64_t ticks_elapsed;
 } Frame;
 
+// Eased scenes pick a frame index from (ease, total_steps, step) alone, and
+// every character stepping the same scene shape picks the same indices, so the
+// sequence is memoized per shape instead of recomputing cos/pow and rounding in
+// every character's tick. Identical to evaluating easing_ease directly.
+int64_t eased_frame_index(const Easing *ease, int64_t total_steps, int64_t step);
+
 typedef struct {
     size_t *items;
     size_t len;
