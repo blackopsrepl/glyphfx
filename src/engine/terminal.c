@@ -928,6 +928,9 @@ void terminal_render_rows(Terminal *t) {
                 StrBuf check;
                 sb_init(&check);
                 serialize_row(t, row_index, width, &check);
+                if (row_index != 0) {
+                    sb_push(&check, '\n');  // rows carry their joining newline
+                }
                 if (check.len != t->row_lens[row_index] ||
                     (check.len && memcmp(check.data, t->row_bytes[row_index], check.len) != 0)) {
                     fprintf(stderr, "render-verify: row %zu deemed clean but content changed\n", row_index);
