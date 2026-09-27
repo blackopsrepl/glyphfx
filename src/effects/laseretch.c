@@ -46,12 +46,14 @@ typedef struct {
     size_t pending_head;
     int64_t char_delay;
     Laser *laser;
+    FrameMemo *spark_runs;
 } LaserEtch;
 
 typedef struct {
     const Color *colors;
     size_t len;
     int64_t cooling_frames;
+    FrameMemo *runs;  // (symbol, first spectrum color) -> template spark scene
 } SparkInit;
 
 typedef struct {
@@ -169,7 +171,17 @@ static void laseretch_initialize_spark(void *user, EngineCtx *ctx, CharId spark)
     const char *spark_scn = animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, ease, "spark",
                                                 uses_pre);
     Scene *scene = spark_scn ? (Scene *)om_get(&ctx->terminal.arena.items[spark].animation.scenes, spark_scn) : NULL;
-    if (scene) {
+    // The cooling gradient over the symbol is the same for every spark: the
+    // first builds the frames, the rest append them (the asm engine's
+    // le_init_spark runs them through visual_run).
+    bool shareable = scene && !scene->has_preexisting_colors && !scene->preexisting_bold;
+    Scene *run = shareable ? framemo_get(init->runs, input_symbol, init->colors[0]) : NULL;
+    if (run) {
+        if (scene_append_frames(scene, run) != 0) {
+            free(input_symbol);
+            return;
+        }
+    } else if (scene) {
         for (size_t i = 0; i < init->len; i++) {
             VisualParams vp;
             memset(&vp, 0, sizeof(vp));
@@ -177,6 +189,9 @@ static void laseretch_initialize_spark(void *user, EngineCtx *ctx, CharId spark)
             vp.colors.has_fg = true;
             vp.colors.fg = init->colors[i];
             scene_add_frame(scene, input_symbol, init->cooling_frames, &vp);
+        }
+        if (shareable) {
+            (void)framemo_put(init->runs, input_symbol, init->colors[0], scene);
         }
     }
     free(input_symbol);
@@ -219,6 +234,7 @@ static void laseretch_emit_sparks(Effect *self, EngineCtx *ctx, Laser *laser, si
     init.colors = laser->spark_gradient.spectrum;
     init.len = laser->spark_gradient.len;
     init.cooling_frames = st->config.spark_cooling_frames;
+    init.runs = st->spark_runs;
     for (size_t i = 0; i < spark_count; i++) {
         SparkEmit emit;
         emit.self = self;
@@ -290,6 +306,7 @@ static Laser *laseretch_make_laser(Effect *self, EngineCtx *ctx) {
     init.colors = laser->spark_gradient.spectrum;
     init.len = laser->spark_gradient.len;
     init.cooling_frames = st->config.spark_cooling_frames;
+    init.runs = st->spark_runs;
     if (particle_pool_preallocate(&laser->sparks_pool, ctx, 2000, laseretch_initialize_spark, &init) != 0) {
         particle_pool_free(&laser->sparks_pool);
         gradient_free(&laser->spark_gradient);
@@ -649,6 +666,7 @@ static void laseretch_destroy(Effect *self) {
     if (!st) {
         return;
     }
+    framemo_free(st->spark_runs);
     if (st->laser) {
         if (st->laser->has_sparks_pool) {
             particle_pool_free(&st->laser->sparks_pool);
@@ -676,6 +694,7 @@ Effect *laseretch_make(const void *cfg) {
         return NULL;
     }
     st->config = *(const LaserEtchConfig *)cfg;
+    st->spark_runs = framemo_new();
     effect->ops = &LASERETCH_OPS;
     effect->state = st;
     return effect;
