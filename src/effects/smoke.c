@@ -13,19 +13,8 @@
 #include "engine/terminal.h"
 #include "utils/easing.h"
 #include "utils/graphics.h"
-#include "utils/strhash.h"
 #include "utils/ordmap.h"
 #include "utils/spanning_tree.h"
-
-// Paint frames depend only on (symbol, final foreground): every character
-// drawing the same glyph in the same gradient band would build identical
-// frames, so the first one builds and the rest append (the asm engine keys a
-// visual_run the same way).
-typedef struct {
-    char *symbol;  // owned copy for value comparison
-    Color fg;
-    Scene *scene;  // borrowed: the first paint scene built for this pair
-} PaintRun;
 
 typedef struct {
     SmokeConfig config;
@@ -35,73 +24,8 @@ typedef struct {
     BreadthFirst fill_alg;
     bool has_fill_alg;
     Scene *smoke_template;  // borrowed: first shareable smoke scene
-    PaintRun *runs;
-    size_t runs_len;
-    size_t runs_cap;
+    FrameMemo *paint_runs;
 } Smoke;
-
-static uint64_t paint_run_hash(const char *symbol, Color fg) {
-    uint64_t h = str_hash64(symbol);
-    h ^= str_hash64(fg.hex) * 0x9E3779B97F4A7C15ULL;
-    h ^= (uint64_t)fg.is_xterm << 56;
-    h ^= (uint64_t)fg.xterm << 32;
-    h ^= (uint64_t)fg.hex_len << 48;
-    return h;
-}
-
-static PaintRun *paint_run_find(Smoke *st, const char *symbol, Color fg) {
-    size_t mask = st->runs_cap ? st->runs_cap - 1 : 0;
-    size_t i = (size_t)paint_run_hash(symbol, fg) & mask;
-    while (st->runs_cap) {
-        PaintRun *r = &st->runs[i];
-        if (!r->scene) {
-            return NULL;
-        }
-        if (r->fg.is_xterm == fg.is_xterm && r->fg.xterm == fg.xterm && r->fg.hex_len == fg.hex_len &&
-            memcmp(r->fg.hex, fg.hex, fg.hex_len) == 0 && strcmp(r->symbol, symbol) == 0) {
-            return r;
-        }
-        i = (i + 1) & mask;
-    }
-    return NULL;
-}
-
-static int paint_run_add(Smoke *st, const char *symbol, Color fg, Scene *scene) {
-    if ((st->runs_len + 1) * 2 >= st->runs_cap) {
-        size_t cap = st->runs_cap ? st->runs_cap * 2 : 64;
-        PaintRun *grown = calloc(cap, sizeof(PaintRun));
-        if (!grown) {
-            return -1;
-        }
-        for (size_t i = 0; i < st->runs_cap; i++) {
-            if (st->runs[i].scene) {
-                size_t j = (size_t)paint_run_hash(st->runs[i].symbol, st->runs[i].fg) & (cap - 1);
-                while (grown[j].scene) {
-                    j = (j + 1) & (cap - 1);
-                }
-                grown[j] = st->runs[i];
-            }
-        }
-        free(st->runs);
-        st->runs = grown;
-        st->runs_cap = cap;
-    }
-    size_t mask = st->runs_cap - 1;
-    size_t i = (size_t)paint_run_hash(symbol, fg) & mask;
-    while (st->runs[i].scene) {
-        i = (i + 1) & mask;
-    }
-    char *copy = malloc(strlen(symbol) + 1);
-    if (!copy) {
-        return -1;
-    }
-    strcpy(copy, symbol);
-    st->runs[i].symbol = copy;
-    st->runs[i].fg = fg;
-    st->runs[i].scene = scene;
-    st->runs_len++;
-    return 0;
-}
 
 static void push_color_default(ColorList *list, const char *hex) {
     if (list->len == list->cap) {
@@ -243,6 +167,8 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
     }
     free(smoke_colors);
 
+    st->paint_runs = framemo_new();
+
     bool dynamic = ctx->terminal.config.existing_color_handling == EXISTING_COLOR_DYNAMIC;
     CharacterFilter filter = {true, true, true, false};
     size_t chars_len = 0;
@@ -308,9 +234,9 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
             Scene *scene =
                 paint_scn ? (Scene *)om_get(&ctx->terminal.arena.items[id].animation.scenes, paint_scn) : NULL;
             bool shareable = scene && !scene->has_preexisting_colors && !scene->preexisting_bold;
-            PaintRun *run = shareable ? paint_run_find(st, input_symbol, final_fg) : NULL;
+            Scene *run = shareable ? framemo_get(st->paint_runs, input_symbol, final_fg) : NULL;
             if (run) {
-                if (scene_append_frames(scene, run->scene) != 0) {
+                if (scene_append_frames(scene, run) != 0) {
                     rc = -1;
                 }
             } else if (scene) {
@@ -327,7 +253,7 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
                 } else {
                     if (scene_apply_gradient_to_symbols(scene, paint_chars, 1, 5, &paint_gradient, NULL) != 0) {
                         rc = -1;
-                    } else if (shareable && paint_run_add(st, input_symbol, final_fg, scene) != 0) {
+                    } else if (shareable && framemo_put(st->paint_runs, input_symbol, final_fg, scene) != 0) {
                         rc = -1;
                     }
                     gradient_free(&paint_gradient);
@@ -451,10 +377,7 @@ static void smoke_destroy(Effect *self) {
     if (st->has_fill_alg) {
         breadth_first_free(&st->fill_alg);
     }
-    for (size_t i = 0; i < st->runs_cap; i++) {
-        free(st->runs[i].symbol);
-    }
-    free(st->runs);
+    framemo_free(st->paint_runs);
     free(st->character_final_color_map);
     free(st->final_present);
     free(st);

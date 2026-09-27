@@ -37,6 +37,7 @@ typedef struct {
     PrintRow current_row;
     bool typing;
     int64_t last_column;
+    FrameMemo *head_runs;  // (symbol, final fg) -> template head scene
 } Print;
 
 #define SET_INVISIBLE_CALLBACK 0
@@ -257,15 +258,28 @@ static int print_make_row(Effect *self, EngineCtx *ctx, const CharId *chars, siz
             if ((size_t)id < st->final_colors_len && st->final_colors_present[id]) {
                 final_fg = st->final_colors[id].fg;
             }
-            Color stops[2] = {typing_head_color, final_fg};
-            Gradient color_gradient;
-            if (gradient_with_steps(stops, 2, 5, false, &color_gradient) != 0) {
-                rc = -1;
-            } else {
-                if (scene_apply_gradient_to_symbols(scene, head_symbols, 5, 3, &color_gradient, NULL) != 0) {
+            // The head frames depend on the input symbol and final color only,
+            // so later characters with the same pair copy the first one's
+            // scene (the asm engine's visual_run_find/keep memo).
+            bool shareable = scene && !scene->has_preexisting_colors && !scene->preexisting_bold;
+            Scene *tmpl = shareable ? framemo_get(st->head_runs, input_symbol, final_fg) : NULL;
+            if (tmpl) {
+                if (scene_append_frames(scene, tmpl) != 0) {
                     rc = -1;
                 }
-                gradient_free(&color_gradient);
+            } else {
+                Color stops[2] = {typing_head_color, final_fg};
+                Gradient color_gradient;
+                if (gradient_with_steps(stops, 2, 5, false, &color_gradient) != 0) {
+                    rc = -1;
+                } else {
+                    if (scene_apply_gradient_to_symbols(scene, head_symbols, 5, 3, &color_gradient, NULL) != 0) {
+                        rc = -1;
+                    } else if (shareable && framemo_put(st->head_runs, input_symbol, final_fg, scene) != 0) {
+                        rc = -1;
+                    }
+                    gradient_free(&color_gradient);
+                }
             }
         }
 
@@ -483,6 +497,7 @@ static void print_destroy(Effect *self) {
     if (!st) {
         return;
     }
+    framemo_free(st->head_runs);
     row_free(&st->current_row);
     for (size_t i = st->pending_head; i < st->pending_len; i++) {
         row_free(&st->pending_rows[i]);
@@ -509,6 +524,7 @@ Effect *print_make(const void *cfg) {
         return NULL;
     }
     st->config = *(const PrintConfig *)cfg;
+    st->head_runs = framemo_new();
     effect->ops = &PRINT_OPS;
     effect->state = st;
     return effect;

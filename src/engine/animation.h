@@ -174,6 +174,16 @@ int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const Vi
 // scene_add_frame. For templates whose frames are byte-identical to what dst
 // would build for itself.
 int scene_append_frames(Scene *dst, const Scene *src);
+
+// Memo of template scenes keyed by (symbol, color): effects whose frame
+// content depends only on that pair build one scene and share it across
+// characters (the asm engine's visual_run_find/visual_run_keep).
+typedef struct FrameMemo FrameMemo;
+FrameMemo *framemo_new(void);
+// The template scene recorded for (symbol, fg), or NULL.
+Scene *framemo_get(FrameMemo *m, const char *symbol, Color fg);
+int framemo_put(FrameMemo *m, const char *symbol, Color fg, Scene *scene);
+void framemo_free(FrameMemo *m);
 // Returns 0 on success; sets the active frame's visual (borrowed) and its
 // all_frames index.
 int scene_activate(const Scene *scene, CharacterVisual **out, size_t *frame_index);

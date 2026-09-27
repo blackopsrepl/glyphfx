@@ -6,6 +6,7 @@
 
 #include "utils/hexterm.h"
 #include "utils/strbuf.h"
+#include "utils/strhash.h"
 
 static char *dup_cstr(const char *s) {
     size_t len = strlen(s);
@@ -933,4 +934,113 @@ void animation_clear_scenes(Animation *anim) {
     om_clear(&anim->scenes);
     anim->active_scene_ref = NULL;
     anim->active_scene_slot_valid = false;
+}
+
+// --- frame memo -----------------------------------------------------------
+
+typedef struct {
+    char *symbol;  // owned copy for value comparison
+    Color fg;
+    Scene *scene;  // borrowed: the template scene for this pair
+} FrameMemoEntry;
+
+struct FrameMemo {
+    FrameMemoEntry *slots;
+    size_t cap;  // power of two
+    size_t used;
+};
+
+static uint64_t framemo_hash(const char *symbol, Color fg) {
+    uint64_t h = str_hash64(symbol);
+    h ^= str_hash64(fg.hex) * 0x9E3779B97F4A7C15ULL;
+    h ^= (uint64_t)fg.is_xterm << 56;
+    h ^= (uint64_t)fg.xterm << 32;
+    h ^= (uint64_t)fg.hex_len << 48;
+    return h;
+}
+
+static bool framemo_key_eq(const FrameMemoEntry *e, const char *symbol, Color fg) {
+    return e->fg.is_xterm == fg.is_xterm && e->fg.xterm == fg.xterm && e->fg.hex_len == fg.hex_len &&
+           memcmp(e->fg.hex, fg.hex, fg.hex_len) == 0 && strcmp(e->symbol, symbol) == 0;
+}
+
+FrameMemo *framemo_new(void) {
+    return calloc(1, sizeof(FrameMemo));
+}
+
+Scene *framemo_get(FrameMemo *m, const char *symbol, Color fg) {
+    FrameMemo *tab = m;
+    if (!tab || tab->cap == 0) {
+        return NULL;
+    }
+    size_t mask = tab->cap - 1;
+    size_t i = (size_t)framemo_hash(symbol, fg) & mask;
+    while (tab->slots[i].scene) {
+        if (framemo_key_eq(&tab->slots[i], symbol, fg)) {
+            return tab->slots[i].scene;
+        }
+        i = (i + 1) & mask;
+    }
+    return NULL;
+}
+
+static int framemo_rehash(FrameMemo *tab, size_t cap) {
+    FrameMemoEntry *grown = calloc(cap, sizeof(FrameMemoEntry));
+    if (!grown) {
+        return -1;
+    }
+    for (size_t i = 0; i < tab->cap; i++) {
+        if (!tab->slots[i].scene) {
+            continue;
+        }
+        size_t j = (size_t)framemo_hash(tab->slots[i].symbol, tab->slots[i].fg) & (cap - 1);
+        while (grown[j].scene) {
+            j = (j + 1) & (cap - 1);
+        }
+        grown[j] = tab->slots[i];
+    }
+    free(tab->slots);
+    tab->slots = grown;
+    tab->cap = cap;
+    return 0;
+}
+
+int framemo_put(FrameMemo *m, const char *symbol, Color fg, Scene *scene) {
+    FrameMemo *tab = m;
+    if (!tab) {
+        return -1;
+    }
+    if ((tab->used + 1) * 2 >= tab->cap && framemo_rehash(tab, tab->cap ? tab->cap * 2 : 64) != 0) {
+        return -1;
+    }
+    size_t mask = tab->cap - 1;
+    size_t i = (size_t)framemo_hash(symbol, fg) & mask;
+    while (tab->slots[i].scene) {
+        if (framemo_key_eq(&tab->slots[i], symbol, fg)) {
+            return 0;
+        }
+        i = (i + 1) & mask;
+    }
+    char *copy = malloc(strlen(symbol) + 1);
+    if (!copy) {
+        return -1;
+    }
+    strcpy(copy, symbol);
+    tab->slots[i].symbol = copy;
+    tab->slots[i].fg = fg;
+    tab->slots[i].scene = scene;
+    tab->used++;
+    return 0;
+}
+
+void framemo_free(FrameMemo *m) {
+    FrameMemo *tab = m;
+    if (!tab) {
+        return;
+    }
+    for (size_t i = 0; i < tab->cap; i++) {
+        free(tab->slots[i].symbol);
+    }
+    free(tab->slots);
+    free(tab);
 }
