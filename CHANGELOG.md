@@ -2,6 +2,17 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
 
+## [0.3.0](https://github.com/blackopsrepl/glyphfx/compare/v0.2.1...v0.3.0) (2026-09-27)
+
+### Performance
+
+* **render:** row buffers with a handle-grid clean test ([c1b1239](https://github.com/blackopsrepl/glyphfx/commit/c1b1239dad8a77cdf1199802bcae9d2bdac8a541))
+* **rng:** inline the random helpers and fix the clz width at n == 1 ([06fd8ee](https://github.com/blackopsrepl/glyphfx/commit/06fd8ee0d34b1527e6e705a9c3a33e2daa4f92b3))
+* **scene:** index scene frames by head instead of a played-frames deque ([dc7f057](https://github.com/blackopsrepl/glyphfx/commit/dc7f057a1e106550f5b9effaaca696a547d613dc))
+* **tools:** add the asm-target benchmark gate ([2a87417](https://github.com/blackopsrepl/glyphfx/commit/2a8741762ce3fedbc6c41bde20f3a8bec188911c))
+* **visual:** add the offset-addressed visual pool ([5c3a645](https://github.com/blackopsrepl/glyphfx/commit/5c3a645cc1495cfc241a192ad4900bfa4e946d7c))
+* **visual:** address visuals as pool handles end to end ([f1dffe9](https://github.com/blackopsrepl/glyphfx/commit/f1dffe9c900848600ceef7dbe8e94a14a525090f))
+
 ## [0.2.1](https://github.com/blackopsrepl/glyphfx/compare/v0.2.0...v0.2.1) (2026-09-27)
 
 ### Performance
