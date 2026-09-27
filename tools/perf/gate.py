@@ -213,7 +213,7 @@ def main() -> int:
         for e in EFFECTS:
             frames, sha = validate(a.binary, e, data, env)
             base = bvals.get(e)
-            if base is not None:
+            if base is not None and not (a.update and a.force):
                 if frames != base[1] or sha != base[2]:
                     raise GateError(f"{e}: parity stream changed ({frames} frames, {sha[:12]})")
             ms = time_run(a.binary, e, data, env, a.runs)
@@ -238,8 +238,12 @@ def main() -> int:
             if e not in measured:
                 continue
             old = bvals.get(e)
-            tightened[e] = (min(old[0], measured[e][0]), measured[e][1], measured[e][2]) if old \
-                else measured[e]
+            if old is not None and old[1] == measured[e][1] and old[2] == measured[e][2]:
+                tightened[e] = (min(old[0], measured[e][0]), measured[e][1], measured[e][2])
+            else:
+                # A new effect, or a verified change to its output: the old time
+                # was for a different workload, so record the measured one.
+                tightened[e] = measured[e]
         save_baseline(key, tightened)
         improved = sum(1 for e in tightened if e in bvals and tightened[e][0] < bvals[e][0])
         print(f"baseline updated: {improved} effect(s) tightened, {BASELINE.relative_to(ROOT)}")
