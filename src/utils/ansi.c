@@ -38,6 +38,7 @@ ColorCode colorcode_rgb(const char *hex) {
     ColorCode code;
     code.kind = COLORCODE_RGB;
     code.xterm = 0;
+    memset(code.hex, 0, sizeof(code.hex));
     size_t len = strlen(hex);
     if (len >= sizeof(code.hex)) {
         len = sizeof(code.hex) - 1;
@@ -50,7 +51,7 @@ ColorCode colorcode_rgb(const char *hex) {
 ColorCode colorcode_xterm(uint8_t code) {
     ColorCode cc;
     cc.kind = COLORCODE_XTERM;
-    cc.hex[0] = '\0';
+    memset(cc.hex, 0, sizeof(cc.hex));
     cc.xterm = code;
     return cc;
 }

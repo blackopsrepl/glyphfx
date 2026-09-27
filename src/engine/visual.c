@@ -125,8 +125,12 @@ static void visual_table_alloc(uint32_t capacity) {
 // hex buffer (a code's hex may hold more than 8 digits, and code_key_eq
 // compares all 16 bytes). No field is dropped, so equal keys mean equal bytes.
 static void pack_code(const ColorCode *c, bool has, uint64_t out[2]) {
-    out[0] = (uint64_t)(has ? 1u : 0u) | ((uint64_t)(uint8_t)c->kind << 1) |
-             ((uint64_t)c->xterm << 9);
+    out[0] = 0;
+    out[1] = 0;
+    if (!has) {
+        return;
+    }
+    out[0] = 1u | ((uint64_t)(uint8_t)c->kind << 1) | ((uint64_t)c->xterm << 9);
     memcpy(&out[1], c->hex, sizeof(c->hex));
 }
 
