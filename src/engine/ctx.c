@@ -653,5 +653,11 @@ const char *engine_frame(EngineCtx *ctx) {
         terminal_enforce_framerate(&ctx->terminal);
     }
     clock_advance_frame(&ctx->clock);
+    if (ctx->terminal.frame_rows_mode) {
+        // The run loop emits the rendered rows with writev; the string is only
+        // built for the parity and m0 dumps.
+        terminal_render_rows(&ctx->terminal);
+        return "";
+    }
     return terminal_get_formatted_output_string(&ctx->terminal);
 }

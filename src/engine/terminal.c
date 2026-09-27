@@ -3,7 +3,9 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <string.h>
+#include <sys/uio.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -455,6 +457,7 @@ void terminal_free(Terminal *t) {
         free(t->row_caps);
     }
     free(t->move_cursor_to_top);
+    free(t->frame_iov);
     sb_free(&t->output_buffer);
     memset(t, 0, sizeof(*t));
 }
@@ -883,37 +886,16 @@ static bool row_is_clean(const Terminal *t, size_t row_index, size_t width) {
     return memcmp(cur_ver, prev_ver, width * sizeof(uint32_t)) == 0;
 }
 
-static void row_cache_store(Terminal *t, size_t row_index, const char *bytes, size_t len) {
-    if (t->row_caps[row_index] < len) {
-        size_t cap = t->row_caps[row_index] ? t->row_caps[row_index] * 2 : len * 2;
-        while (cap < len) {
-            cap *= 2;
-        }
-        char *grown = realloc(t->row_bytes[row_index], cap);
-        if (!grown) {
-            return;
-        }
-        t->row_bytes[row_index] = grown;
-        t->row_caps[row_index] = cap;
-    }
-    if (len) {
-        memcpy(t->row_bytes[row_index], bytes, len);
-    }
-    t->row_lens[row_index] = len;
-}
-
-const char *terminal_get_formatted_output_string(Terminal *t) {
+// Render the frame into the per-row buffers. A row whose owner and version
+// grids match the previous frame keeps its bytes (with its joining newline);
+// a dirty row is serialized, newline included, and becomes the new cache.
+void terminal_render_rows(Terminal *t) {
     size_t width = 0;
     size_t height = 0;
     update_render_cells(t, &width, &height);
-    StrBuf *sb = &t->output_buffer;
-    sb_clear(sb);
     bool cached = t->cache_on;
     size_t clean_rows = 0;
     for (size_t row_index = height; row_index-- > 0;) {
-        if (row_index + 1 < height) {
-            sb_push(sb, '\n');
-        }
         if (cached && row_is_clean(t, row_index, width)) {
             if (g_render_verify) {
                 StrBuf check;
@@ -926,20 +908,38 @@ const char *terminal_get_formatted_output_string(Terminal *t) {
                 }
                 sb_free(&check);
             }
-            sb_append(sb, t->row_bytes[row_index], t->row_lens[row_index]);
             clean_rows++;
-        } else {
-            size_t start = sb->len;
-            serialize_row(t, row_index, width, sb);
-            if (cached) {
-                row_cache_store(t, row_index, sb->data ? sb->data + start : "", sb->len - start);
-                memcpy(&t->prev_cells[row_index * width], &t->render_cells[row_index * width],
-                       width * sizeof(uint32_t));
-                memcpy(&t->prev_version[row_index * width], &t->cell_version[row_index * width],
-                       width * sizeof(uint32_t));
-            }
+            continue;
+        }
+        StrBuf row = {t->row_bytes[row_index], 0, t->row_caps[row_index]};
+        sb_clear(&row);
+        serialize_row(t, row_index, width, &row);
+        if (row_index != 0) {
+            sb_push(&row, '\n');
+        }
+        t->row_bytes[row_index] = row.data;
+        t->row_caps[row_index] = row.cap;
+        t->row_lens[row_index] = row.len;
+        if (cached) {
+            memcpy(&t->prev_cells[row_index * width], &t->render_cells[row_index * width],
+                   width * sizeof(uint32_t));
+            memcpy(&t->prev_version[row_index * width], &t->cell_version[row_index * width],
+                   width * sizeof(uint32_t));
         }
     }
+    t->last_width = width;
+    t->last_height = height;
+    t->last_clean_rows = clean_rows;
+}
+
+// The row-cache gate runs after the frame has been assembled or emitted: it
+// may invalidate the row buffers for the next frame, which must not affect the
+// frame currently leaving.
+static void frame_gate(Terminal *t) {
+    size_t width = t->last_width;
+    size_t height = t->last_height;
+    size_t clean_rows = t->last_clean_rows;
+    bool cached = t->cache_on;
     if (cached) {
         t->gate_seen++;
         t->gate_clean += clean_rows;
@@ -959,11 +959,6 @@ const char *terminal_get_formatted_output_string(Terminal *t) {
             }
         } else if (t->gate_seen >= ROW_CACHE_WINDOW) {
             bool keep;
-            // Sparse canvases serialize to little more than space runs, so the
-            // cache's bookkeeping cannot pay for itself there even when rows
-            // stay clean; require a reasonably filled canvas too. Painted cells
-            // measure that directly (visible characters include the off-canvas
-            // and the not-yet-typed).
             size_t cells = width * height;
             bool dense = t->gate_painted * 4 >= t->gate_seen * cells;
             if (t->cache_probing) {
@@ -997,7 +992,84 @@ const char *terminal_get_formatted_output_string(Terminal *t) {
             row_cache_invalidate(t);
         }
     }
+}
+
+const char *terminal_get_formatted_output_string(Terminal *t) {
+    terminal_render_rows(t);
+    size_t width = t->visible_right > 0 ? (size_t)t->visible_right : 0;
+    size_t height = t->visible_top > 0 ? (size_t)t->visible_top : 0;
+    (void)width;
+    StrBuf *sb = &t->output_buffer;
+    sb_clear(sb);
+    for (size_t row_index = height; row_index-- > 0;) {
+        sb_append(sb, t->row_bytes[row_index], t->row_lens[row_index]);
+    }
+    frame_gate(t);
     return sb->data ? sb->data : "";
+}
+
+// Emit the rendered rows with one writev (cursor prefix plus one iovec per
+// row), so the frame is never assembled into a single string. rows already
+// carry their joining newline.
+int terminal_emit_frame(Terminal *t, FILE *out) {
+    size_t height = t->visible_top > 0 ? (size_t)t->visible_top : 0;
+    if (height == 0) {
+        return 0;
+    }
+    size_t need = height + 1;
+    if (t->frame_iov_cap < need) {
+        struct iovec *grown = realloc(t->frame_iov, need * sizeof(struct iovec));
+        if (!grown) {
+            return -1;
+        }
+        t->frame_iov = grown;
+        t->frame_iov_cap = need;
+    }
+    if (fflush(out) != 0) {
+        return -1;
+    }
+    const char *prefix = t->move_cursor_to_top ? t->move_cursor_to_top : "";
+    t->frame_iov[0].iov_base = (void *)prefix;
+    t->frame_iov[0].iov_len = strlen(prefix);
+    size_t n = 1;
+    for (size_t row = height; row-- > 0;) {
+        t->frame_iov[n].iov_base = t->row_bytes[row];
+        t->frame_iov[n].iov_len = t->row_lens[row];
+        n++;
+    }
+    int fd = fileno(out);
+    size_t max_iov = 1024;
+#ifdef IOV_MAX
+    max_iov = IOV_MAX;
+#endif
+    if (max_iov < 1) {
+        max_iov = 1;
+    }
+    size_t i = 0;
+    while (i < n) {
+        size_t chunk = n - i;
+        if (chunk > max_iov) {
+            chunk = max_iov;
+        }
+        ssize_t written;
+        do {
+            written = writev(fd, &t->frame_iov[i], (int)chunk);
+        } while (written < 0 && errno == EINTR);
+        if (written < 0) {
+            return -1;
+        }
+        size_t consumed = (size_t)written;
+        while (i < n && consumed >= t->frame_iov[i].iov_len) {
+            consumed -= t->frame_iov[i].iov_len;
+            i++;
+        }
+        if (i < n && consumed > 0) {
+            t->frame_iov[i].iov_base = (char *)t->frame_iov[i].iov_base + consumed;
+            t->frame_iov[i].iov_len -= consumed;
+        }
+    }
+    frame_gate(t);
+    return 0;
 }
 
 // --- tty side -------------------------------------------------------------

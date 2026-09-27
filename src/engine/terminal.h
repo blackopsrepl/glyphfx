@@ -176,7 +176,13 @@ struct Terminal {
     size_t gate_seen;
     size_t gate_clean;
     size_t probe_backoff;
+    bool frame_rows_mode;   // render into row buffers and emit with writev
+    size_t last_width;
+    size_t last_height;
+    size_t last_clean_rows;
     StrBuf output_buffer;  // reused across frames
+    struct iovec *frame_iov;
+    size_t frame_iov_cap;
     char *move_cursor_to_top;
     int64_t frame_rate;
     double last_time_printed;
@@ -202,6 +208,10 @@ const char *terminal_get_formatted_output_string(Terminal *t);
 void terminal_prep_canvas(Terminal *t, FILE *out);
 void terminal_restore_cursor(Terminal *t, FILE *out, const char *end_symbol);
 void terminal_print_frame(Terminal *t, FILE *out, const char *output_string);
+// Render the frame into the per-row buffers (frame_rows_mode) and emit the
+// rows with one writev, so the frame is never assembled into one string.
+void terminal_render_rows(Terminal *t);
+int terminal_emit_frame(Terminal *t, FILE *out);
 void terminal_enforce_framerate(Terminal *t);
 void terminal_reset_canvas_area(Terminal *t, FILE *out);
 // True when a resize has settled and would move the layout (tty-only callers).

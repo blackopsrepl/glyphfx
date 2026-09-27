@@ -51,6 +51,7 @@ int effect_run(Effect *effect, EngineCtx *ctx, bool tty_output, RunOutcome *out_
     if (effect->ops->build(effect, ctx) != 0) {
         return -1;
     }
+    ctx->terminal.frame_rows_mode = true;
     // Batch the whole frame (its embedded newlines would otherwise force a
     // write per line on a line-buffered tty); still flush once per frame.
     if (tty_output) {
@@ -75,8 +76,8 @@ int effect_run(Effect *effect, EngineCtx *ctx, bool tty_output, RunOutcome *out_
             outcome = stop;
             break;
         }
-        terminal_print_frame(&ctx->terminal, stdout, frame);
-        if (ferror(stdout)) {
+        (void)frame;
+        if (terminal_emit_frame(&ctx->terminal, stdout) != 0 || ferror(stdout)) {
             write_error = 1;
             break;
         }
