@@ -74,6 +74,7 @@ typedef struct {
     bool rain_complete;
     Phase phase;
     double rain_start;
+    FrameMemo *resolve_runs;  // (input symbol, final foreground) -> template scene
 } Matrix;
 
 static void push_color_default(ColorList *list, const char *hex) {
@@ -586,22 +587,35 @@ static int matrix_build(Effect *self, EngineCtx *ctx) {
                 gradient_free(&bg_gradient);
             }
         } else {
-            Color stops[2] = {cfg->highlight_color, final_fg_color};
-            Gradient resolve_gradient;
-            if (gradient_with_steps(stops, 2, 8, false, &resolve_gradient) != 0) {
-                rc = -1;
-            } else {
-                for (size_t j = 0; j < resolve_gradient.len && rc == 0; j++) {
-                    VisualParams vp;
-                    memset(&vp, 0, sizeof(vp));
-                    vp.has_colors = true;
-                    vp.colors.has_fg = true;
-                    vp.colors.fg = resolve_gradient.spectrum[j];
-                    if (!scene || scene_add_frame(scene, input_symbol, cfg->final_gradient_frames, &vp) != 0) {
-                        rc = -1;
-                    }
+            // matrix.asm's visual_run_find: the resolve frames depend only on
+            // the symbol and final color, so build them once for each pair.
+            bool shareable = scene && !scene->has_preexisting_colors && !scene->preexisting_bold;
+            Scene *template = shareable ? framemo_get(st->resolve_runs, input_symbol, final_fg_color) : NULL;
+            if (template) {
+                if (scene_append_frames(scene, template) != 0) {
+                    rc = -1;
                 }
-                gradient_free(&resolve_gradient);
+            } else {
+                Color stops[2] = {cfg->highlight_color, final_fg_color};
+                Gradient resolve_gradient;
+                if (gradient_with_steps(stops, 2, 8, false, &resolve_gradient) != 0) {
+                    rc = -1;
+                } else {
+                    for (size_t j = 0; j < resolve_gradient.len && rc == 0; j++) {
+                        VisualParams vp;
+                        memset(&vp, 0, sizeof(vp));
+                        vp.has_colors = true;
+                        vp.colors.has_fg = true;
+                        vp.colors.fg = resolve_gradient.spectrum[j];
+                        if (!scene || scene_add_frame(scene, input_symbol, cfg->final_gradient_frames, &vp) != 0) {
+                            rc = -1;
+                        }
+                    }
+                    if (rc == 0 && shareable) {
+                        (void)framemo_put(st->resolve_runs, input_symbol, final_fg_color, scene);
+                    }
+                    gradient_free(&resolve_gradient);
+                }
             }
         }
         free(input_symbol);
@@ -815,6 +829,7 @@ static void matrix_destroy(Effect *self) {
     free(st->active_columns);
     free(st->full_columns);
     free(st->character_final_color_map);
+    framemo_free(st->resolve_runs);
     gradient_free(&st->rain_gradient);
     free(st);
     free(self);
@@ -831,6 +846,7 @@ Effect *matrix_make(const void *cfg) {
         return NULL;
     }
     st->config = *(const MatrixConfig *)cfg;
+    st->resolve_runs = framemo_new();
     st->resolve_delay = st->config.resolve_delay;
     st->phase = PHASE_RAIN;
     effect->ops = &MATRIX_OPS;
