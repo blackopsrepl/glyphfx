@@ -169,6 +169,11 @@ void animation_clear_scenes(Animation *anim);
 // Scene operations.
 void scene_free(Scene *scene);
 int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const VisualParams *params);
+// Appends every frame of src to dst, sharing the pooled visuals and copying
+// durations; playback counters start fresh and easing bookkeeping matches
+// scene_add_frame. For templates whose frames are byte-identical to what dst
+// would build for itself.
+int scene_append_frames(Scene *dst, const Scene *src);
 // Returns 0 on success; sets the active frame's visual (borrowed) and its
 // all_frames index.
 int scene_activate(const Scene *scene, CharacterVisual **out, size_t *frame_index);

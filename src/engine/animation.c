@@ -505,6 +505,44 @@ int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const Vi
     return 0;
 }
 
+int scene_append_frames(Scene *dst, const Scene *src) {
+    for (size_t i = 0; i < src->all_frames_len; i++) {
+        const Frame *from = &src->all_frames[i];
+        if (from->duration < 1) {
+            return -1;
+        }
+        if (dst->all_frames_len == dst->all_frames_cap) {
+            size_t cap = dst->all_frames_cap ? dst->all_frames_cap * 2 : 8;
+            Frame *grown = realloc(dst->all_frames, cap * sizeof(Frame));
+            if (!grown) {
+                return -1;
+            }
+            dst->all_frames = grown;
+            dst->all_frames_cap = cap;
+        }
+        size_t frame_index = dst->all_frames_len++;
+        Frame *frame = &dst->all_frames[frame_index];
+        frame->visual = vis_ref(from->visual);
+        frame->duration = from->duration;
+        frame->ticks_elapsed = 0;
+        iq_push_back(&dst->frames, frame_index);
+        for (int64_t k = 0; k < frame->duration; k++) {
+            if (dst->frame_index_map_len == dst->frame_index_map_cap) {
+                size_t cap = dst->frame_index_map_cap ? dst->frame_index_map_cap * 2 : 16;
+                size_t *grown = realloc(dst->frame_index_map, cap * sizeof(size_t));
+                if (!grown) {
+                    return -1;
+                }
+                dst->frame_index_map = grown;
+                dst->frame_index_map_cap = cap;
+            }
+            dst->frame_index_map[dst->frame_index_map_len++] = frame_index;
+            dst->easing_total_steps += 1;
+        }
+    }
+    return 0;
+}
+
 int scene_activate(const Scene *scene, CharacterVisual **out, size_t *frame_index) {
     size_t head;
     if (!iq_peek_front(&scene->frames, &head)) {
