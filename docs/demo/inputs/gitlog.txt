@@ -1,0 +1,15 @@
+dd544dc docs(readme): add a why-not-assembly note
+6fe056f docs(readme): regenerate the effect gifs on the reference pace
+fbc3128 fix(demo): cap the frame budget to the reference gallery's pace
+ced9a19 docs(readme): regenerate the effect gifs
+d037020 fix(demo): tighten canvas, type, and palette
+f5fef8b fix(demo): render block glyphs as rectangles
+05e6e4f fix(demo): sample the whole effect animation
+0d5f32d docs: use a legible block banner and make wipe the hero
+5a1cfef docs: tighten README attribution, links, and layout
+12a516a docs(readme): introduce the GlyphFX mascot
+4d38c6a build: give the Makefile the SolverForge treatment
+6eb9ba7 chore(release): declare the VERSION package file
+2243f3e chore(release): 0.1.1
+f40a532 docs: explain why glyphfx stays in portable C
+f47c25b perf: share visuals, reuse frame buffers, and skip exit teardown

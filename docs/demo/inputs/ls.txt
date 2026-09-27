@@ -1,0 +1,21 @@
+total 48
+drwxr-sr-x 1 pvd lab   262 Sep 26 15:04 .
+drwxrwsr-x 1 pvd lab  1368 Sep 26 09:26 ..
+drwxr-sr-x 1 pvd lab   306 Sep 26 15:19 build
+-rw-r--r-- 1 pvd lab  5508 Sep 26 14:30 CHANGELOG.md
+drwxr-sr-x 1 pvd lab    54 Sep 26 17:08 docs
+drwxr-sr-x 1 pvd lab    18 Sep 26 09:40 .forgejo
+drwxr-sr-x 1 pvd lab   164 Sep 26 17:06 .git
+drwxr-sr-x 1 pvd lab    18 Sep 26 09:40 .github
+-rw-r--r-- 1 pvd lab   159 Sep 26 09:49 .gitignore
+-rw-r--r-- 1 pvd lab  1243 Sep 26 09:49 LICENSE
+-rw-r--r-- 1 pvd lab  7844 Sep 26 15:04 Makefile
+-rw-r--r-- 1 pvd lab   600 Sep 26 15:13 NOTICE
+drwxr-sr-x 1 pvd lab    50 Sep 26 13:19 packaging
+-rw-r--r-- 1 pvd lab 11684 Sep 26 17:06 README.md
+drwxr-sr-x 1 pvd lab   254 Sep 26 09:48 reference
+drwxr-sr-x 1 pvd lab    68 Sep 26 09:46 src
+drwxr-sr-x 1 pvd lab   214 Sep 26 10:00 tests
+drwxr-sr-x 1 pvd lab    30 Sep 26 09:40 tools
+-rw-r--r-- 1 pvd lab     5 Sep 26 14:30 VERSION
+-rw-r--r-- 1 pvd lab  1245 Sep 26 14:32 .versionrc.js
