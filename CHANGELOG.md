@@ -2,6 +2,18 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
 
+## [0.2.0](https://github.com/blackopsrepl/glyphfx/compare/v0.1.9...v0.2.0) (2026-09-27)
+
+### Performance
+
+* **render:** emit four cells per iteration in the row writer ([d38d044](https://github.com/blackopsrepl/glyphfx/commit/d38d0449bca9088d2c6ccb0af41f11d53c1bd5ea))
+* **render:** emit frames as one iovec per row instead of an assembled string ([e88a1c7](https://github.com/blackopsrepl/glyphfx/commit/e88a1c7c573b21cf72ec28293e205ce8042359ca))
+* **render:** serialize from a handle grid instead of the character arena ([4f2a933](https://github.com/blackopsrepl/glyphfx/commit/4f2a933798c59e18fc99d3490ca4dc1c64212b00))
+
+### Tests
+
+* **render:** teach the row verifier about stored newlines ([71aeaef](https://github.com/blackopsrepl/glyphfx/commit/71aeaef2693676f0b556c94674b117f4b486af10))
+
 ## [0.1.9](https://github.com/blackopsrepl/glyphfx/compare/v0.1.8...v0.1.9) (2026-09-27)
 
 ### Performance
