@@ -2,6 +2,14 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
 
+## [0.2.1](https://github.com/blackopsrepl/glyphfx/compare/v0.2.0...v0.2.1) (2026-09-27)
+
+### Performance
+
+* **animation:** intern visuals on a packed appearance key ([8d38052](https://github.com/blackopsrepl/glyphfx/commit/8d38052472e170059cf6b0af42196ddf88d585b5))
+* **animation:** memoize the eased frame-index sequence ([9bdb08b](https://github.com/blackopsrepl/glyphfx/commit/9bdb08b14aedaa2ae4989e62dbbb8023f0a4d50a))
+* **motion:** resolve the active path from its cached slot ([46f2d26](https://github.com/blackopsrepl/glyphfx/commit/46f2d26aa371b8d1bd7a167c7e9edc5c953ccd87))
+
 ## [0.2.0](https://github.com/blackopsrepl/glyphfx/compare/v0.1.9...v0.2.0) (2026-09-27)
 
 ### Performance
