@@ -34,380 +34,132 @@ static bool resolve_color_code(bool has_color, const Color *color, bool no_color
     return true;
 }
 
-// --- CharacterVisual ------------------------------------------------------
+// --- Scene ----------------------------------------------------------------
 
-// Retained across vis_format calls so restyling does not allocate; freed with
-// the pool at exit.
-static StrBuf g_fmt_scratch;
+static Scene *scene_new(const char *scene_id, bool is_looping, bool has_sync, SyncMetric sync, bool has_ease,
+                        Easing ease, bool no_color, bool use_xterm_colors) {
+    Scene *scene = calloc(1, sizeof(Scene));
+    if (!scene) {
+        return NULL;
+    }
+    scene->scene_id = dup_cstr(scene_id);
+    scene->is_looping = is_looping;
+    scene->no_color = no_color;
+    scene->use_xterm_colors = use_xterm_colors;
+    scene->has_sync = has_sync;
+    scene->sync = sync;
+    scene->has_ease = has_ease;
+    scene->ease = ease;
+    iq_init(&scene->frames);
+    iq_init(&scene->played_frames);
+    return scene;
+}
 
-// Monotonic visual byte-version: fresh allocations and in-place restyles draw
-// from it, so equal versions mean equal rendered bytes at any moment.
-static uint32_t g_vis_version;
+void scene_free(Scene *scene) {
+    if (!scene) {
+        return;
+    }
+    for (size_t i = 0; i < scene->all_frames_len; i++) {
+    }
+    free(scene->all_frames);
+    free(scene->scene_id);
+    free(scene->frame_index_map);
+    iq_free(&scene->frames);
+    iq_free(&scene->played_frames);
+    free(scene);
+}
 
-void vis_format(CharacterVisual *vis) {
-    // Effects restyle characters constantly, so the SGR string is assembled in a
-    // buffer retained across calls instead of allocating one per visual.
-    StrBuf sb = g_fmt_scratch;
-    sb_clear(&sb);
-    // Worst case is several attributes plus 24-bit fg and bg; reserve once so
-    // the appends below never grow.
-    sb_reserve(&sb, 96);
-    if (vis->bold) {
-        sb_puts(&sb, ANSI_BOLD);
+int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const VisualParams *params_in) {
+    VisualParams params = *params_in;
+    if (scene->has_preexisting_colors) {
+        params.colors = scene->preexisting_colors;
+        params.has_colors = true;
     }
-    if (vis->italic) {
-        sb_puts(&sb, ANSI_ITALIC);
+    if (scene->preexisting_bold) {
+        params.bold = true;
     }
-    if (vis->underline) {
-        sb_puts(&sb, ANSI_UNDERLINE);
-    }
-    if (vis->blink) {
-        sb_puts(&sb, ANSI_BLINK);
-    }
-    if (vis->reverse) {
-        sb_puts(&sb, ANSI_REVERSE);
-    }
-    if (vis->hidden) {
-        sb_puts(&sb, ANSI_HIDDEN);
-    }
-    if (vis->strike) {
-        sb_puts(&sb, ANSI_STRIKETHROUGH);
-    }
-    if (vis->has_fg_code) {
-        ansi_fg(&vis->fg_code, &sb);
-    }
-    if (vis->has_bg_code) {
-        ansi_bg(&vis->bg_code, &sb);
-    }
-    size_t symbol_len = strlen(vis->symbol);
-    sb_puts(&sb, vis->symbol);
-    if (sb.len != symbol_len) {
-        sb_puts(&sb, ANSI_RESET_ALL);
-    }
-    size_t len = sb.len;
-    free(vis->formatted_heap);
-    vis->formatted_heap = NULL;
-    if (len <= VIS_INLINE_FMT_CAP) {
-        memcpy(vis->formatted_inline, sb.data, len);
-        vis->formatted_inline[len < VIS_INLINE_FMT_CAP ? len : VIS_INLINE_FMT_CAP - 1] = '\0';
-        g_fmt_scratch = sb;  // keep the assembly buffer for the next visual
+    if (params.has_colors) {
+        params.has_fg_code =
+            resolve_color_code(params.colors.has_fg, &params.colors.fg, scene->no_color, scene->use_xterm_colors,
+                               &params.fg_code);
+        params.has_bg_code =
+            resolve_color_code(params.colors.has_bg, &params.colors.bg, scene->no_color, scene->use_xterm_colors,
+                               &params.bg_code);
     } else {
-        vis->formatted_heap = sb_take(&sb);  // moves the buffer out of the scratch
-        g_fmt_scratch = sb;                  // now empty; next call reallocates
+        params.has_fg_code = false;
+        params.has_bg_code = false;
     }
-    vis->formatted_len = len;
-}
-
-static CharacterVisual *vis_alloc(const char *symbol, const VisualParams *params, const VisKey *key) {
-    CharacterVisual *vis = calloc(1, sizeof(CharacterVisual));
-    if (!vis) {
-        return NULL;
+    if (duration < 1) {
+        return -1;
     }
-    vis->refcount = 1;
-    vis->key = *key;
-    vis->pool_slot = SIZE_MAX;
-    vis->version = ++g_vis_version;
-    vis->symbol = dup_cstr(symbol);
-    vis->bold = params->bold;
-    vis->dim = params->dim;
-    vis->italic = params->italic;
-    vis->underline = params->underline;
-    vis->blink = params->blink;
-    vis->reverse = params->reverse;
-    vis->hidden = params->hidden;
-    vis->strike = params->strike;
-    vis->has_colors = params->has_colors;
-    vis->colors = params->colors;
-    vis->has_fg_code = params->has_fg_code;
-    vis->fg_code = params->fg_code;
-    vis->has_bg_code = params->has_bg_code;
-    vis->bg_code = params->bg_code;
-    vis_format(vis);
-    return vis;
-}
-
-CharacterVisual *vis_new_plain(const char *symbol) {
-    VisualParams params;
-    memset(&params, 0, sizeof(params));
-    return vis_new(symbol, &params);
-}
-
-static void vis_destroy(CharacterVisual *vis) {
-    free(vis->symbol);
-    free(vis->formatted_heap);
-    free(vis);
-}
-
-// --- visual pool ----------------------------------------------------------
-// A visual is immutable once built, so every distinct appearance maps to one
-// shared instance. The pool owns them for the process lifetime; nothing is
-// refcounted, which deletes the hottest per-tick instruction in the stepper.
-
-typedef struct {
-    uint64_t hash;
-    CharacterVisual *vis;  // NULL marks a deleted slot (occupied but free)
-    bool occupied;
-} VisPoolSlot;
-
-static VisPoolSlot *g_pool;
-static size_t g_pool_cap;
-static size_t g_pool_live;
-static size_t g_pool_used;
-static bool g_pool_atexit;
-
-static uint64_t hash_bytes(uint64_t h, const void *p, size_t n) {
-    const unsigned char *b = p;
-    size_t i = 0;
-    for (; i + 8 <= n; i += 8) {
-        uint64_t v;
-        memcpy(&v, b + i, 8);
-        h = (h ^ v) * 1099511628211ULL;
-        h ^= h >> 29;
-    }
-    for (; i < n; i++) {
-        h = (h ^ b[i]) * 1099511628211ULL;
-    }
-    return h;
-}
-
-// Pack the appearance into the fixed key the pool interns on, exactly mirroring
-// the fields the previous field-by-field comparator used: the eight attributes
-// (including `dim`), both colours at their declared hex length, and both
-// resolved codes over the full 16-byte buffer. Padding is zeroed so equal
-// appearances yield byte-equal keys.
-static void vis_key_build(const VisualParams *p, VisKey *k) {
-    memset(k, 0, sizeof(*k));
-    k->attrs = (uint16_t)((p->bold ? 1u : 0) | (p->dim ? 2u : 0) | (p->italic ? 4u : 0) |
-                          (p->underline ? 8u : 0) | (p->blink ? 16u : 0) | (p->reverse ? 32u : 0) |
-                          (p->hidden ? 64u : 0) | (p->strike ? 128u : 0));
-    k->has_colors = p->has_colors ? 1 : 0;
-    k->colors_has_fg = p->colors.has_fg ? 1 : 0;
-    if (p->colors.has_fg) {
-        const Color *c = &p->colors.fg;
-        uint8_t n = c->hex_len > sizeof(c->hex) ? (uint8_t)sizeof(c->hex) : c->hex_len;
-        k->colors_fg_is_xterm = c->is_xterm ? 1 : 0;
-        k->colors_fg_xterm = c->xterm;
-        k->colors_fg_hex_len = n;
-        memcpy(k->colors_fg_hex, c->hex, n);
-        memcpy(k->colors_fg_rgb, c->rgb, 3);
-    }
-    k->colors_has_bg = p->colors.has_bg ? 1 : 0;
-    if (p->colors.has_bg) {
-        const Color *c = &p->colors.bg;
-        uint8_t n = c->hex_len > sizeof(c->hex) ? (uint8_t)sizeof(c->hex) : c->hex_len;
-        k->colors_bg_is_xterm = c->is_xterm ? 1 : 0;
-        k->colors_bg_xterm = c->xterm;
-        k->colors_bg_hex_len = n;
-        memcpy(k->colors_bg_hex, c->hex, n);
-        memcpy(k->colors_bg_rgb, c->rgb, 3);
-    }
-    k->has_fg_code = p->has_fg_code ? 1 : 0;
-    k->fg_code_kind = (uint8_t)p->fg_code.kind;
-    k->fg_code_xterm = p->fg_code.xterm;
-    memcpy(k->fg_code_hex, p->fg_code.hex, sizeof(k->fg_code_hex));
-    k->has_bg_code = p->has_bg_code ? 1 : 0;
-    k->bg_code_kind = (uint8_t)p->bg_code.kind;
-    k->bg_code_xterm = p->bg_code.xterm;
-    memcpy(k->bg_code_hex, p->bg_code.hex, sizeof(k->bg_code_hex));
-}
-
-static uint64_t vis_hash(const char *symbol, const VisKey *k) {
-    uint64_t h = 14695981039346656037ULL;
-    h = hash_bytes(h, k, sizeof(*k));
-    h = hash_bytes(h, symbol, strlen(symbol));
-    return h;
-}
-
-// Exact appearance comparison: one memcmp over the packed key plus the symbol.
-static bool vis_matches(const CharacterVisual *v, const char *symbol, const VisKey *k) {
-    return memcmp(&v->key, k, sizeof(*k)) == 0 && strcmp(v->symbol, symbol) == 0;
-}
-
-// --- eased frame-index memo -----------------------------------------------
-// step_eased_scene evaluates an easing curve and rounds to a frame index once
-// per character per tick. Both the curve and the rounding depend only on the
-// scene's easing and step count, so one table per distinct (ease, total_steps)
-// serves every character and removes the libm call from the hot path.
-typedef struct {
-    Easing ease;
-    int64_t total;
-    int32_t *vals;
-    size_t len;
-    size_t cap;
-} EasedSeq;
-
-static EasedSeq *g_eseq;
-static size_t g_eseq_len;
-static size_t g_eseq_cap;
-
-static int32_t eased_compute(const Easing *e, int64_t total, int64_t step) {
-    int64_t final = total > 1 ? total - 1 : 0;
-    double ratio = (double)step / (double)total;
-    int64_t idx = py_round_half_even(easing_ease(e, ratio) * (double)final);
-    if (idx > final) {
-        idx = final;
-    }
-    if (idx < 0) {
-        idx = 0;
-    }
-    return (int32_t)idx;
-}
-
-int64_t eased_frame_index(const Easing *ease, int64_t total_steps, int64_t step) {
-    if (total_steps <= 0 || step < 0) {
-        return 0;
-    }
-    EasedSeq *seq = NULL;
-    for (size_t i = 0; i < g_eseq_len; i++) {
-        if (g_eseq[i].total == total_steps && g_eseq[i].ease.kind == ease->kind &&
-            g_eseq[i].ease.x1 == ease->x1 && g_eseq[i].ease.y1 == ease->y1 &&
-            g_eseq[i].ease.x2 == ease->x2 && g_eseq[i].ease.y2 == ease->y2) {
-            seq = &g_eseq[i];
-            break;
+    if (scene->all_frames_len == scene->all_frames_cap) {
+        size_t cap = scene->all_frames_cap ? scene->all_frames_cap * 2 : 8;
+        Frame *grown = realloc(scene->all_frames, cap * sizeof(Frame));
+        if (!grown) {
+            return -1;
         }
+        scene->all_frames = grown;
+        scene->all_frames_cap = cap;
     }
-    if (!seq) {
-        if (g_eseq_len == g_eseq_cap) {
-            size_t cap = g_eseq_cap ? g_eseq_cap * 2 : 8;
-            EasedSeq *grown = realloc(g_eseq, cap * sizeof(*grown));
+    size_t frame_index = scene->all_frames_len++;
+    Frame *frame = &scene->all_frames[frame_index];
+    memset(frame, 0, sizeof(*frame));
+    frame->visual = visual_make(symbol, &params);
+    frame->duration = duration;
+    frame->ticks_elapsed = 0;
+    iq_push_back(&scene->frames, frame_index);
+    for (int64_t i = 0; i < duration; i++) {
+        if (scene->frame_index_map_len == scene->frame_index_map_cap) {
+            size_t cap = scene->frame_index_map_cap ? scene->frame_index_map_cap * 2 : 16;
+            size_t *grown = realloc(scene->frame_index_map, cap * sizeof(size_t));
             if (!grown) {
-                return eased_compute(ease, total_steps, step);
+                return -1;
             }
-            g_eseq = grown;
-            g_eseq_cap = cap;
+            scene->frame_index_map = grown;
+            scene->frame_index_map_cap = cap;
         }
-        seq = &g_eseq[g_eseq_len++];
-        memset(seq, 0, sizeof(*seq));
-        seq->ease = *ease;
-        seq->total = total_steps;
+        scene->frame_index_map[scene->frame_index_map_len++] = frame_index;
+        scene->easing_total_steps += 1;
     }
-    size_t want = (size_t)step + 1;
-    if (want > seq->len) {
-        if (want > seq->cap) {
-            size_t cap = seq->cap ? seq->cap : 16;
-            while (cap < want) {
-                cap *= 2;
-            }
-            int32_t *grown = realloc(seq->vals, cap * sizeof(*grown));
+    return 0;
+}
+
+int scene_append_frames(Scene *dst, const Scene *src) {
+    for (size_t i = 0; i < src->all_frames_len; i++) {
+        const Frame *from = &src->all_frames[i];
+        if (from->duration < 1) {
+            return -1;
+        }
+        if (dst->all_frames_len == dst->all_frames_cap) {
+            size_t cap = dst->all_frames_cap ? dst->all_frames_cap * 2 : 8;
+            Frame *grown = realloc(dst->all_frames, cap * sizeof(Frame));
             if (!grown) {
-                return eased_compute(ease, total_steps, step);
+                return -1;
             }
-            seq->vals = grown;
-            seq->cap = cap;
+            dst->all_frames = grown;
+            dst->all_frames_cap = cap;
         }
-        for (size_t i = seq->len; i < want; i++) {
-            seq->vals[i] = eased_compute(ease, total_steps, (int64_t)i);
-        }
-        seq->len = want;
-    }
-    return seq->vals[step];
-}
-
-void vis_pool_reset(void) {
-    for (size_t i = 0; i < g_pool_cap; i++) {
-        if (g_pool[i].vis) {
-            vis_destroy(g_pool[i].vis);
-        }
-    }
-    free(g_pool);
-    sb_free(&g_fmt_scratch);
-    g_pool = NULL;
-    g_pool_cap = 0;
-    g_pool_live = 0;
-    g_pool_used = 0;
-}
-
-static void vis_pool_grow(void) {
-    size_t old_cap = g_pool_cap;
-    VisPoolSlot *old = g_pool;
-    g_pool_cap = old_cap ? old_cap * 2 : 32;
-    g_pool = calloc(g_pool_cap, sizeof(VisPoolSlot));
-    if (!g_pool) {
-        g_pool = old;
-        g_pool_cap = old_cap;
-        return;
-    }
-    g_pool_live = 0;
-    g_pool_used = 0;
-    for (size_t i = 0; i < old_cap; i++) {
-        if (!old[i].vis) {
-            continue;
-        }
-        size_t mask = g_pool_cap - 1;
-        size_t j = old[i].hash & mask;
-        while (g_pool[j].occupied) {
-            j = (j + 1) & mask;
-        }
-        g_pool[j] = old[i];
-        g_pool[j].occupied = true;
-        old[i].vis->pool_slot = j;
-        g_pool_live++;
-        g_pool_used++;
-    }
-    free(old);
-}
-
-CharacterVisual *vis_new(const char *symbol, const VisualParams *params) {
-    VisKey key;
-    vis_key_build(params, &key);
-    uint64_t h = vis_hash(symbol, &key);
-    if (!g_pool_atexit) {
-        atexit(vis_pool_reset);
-        g_pool_atexit = true;
-    }
-    if (g_pool_cap == 0 || (g_pool_used + 1) * 2 >= g_pool_cap) {
-        vis_pool_grow();
-        if (!g_pool) {
-            return NULL;
-        }
-    }
-    size_t mask = g_pool_cap - 1;
-    size_t i = h & mask;
-    size_t first_dead = SIZE_MAX;
-    while (g_pool[i].occupied) {
-        if (g_pool[i].vis) {
-            if (g_pool[i].hash == h && vis_matches(g_pool[i].vis, symbol, &key)) {
-                g_pool[i].vis->refcount++;
-                return g_pool[i].vis;
+        size_t frame_index = dst->all_frames_len++;
+        Frame *frame = &dst->all_frames[frame_index];
+        frame->visual = from->visual;
+        frame->duration = from->duration;
+        frame->ticks_elapsed = 0;
+        iq_push_back(&dst->frames, frame_index);
+        for (int64_t k = 0; k < frame->duration; k++) {
+            if (dst->frame_index_map_len == dst->frame_index_map_cap) {
+                size_t cap = dst->frame_index_map_cap ? dst->frame_index_map_cap * 2 : 16;
+                size_t *grown = realloc(dst->frame_index_map, cap * sizeof(size_t));
+                if (!grown) {
+                    return -1;
+                }
+                dst->frame_index_map = grown;
+                dst->frame_index_map_cap = cap;
             }
-        } else if (first_dead == SIZE_MAX) {
-            first_dead = i;
+            dst->frame_index_map[dst->frame_index_map_len++] = frame_index;
+            dst->easing_total_steps += 1;
         }
-        i = (i + 1) & mask;
     }
-    size_t slot = first_dead != SIZE_MAX ? first_dead : i;
-    bool reuse = g_pool[slot].occupied;
-    CharacterVisual *vis = vis_alloc(symbol, params, &key);
-    if (!vis) {
-        return NULL;
-    }
-    g_pool[slot].hash = h;
-    g_pool[slot].vis = vis;
-    g_pool[slot].occupied = true;
-    if (!reuse) {
-        g_pool_used++;
-    }
-    g_pool_live++;
-    vis->pool_slot = slot;
-    return vis;
-}
-
-CharacterVisual *vis_ref(CharacterVisual *vis) {
-    if (vis) {
-        vis->refcount++;
-    }
-    return vis;
-}
-
-void vis_unref(CharacterVisual *vis) {
-    if (!vis || --vis->refcount > 0) {
-        return;
-    }
-    if (g_pool && vis->pool_slot < g_pool_cap && g_pool[vis->pool_slot].vis == vis) {
-        g_pool[vis->pool_slot].vis = NULL;  // stays occupied so probing never stops early
-        g_pool_live--;
-    }
-    vis_destroy(vis);
+    return 0;
 }
 
 // --- IndexDeque -----------------------------------------------------------
@@ -493,139 +245,11 @@ void iq_append(IndexDeque *dst, IndexDeque *src) {
     }
 }
 
-// --- Scene ----------------------------------------------------------------
 
-static Scene *scene_new(const char *scene_id, bool is_looping, bool has_sync, SyncMetric sync, bool has_ease,
-                        Easing ease, bool no_color, bool use_xterm_colors) {
-    Scene *scene = calloc(1, sizeof(Scene));
-    if (!scene) {
-        return NULL;
-    }
-    scene->scene_id = dup_cstr(scene_id);
-    scene->is_looping = is_looping;
-    scene->no_color = no_color;
-    scene->use_xterm_colors = use_xterm_colors;
-    scene->has_sync = has_sync;
-    scene->sync = sync;
-    scene->has_ease = has_ease;
-    scene->ease = ease;
-    iq_init(&scene->frames);
-    iq_init(&scene->played_frames);
-    return scene;
-}
-
-void scene_free(Scene *scene) {
-    if (!scene) {
-        return;
-    }
-    for (size_t i = 0; i < scene->all_frames_len; i++) {
-        vis_unref(scene->all_frames[i].visual);
-    }
-    free(scene->all_frames);
-    free(scene->scene_id);
-    free(scene->frame_index_map);
-    iq_free(&scene->frames);
-    iq_free(&scene->played_frames);
-    free(scene);
-}
-
-int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const VisualParams *params_in) {
-    VisualParams params = *params_in;
-    if (scene->has_preexisting_colors) {
-        params.colors = scene->preexisting_colors;
-        params.has_colors = true;
-    }
-    if (scene->preexisting_bold) {
-        params.bold = true;
-    }
-    if (params.has_colors) {
-        params.has_fg_code =
-            resolve_color_code(params.colors.has_fg, &params.colors.fg, scene->no_color, scene->use_xterm_colors,
-                               &params.fg_code);
-        params.has_bg_code =
-            resolve_color_code(params.colors.has_bg, &params.colors.bg, scene->no_color, scene->use_xterm_colors,
-                               &params.bg_code);
-    } else {
-        params.has_fg_code = false;
-        params.has_bg_code = false;
-    }
-    if (duration < 1) {
-        return -1;
-    }
-    if (scene->all_frames_len == scene->all_frames_cap) {
-        size_t cap = scene->all_frames_cap ? scene->all_frames_cap * 2 : 8;
-        Frame *grown = realloc(scene->all_frames, cap * sizeof(Frame));
-        if (!grown) {
-            return -1;
-        }
-        scene->all_frames = grown;
-        scene->all_frames_cap = cap;
-    }
-    size_t frame_index = scene->all_frames_len++;
-    Frame *frame = &scene->all_frames[frame_index];
-    memset(frame, 0, sizeof(*frame));
-    frame->visual = vis_new(symbol, &params);
-    frame->duration = duration;
-    frame->ticks_elapsed = 0;
-    iq_push_back(&scene->frames, frame_index);
-    for (int64_t i = 0; i < duration; i++) {
-        if (scene->frame_index_map_len == scene->frame_index_map_cap) {
-            size_t cap = scene->frame_index_map_cap ? scene->frame_index_map_cap * 2 : 16;
-            size_t *grown = realloc(scene->frame_index_map, cap * sizeof(size_t));
-            if (!grown) {
-                return -1;
-            }
-            scene->frame_index_map = grown;
-            scene->frame_index_map_cap = cap;
-        }
-        scene->frame_index_map[scene->frame_index_map_len++] = frame_index;
-        scene->easing_total_steps += 1;
-    }
-    return 0;
-}
-
-int scene_append_frames(Scene *dst, const Scene *src) {
-    for (size_t i = 0; i < src->all_frames_len; i++) {
-        const Frame *from = &src->all_frames[i];
-        if (from->duration < 1) {
-            return -1;
-        }
-        if (dst->all_frames_len == dst->all_frames_cap) {
-            size_t cap = dst->all_frames_cap ? dst->all_frames_cap * 2 : 8;
-            Frame *grown = realloc(dst->all_frames, cap * sizeof(Frame));
-            if (!grown) {
-                return -1;
-            }
-            dst->all_frames = grown;
-            dst->all_frames_cap = cap;
-        }
-        size_t frame_index = dst->all_frames_len++;
-        Frame *frame = &dst->all_frames[frame_index];
-        frame->visual = vis_ref(from->visual);
-        frame->duration = from->duration;
-        frame->ticks_elapsed = 0;
-        iq_push_back(&dst->frames, frame_index);
-        for (int64_t k = 0; k < frame->duration; k++) {
-            if (dst->frame_index_map_len == dst->frame_index_map_cap) {
-                size_t cap = dst->frame_index_map_cap ? dst->frame_index_map_cap * 2 : 16;
-                size_t *grown = realloc(dst->frame_index_map, cap * sizeof(size_t));
-                if (!grown) {
-                    return -1;
-                }
-                dst->frame_index_map = grown;
-                dst->frame_index_map_cap = cap;
-            }
-            dst->frame_index_map[dst->frame_index_map_len++] = frame_index;
-            dst->easing_total_steps += 1;
-        }
-    }
-    return 0;
-}
-
-int scene_activate(const Scene *scene, CharacterVisual **out, size_t *frame_index) {
+int scene_activate(const Scene *scene, VisualHandle *out, size_t *frame_index) {
     size_t head;
     if (!iq_peek_front(&scene->frames, &head)) {
-        *out = NULL;
+        *out = 0;
         *frame_index = 0;
         return -1;
     }
@@ -634,10 +258,10 @@ int scene_activate(const Scene *scene, CharacterVisual **out, size_t *frame_inde
     return 0;
 }
 
-void scene_get_next_visual(Scene *scene, CharacterVisual **out, size_t *frame_index) {
+void scene_get_next_visual(Scene *scene, VisualHandle *out, size_t *frame_index) {
     size_t head;
     if (!iq_peek_front(&scene->frames, &head)) {
-        *out = NULL;
+        *out = 0;
         *frame_index = 0;
         return;
     }
@@ -841,12 +465,93 @@ int scene_apply_gradient_to_symbols(Scene *scene, const char *const *symbols, si
 
 // --- Animation ------------------------------------------------------------
 
+// --- eased frame-index memo -----------------------------------------------
+// step_eased_scene evaluates an easing curve and rounds to a frame index once
+// per character per tick. Both the curve and the rounding depend only on the
+// scene's easing and step count, so one table per distinct (ease, total_steps)
+// serves every character and removes the libm call from the hot path.
+typedef struct {
+    Easing ease;
+    int64_t total;
+    int32_t *vals;
+    size_t len;
+    size_t cap;
+} EasedSeq;
+
+static EasedSeq *g_eseq;
+static size_t g_eseq_len;
+static size_t g_eseq_cap;
+
+static int32_t eased_compute(const Easing *e, int64_t total, int64_t step) {
+    int64_t final = total > 1 ? total - 1 : 0;
+    double ratio = (double)step / (double)total;
+    int64_t idx = py_round_half_even(easing_ease(e, ratio) * (double)final);
+    if (idx > final) {
+        idx = final;
+    }
+    if (idx < 0) {
+        idx = 0;
+    }
+    return (int32_t)idx;
+}
+
+int64_t eased_frame_index(const Easing *ease, int64_t total_steps, int64_t step) {
+    if (total_steps <= 0 || step < 0) {
+        return 0;
+    }
+    EasedSeq *seq = NULL;
+    for (size_t i = 0; i < g_eseq_len; i++) {
+        if (g_eseq[i].total == total_steps && g_eseq[i].ease.kind == ease->kind &&
+            g_eseq[i].ease.x1 == ease->x1 && g_eseq[i].ease.y1 == ease->y1 &&
+            g_eseq[i].ease.x2 == ease->x2 && g_eseq[i].ease.y2 == ease->y2) {
+            seq = &g_eseq[i];
+            break;
+        }
+    }
+    if (!seq) {
+        if (g_eseq_len == g_eseq_cap) {
+            size_t cap = g_eseq_cap ? g_eseq_cap * 2 : 8;
+            EasedSeq *grown = realloc(g_eseq, cap * sizeof(*grown));
+            if (!grown) {
+                return eased_compute(ease, total_steps, step);
+            }
+            g_eseq = grown;
+            g_eseq_cap = cap;
+        }
+        seq = &g_eseq[g_eseq_len++];
+        memset(seq, 0, sizeof(*seq));
+        seq->ease = *ease;
+        seq->total = total_steps;
+    }
+    size_t want = (size_t)step + 1;
+    if (want > seq->len) {
+        if (want > seq->cap) {
+            size_t cap = seq->cap ? seq->cap : 16;
+            while (cap < want) {
+                cap *= 2;
+            }
+            int32_t *grown = realloc(seq->vals, cap * sizeof(*grown));
+            if (!grown) {
+                return eased_compute(ease, total_steps, step);
+            }
+            seq->vals = grown;
+            seq->cap = cap;
+        }
+        for (size_t i = seq->len; i < want; i++) {
+            seq->vals[i] = eased_compute(ease, total_steps, (int64_t)i);
+        }
+        seq->len = want;
+    }
+    return seq->vals[step];
+}
+
+
 void animation_init(Animation *anim, const char *input_symbol) {
     memset(anim, 0, sizeof(*anim));
     om_init(&anim->scenes);
     anim->input_symbol = dup_cstr(input_symbol);
     anim->existing_color_handling = EXISTING_COLOR_IGNORE;
-    anim->current_visual = vis_new_plain(input_symbol);
+    anim->current_visual = visual_make(input_symbol, &(VisualParams){0});
 }
 
 void animation_free(Animation *anim) {
@@ -856,7 +561,6 @@ void animation_free(Animation *anim) {
     om_free(&anim->scenes);
     free(anim->input_symbol);
     free(anim->active_scene);
-    vis_unref(anim->current_visual);
     memset(anim, 0, sizeof(*anim));
 }
 
@@ -892,63 +596,14 @@ void animation_set_appearance(Animation *anim, bool uses_input_preexisting_color
             resolve_color_code(true, &effective.bg, anim->no_color, anim->use_xterm_colors, &params.bg_code);
     }
 
-    CharacterVisual *cur = anim->current_visual;
-    // The reference reuses the current visual's allocation when it is uniquely
-    // owned (Rc::get_mut), so restyling costs no allocation and a no-op restyle
-    // costs nothing at all. Same rule here: a visual nobody else references and
-    // that never entered the pool can be restyled in place.
-    if (cur && cur->refcount == 1 && cur->pool_slot == SIZE_MAX) {
-        bool params_same = cur->bold == params.bold && cur->dim == params.dim &&
-                           cur->italic == params.italic && cur->underline == params.underline &&
-                           cur->blink == params.blink && cur->reverse == params.reverse &&
-                           cur->hidden == params.hidden && cur->strike == params.strike &&
-                           cur->has_colors == params.has_colors &&
-                           memcmp(&cur->colors, &params.colors, sizeof(ColorPair)) == 0 &&
-                           cur->has_fg_code == params.has_fg_code &&
-                           memcmp(&cur->fg_code, &params.fg_code, sizeof(ColorCode)) == 0 &&
-                           cur->has_bg_code == params.has_bg_code &&
-                           memcmp(&cur->bg_code, &params.bg_code, sizeof(ColorCode)) == 0;
-        bool symbol_same = strcmp(cur->symbol, use_symbol) == 0;
-        if (params_same && symbol_same) {
-            return;
-        }
-        cur->bold = params.bold;
-        cur->dim = params.dim;
-        cur->italic = params.italic;
-        cur->underline = params.underline;
-        cur->blink = params.blink;
-        cur->reverse = params.reverse;
-        cur->hidden = params.hidden;
-        cur->strike = params.strike;
-        cur->has_colors = params.has_colors;
-        cur->colors = params.colors;
-        cur->has_fg_code = params.has_fg_code;
-        cur->fg_code = params.fg_code;
-        cur->has_bg_code = params.has_bg_code;
-        cur->bg_code = params.bg_code;
-        if (!symbol_same) {
-            size_t need = strlen(use_symbol) + 1;
-            char *grown = realloc(cur->symbol, need);
-            if (!grown) {
-                free(cur->symbol);
-                cur->symbol = dup_cstr(use_symbol);
-            } else {
-                memcpy(grown, use_symbol, need);
-                cur->symbol = grown;
-            }
-        }
-        vis_format(cur);
-        cur->version = ++g_vis_version;
-        renderer_handle((CharId)anim->render_id, cur->version);
+    // The pool keys on the appearance, so a restyle to the same look returns
+    // the same handle and costs nothing; a real change interns a new entry.
+    VisualHandle next = visual_make(use_symbol, &params);
+    if (next == 0 || next == anim->current_visual) {
         return;
     }
-    vis_unref(anim->current_visual);
-    // Not pooled: a character's live appearance is unique to it, so a lookup is
-    // pure overhead here (the reference makes the same call).
-    VisKey key;
-    vis_key_build(&params, &key);
-    anim->current_visual = vis_alloc(use_symbol, &params, &key);
-    renderer_handle((CharId)anim->render_id, anim->current_visual ? anim->current_visual->version : 0);
+    anim->current_visual = next;
+    renderer_handle((CharId)anim->render_id, next);
 }
 
 const char *animation_new_scene(Animation *anim, bool is_looping, bool has_sync, SyncMetric sync, bool has_ease,

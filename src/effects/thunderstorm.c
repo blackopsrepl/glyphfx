@@ -572,7 +572,7 @@ static void lightning_strike(Effect *self, EngineCtx *ctx) {
 
     for (size_t i = 0; i < st->pending_strike_chars_len; i++) {
         CharId strike_char = st->pending_strike_chars[i];
-        char *symbol = dup_cstr(ctx->terminal.arena.items[strike_char].animation.current_visual->symbol);
+        char *symbol = dup_cstr(visual_symbol(ctx->terminal.arena.items[strike_char].animation.current_visual));
         bool uses_pre = ctx->terminal.arena.items[strike_char].uses_input_preexisting_colors;
 
         const char *flash_scn = animation_new_scene(&ctx->terminal.arena.items[strike_char].animation, false, false,

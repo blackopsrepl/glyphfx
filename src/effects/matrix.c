@@ -292,7 +292,7 @@ static void rain_fade_last_character(RainColumn *rc, EngineCtx *ctx, const Color
     size_t idx = rng_choice_index(&ctx->rng, tail_len);
     Color darker_color = color_adjust_brightness(&tail[idx], 0.65);
     CharId target = rc->visible[0];
-    char *symbol = dup_cstr(ctx->terminal.arena.items[target].animation.current_visual->symbol);
+    char *symbol = dup_cstr(visual_symbol(ctx->terminal.arena.items[target].animation.current_visual));
     ColorPair colors;
     memset(&colors, 0, sizeof(colors));
     colors.has_fg = true;
@@ -357,7 +357,7 @@ static void rain_tick(RainColumn *rc, EngineCtx *ctx, const MatrixConfig *cfg, c
             if (rc->visible_len > 0) {
                 CharId previous_character = rc->visible[rc->visible_len - 1];
                 char *prev_symbol =
-                    dup_cstr(ctx->terminal.arena.items[previous_character].animation.current_visual->symbol);
+                    dup_cstr(visual_symbol(ctx->terminal.arena.items[previous_character].animation.current_visual));
                 Color fg = rain_colors[rng_choice_index(&ctx->rng, rain_colors_len)];
                 ColorPair colors;
                 memset(&colors, 0, sizeof(colors));
@@ -370,11 +370,13 @@ static void rain_tick(RainColumn *rc, EngineCtx *ctx, const MatrixConfig *cfg, c
             id_push(&rc->visible, &rc->visible_len, &rc->visible_cap, next_char);
         } else if (rc->visible_len > 0) {
             CharId last_char = rc->visible[rc->visible_len - 1];
-            CharacterVisual *visual = ctx->terminal.arena.items[last_char].animation.current_visual;
-            bool last_is_highlight = visual->has_colors && visual->colors.has_fg &&
-                                     color_eq(&visual->colors.fg, &cfg->highlight_color);
+            VisualHandle visual = ctx->terminal.arena.items[last_char].animation.current_visual;
+            Color vfg, vbg;
+            uint8_t vattrs = 0;
+            bool has_colors = visual_colors(visual, &vfg, &vbg, &vattrs);
+            bool last_is_highlight = has_colors && color_eq(&vfg, &cfg->highlight_color);
             if (last_is_highlight) {
-                char *symbol = dup_cstr(visual->symbol);
+                char *symbol = dup_cstr(visual_symbol(visual));
                 Color fg = rain_colors[rng_choice_index(&ctx->rng, rain_colors_len)];
                 ColorPair colors;
                 memset(&colors, 0, sizeof(colors));
@@ -422,11 +424,13 @@ static void rain_tick(RainColumn *rc, EngineCtx *ctx, const MatrixConfig *cfg, c
             continue;
         }
 
-        CharacterVisual *visual = ctx->terminal.arena.items[character].animation.current_visual;
-        bool symbol_unchanged = !has_next_symbol || (visual->symbol && strcmp(next_symbol, visual->symbol) == 0);
-        bool color_unchanged =
-            !has_next_color ||
-            (visual->has_colors && visual->colors.has_fg && color_eq(&visual->colors.fg, &next_color));
+        VisualHandle visual = ctx->terminal.arena.items[character].animation.current_visual;
+        const char *vsym = visual_symbol(visual);
+        Color vfg, vbg;
+        uint8_t vattrs = 0;
+        bool visual_has_color = visual_colors(visual, &vfg, &vbg, &vattrs);
+        bool symbol_unchanged = !has_next_symbol || (vsym && strcmp(next_symbol, vsym) == 0);
+        bool color_unchanged = !has_next_color || (visual_has_color && color_eq(&vfg, &next_color));
         if (symbol_unchanged && color_unchanged) {
             continue;
         }
@@ -438,17 +442,19 @@ static void rain_tick(RainColumn *rc, EngineCtx *ctx, const MatrixConfig *cfg, c
             colors.fg = next_color;
             matrix_set_appearance(ctx, character, next_symbol, &colors);
         } else if (has_next_symbol) {
-            CharacterVisual *v = ctx->terminal.arena.items[character].animation.current_visual;
+            VisualHandle v = ctx->terminal.arena.items[character].animation.current_visual;
             ColorPair colors;
             memset(&colors, 0, sizeof(colors));
-            if (v->has_colors && v->colors.has_fg) {
+            Color vf, vb;
+            uint8_t va = 0;
+            if (visual_colors(v, &vf, &vb, &va)) {
                 colors.has_fg = true;
-                colors.fg = v->colors.fg;
+                colors.fg = vf;
             }
             matrix_set_appearance(ctx, character, next_symbol, &colors);
         } else {
-            CharacterVisual *v = ctx->terminal.arena.items[character].animation.current_visual;
-            char *symbol = dup_cstr(v->symbol);
+            VisualHandle v = ctx->terminal.arena.items[character].animation.current_visual;
+            char *symbol = dup_cstr(visual_symbol(v));
             ColorPair colors;
             memset(&colors, 0, sizeof(colors));
             colors.has_fg = true;

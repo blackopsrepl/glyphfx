@@ -51,8 +51,7 @@ void renderer_move_impl(CharId id, Coord coord) {
         // Entering a cell: the layer and visual matter from here on, so they
         // are logged before the move.
         rlog_push(id, RLOG_LAYER, (uint32_t)t->arena.items[id].layer);
-        const CharacterVisual *vis = t->arena.items[id].animation.current_visual;
-        rlog_push(id, RLOG_HANDLE, vis ? vis->version : 0);
+        rlog_push(id, RLOG_HANDLE, t->arena.items[id].animation.current_visual);
     }
     rlog_push(id, RLOG_MOVE, (uint32_t)cell);
 }

@@ -442,9 +442,8 @@ void terminal_free(Terminal *t) {
     free(t->visible_positions);
     free(t->render_cells);
     free(t->cell_visual);
-    free(t->cell_version);
     free(t->prev_cells);
-    free(t->prev_version);
+    free(t->prev_visual);
     free(t->cell_head);
     free(t->cell_next);
     free(t->cell_of_char);
@@ -570,12 +569,10 @@ static void cell_rewin(Terminal *t, int64_t cell, size_t width) {
     }
     t->render_cells[cell] = owner;
     if (owner == RENDER_EMPTY) {
-        t->cell_visual[cell] = NULL;
-        t->cell_version[cell] = 0;
+        t->cell_visual[cell] = 0;
     } else {
-        const CharacterVisual *vis = t->arena.items[owner].animation.current_visual;
+        VisualHandle vis = t->arena.items[owner].animation.current_visual;
         t->cell_visual[cell] = vis;
-        t->cell_version[cell] = vis ? vis->version : 0;
     }
 }
 
@@ -606,9 +603,8 @@ static void grid_move(Terminal *t, CharId id, int32_t new_cell, size_t width) {
                 t->painted_cells++;
             }
             *owner = (uint32_t)id;
-            const CharacterVisual *vis = t->arena.items[id].animation.current_visual;
+            VisualHandle vis = t->arena.items[id].animation.current_visual;
             t->cell_visual[new_cell] = vis;
-            t->cell_version[new_cell] = vis ? vis->version : 0;
         }
     }
 }
@@ -633,9 +629,6 @@ static void grid_replay(Terminal *t, size_t width) {
                 // The serialized bytes come from the character's current visual;
                 // the logged version only drives the row cache's change test.
                 t->cell_visual[cell] = t->arena.items[id].animation.current_visual;
-                if (t->cell_version[cell] != value) {
-                    t->cell_version[cell] = value;
-                }
             }
         } else {
             int32_t cell = t->cell_of_char[id];
@@ -682,12 +675,12 @@ static void grid_walk(Terminal *t, size_t width, size_t height, bool lists) {
             }
             *owner = (uint32_t)id;
         }
-        const CharacterVisual *vis = ch->animation.current_visual;
+        VisualHandle vis = ch->animation.current_visual;
         t->cell_visual[cell] = vis;
         // The version grid only feeds the row cache; skip its load and store
         // while the cache is off so a repaint costs what it always did.
         if (t->cache_on) {
-            t->cell_version[cell] = vis ? vis->version : 0;
+            t->cell_visual[cell] = vis;
             painted++;
         }
     }
@@ -779,39 +772,30 @@ static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_heig
     *out_height = height;
 }
 
+// Copies a visual's bytes from its pool handle. The pool guarantees 128
+// readable bytes from a visual's start, so a short visual costs one bounded
+// vector copy and no branch on the length.
+static inline void emit_handle(char *dst, VisualHandle h) {
+    size_t len = visual_len(h);
+    if (len <= 16) {
+        memcpy(dst, visual_bytes(h), 16);
+    } else if (len <= 32) {
+        memcpy(dst, visual_bytes(h), 32);
+    } else {
+        memcpy(dst, visual_bytes(h), VISUAL_MAX);
+    }
+}
+
 static void serialize_row(const Terminal *t, size_t row_index, size_t width, StrBuf *dst) {
     static const char SPACES[] = "                                                                ";  // 64 spaces
     const size_t BLOCK = sizeof(SPACES) - 1;
     const uint32_t *row = &t->render_cells[row_index * width];
+    const VisualHandle *handles = &t->cell_visual[row_index * width];
+    // Every inline cell writes at most VISUAL_MAX bytes; reserve once so the
+    // loop needs no capacity test.
+    sb_reserve(dst, width * VISUAL_MAX + 2);
     size_t col = 0;
     while (col < width) {
-        // Four cells per iteration (render.asm's emission quad): when all four
-        // are filled by inline visuals, one capacity check and one unrolled
-        // copy sequence replace four branchy single-cell iterations.
-        if (col + 4 <= width && row[col] != RENDER_EMPTY && row[col + 1] != RENDER_EMPTY &&
-            row[col + 2] != RENDER_EMPTY && row[col + 3] != RENDER_EMPTY) {
-            const CharacterVisual *v0 = t->cell_visual[row_index * width + col];
-            const CharacterVisual *v1 = t->cell_visual[row_index * width + col + 1];
-            const CharacterVisual *v2 = t->cell_visual[row_index * width + col + 2];
-            const CharacterVisual *v3 = t->cell_visual[row_index * width + col + 3];
-            if (v0 && v1 && v2 && v3 && !v0->formatted_heap && !v1->formatted_heap && !v2->formatted_heap &&
-                !v3->formatted_heap) {
-                if (dst->len + 4 * VIS_INLINE_FMT_CAP + 1 > dst->cap) {
-                    sb_grow(dst, dst->len + 4 * VIS_INLINE_FMT_CAP);
-                }
-                memcpy(dst->data + dst->len, v0->formatted_inline, VIS_INLINE_FMT_CAP);
-                dst->len += v0->formatted_len;
-                memcpy(dst->data + dst->len, v1->formatted_inline, VIS_INLINE_FMT_CAP);
-                dst->len += v1->formatted_len;
-                memcpy(dst->data + dst->len, v2->formatted_inline, VIS_INLINE_FMT_CAP);
-                dst->len += v2->formatted_len;
-                memcpy(dst->data + dst->len, v3->formatted_inline, VIS_INLINE_FMT_CAP);
-                dst->len += v3->formatted_len;
-                dst->data[dst->len] = '\0';
-                col += 4;
-                continue;
-            }
-        }
         if (row[col] == RENDER_EMPTY) {
             size_t run = 1;
             while (col + run < width && row[col + run] == RENDER_EMPTY) {
@@ -825,22 +809,12 @@ static void serialize_row(const Terminal *t, size_t row_index, size_t width, Str
             }
             col += run;
         } else {
-            const CharacterVisual *vis = t->cell_visual[row_index * width + col];
-            if (vis->formatted_heap) {
-                sb_append(dst, vis->formatted_heap, vis->formatted_len);
-            } else {
-                // Copy the whole fixed inline block in one move and publish only
-                // the real length, avoiding a variable-length memcpy call.
-                if (dst->len + VIS_INLINE_FMT_CAP + 1 > dst->cap) {
-                    sb_grow(dst, dst->len + VIS_INLINE_FMT_CAP);
-                }
-                memcpy(dst->data + dst->len, vis->formatted_inline, VIS_INLINE_FMT_CAP);
-                dst->len += vis->formatted_len;
-                dst->data[dst->len] = '\0';
-            }
+            emit_handle(dst->data + dst->len, handles[col]);
+            dst->len += visual_len(handles[col]);
             col++;
         }
     }
+    dst->data[dst->len] = '\0';
 }
 
 static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
@@ -849,9 +823,8 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
         return;
     }
     free(t->cell_visual);
-    free(t->cell_version);
     free(t->prev_cells);
-    free(t->prev_version);
+    free(t->prev_visual);
     free(t->cell_head);
     free(t->cell_next);
     free(t->cell_of_char);
@@ -864,9 +837,8 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
         free(t->row_caps);
     }
     t->cell_visual = malloc((cells ? cells : 1) * sizeof(*t->cell_visual));
-    t->cell_version = malloc((cells ? cells : 1) * sizeof(uint32_t));
     t->prev_cells = malloc((cells ? cells : 1) * sizeof(uint32_t));
-    t->prev_version = malloc((cells ? cells : 1) * sizeof(uint32_t));
+    t->prev_visual = malloc((cells ? cells : 1) * sizeof(VisualHandle));
     t->cell_head = malloc((cells ? cells : 1) * sizeof(int32_t));
     t->cell_next = malloc((t->arena.len ? t->arena.len : 1) * sizeof(int32_t));
     t->cell_of_char = malloc((t->arena.len ? t->arena.len : 1) * sizeof(int32_t));
@@ -908,9 +880,9 @@ static bool row_is_clean(const Terminal *t, size_t row_index, size_t width) {
     if (memcmp(cur_owner, prev_owner, width * sizeof(uint32_t)) != 0) {
         return false;
     }
-    const uint32_t *cur_ver = &t->cell_version[row_index * width];
-    const uint32_t *prev_ver = &t->prev_version[row_index * width];
-    return memcmp(cur_ver, prev_ver, width * sizeof(uint32_t)) == 0;
+    const VisualHandle *cur = &t->cell_visual[row_index * width];
+    const VisualHandle *prev = &t->prev_visual[row_index * width];
+    return memcmp(cur, prev, width * sizeof(VisualHandle)) == 0;
 }
 
 // Render the frame into the per-row buffers. A row whose owner and version
@@ -953,8 +925,8 @@ void terminal_render_rows(Terminal *t) {
         if (cached) {
             memcpy(&t->prev_cells[row_index * width], &t->render_cells[row_index * width],
                    width * sizeof(uint32_t));
-            memcpy(&t->prev_version[row_index * width], &t->cell_version[row_index * width],
-                   width * sizeof(uint32_t));
+            memcpy(&t->prev_visual[row_index * width], &t->cell_visual[row_index * width],
+                   width * sizeof(VisualHandle));
         }
     }
     t->last_width = width;

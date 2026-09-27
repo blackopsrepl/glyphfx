@@ -282,10 +282,8 @@ static int overflow_build(Effect *self, EngineCtx *ctx) {
         for (size_t k = 0; k < row->len; k++) {
             CharId id = row->items[k];
             EffectCharacter *ch = &ctx->terminal.arena.items[id];
-            // The reference clones current_character_visual.symbol before the
-            // call; set_appearance frees current_visual->symbol, so an alias
-            // would be a use-after-free.
-            const char *current_symbol = ch->animation.current_visual->symbol;
+            // Pool symbols are interned and immutable, so the alias is safe.
+            const char *current_symbol = visual_symbol(ch->animation.current_visual);
             char *current_symbol_copy = malloc(strlen(current_symbol) + 1);
             strcpy(current_symbol_copy, current_symbol);
             bool uses_pre = ch->uses_input_preexisting_colors;

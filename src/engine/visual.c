@@ -25,14 +25,19 @@
 // [9] attribute bits; [12,44) the logical ColorPair, each colour packed as
 // (is_xterm, xterm, hex_len, hex bytes, rgb). Zero-padded so the header is a
 // deterministic interning key: equal headers mean equal bytes.
-#define VH_SYMBOL 0   // const char *: the interned input symbol
-#define VH_DIM 8      // u8, stored but never emitted
-#define VH_ATTRS 9    // u8, VF_* bits
-#define VH_FG 12      // u8 present, then a packed Color (1+1+1+8+3 bytes)
-#define VH_BG 28      // u8 present, then a packed Color
-#define VH_SIZE VISUAL_HEADER
-// A packed color: is_xterm, xterm code, hex length, 8 hex bytes, rgb triple.
-#define VH_COLOR_BYTES (1 + 1 + 1 + 8 + 3)
+// Record layout: a 48-byte packed key (four 64-bit words, the interning key),
+// then the readable logical header. The key is what the bytes are a function
+// of, so equal keys mean equal bytes; the logical header keeps what the visual
+// *is* for effects that read it back.
+#define VK_WORDS 6
+#define VK_BYTES (VK_WORDS * 8)
+#define VK_END VK_BYTES
+#define VH_SYMBOL VK_END      // u64 const char * (logical)
+#define VH_DIM (VK_END + 8)   // u8
+#define VH_ATTRS (VK_END + 9) // u8
+#define VH_FG (VK_END + 12)   // u8 present, then a packed Color
+#define VH_BG (VK_END + 28)   // u8 present, then a packed Color
+#define VH_SIZE 96
 
 const char *g_visual_pool;
 
@@ -75,6 +80,9 @@ void visual_init(void) {
 #endif
     visual_table_alloc(TABLE_INITIAL);
     g_hdr = calloc(1, VH_SIZE);
+    if (!g_hdr) {
+        visual_oom();
+    }
     g_fmt_cap = 256;
     g_fmt = malloc(g_fmt_cap);
     if (!g_hdr || !g_fmt) {
@@ -113,18 +121,46 @@ static void visual_table_alloc(uint32_t capacity) {
     g_table_used = 0;
 }
 
-// The header hash. Only probe order depends on it, never a handle.
-static uint64_t header_hash(const char *h) {
-    uint64_t x = 0x9e3779b97f4a7c15ULL;
-    for (size_t i = 0; i < VH_SIZE; i++) {
-        x = (x ^ (unsigned char)h[i]) * 0x100000001b3ULL;
-    }
-    return x ? x : 1;
+// A code packs into two words: its kind/xterm/presence, and its full 16-byte
+// hex buffer (a code's hex may hold more than 8 digits, and code_key_eq
+// compares all 16 bytes). No field is dropped, so equal keys mean equal bytes.
+static void pack_code(const ColorCode *c, bool has, uint64_t out[2]) {
+    out[0] = (uint64_t)(has ? 1u : 0u) | ((uint64_t)(uint8_t)c->kind << 1) |
+             ((uint64_t)c->xterm << 9);
+    memcpy(&out[1], c->hex, sizeof(c->hex));
 }
 
-// Writes one colour into the header in a form that matches color_eq: is_xterm,
-// the xterm code, the declared hex bytes, and the rgb triple. Only color_eq's
-// fields are keyed, so the header is deterministic.
+// Four multiplies over four words, as the asm engine's VISUAL_HASH does; only
+// probe order depends on it, never a handle.
+static uint64_t key_hash(const uint64_t *w) {
+    uint64_t x = 0x9e3779b97f4a7c15ULL;
+    uint64_t h = 0xcbf29ce484222325ULL;
+    for (int i = 0; i < VK_WORDS; i++) {
+        h = (h ^ w[i]) * x;
+        h = (h >> 29) | (h << 35);
+    }
+    return h;
+}
+
+static void key_build(const struct VisualParams *p, const char *symbol) {
+    const char *interned = strtab_intern(symbol ? symbol : "");
+    uint64_t *w = (uint64_t *)g_hdr;
+    w[0] = (uint64_t)(uintptr_t)interned;
+    uint8_t attrs = 0;
+    attrs |= p->bold ? VF_BOLD : 0;
+    attrs |= p->italic ? VF_ITALIC : 0;
+    attrs |= p->underline ? VF_UNDERLINE : 0;
+    attrs |= p->blink ? VF_BLINK : 0;
+    attrs |= p->reverse ? VF_REVERSE : 0;
+    attrs |= p->hidden ? VF_HIDDEN : 0;
+    attrs |= p->strike ? VF_STRIKE : 0;
+    w[1] = (uint64_t)attrs | ((uint64_t)(p->colors.has_fg ? 1u : 0u) << 8) |
+           ((uint64_t)(p->colors.has_bg ? 1u : 0u) << 9) | ((uint64_t)(p->dim ? 1u : 0u) << 10);
+    pack_code(&p->fg_code, p->has_fg_code, &w[2]);
+    pack_code(&p->bg_code, p->has_bg_code, &w[4]);
+}
+
+// Writes one colour into the readable header in a form that matches color_eq.
 static void header_put_color(char *at, const Color *c) {
     at[0] = c->is_xterm ? 1 : 0;
     at[1] = (char)c->xterm;
@@ -135,8 +171,7 @@ static void header_put_color(char *at, const Color *c) {
     memcpy(at + 3 + sizeof(c->hex), c->rgb, 3);
 }
 
-static void header_build(const struct VisualParams *p, const char *symbol) {
-    memset(g_hdr, 0, VH_SIZE);
+static void logical_build(const struct VisualParams *p, const char *symbol) {
     const char *interned = strtab_intern(symbol ? symbol : "");
     memcpy(g_hdr + VH_SYMBOL, &interned, sizeof(interned));
     g_hdr[VH_DIM] = p->dim ? 1 : 0;
@@ -155,8 +190,8 @@ static void header_build(const struct VisualParams *p, const char *symbol) {
     header_put_color(g_hdr + VH_BG + 1, &p->colors.bg);
 }
 
-static bool header_equal(const char *a, const char *b) {
-    return memcmp(a, b, VH_SIZE) == 0;
+static bool key_equal(const char *a, const char *b) {
+    return memcmp(a, b, VK_BYTES) == 0;
 }
 
 static inline char *pool_header(uint32_t offset) {
@@ -223,15 +258,16 @@ VisualHandle visual_make(const char *symbol, const struct VisualParams *p) {
     if (strlen(symbol) > VISUAL_MAX) {
         return 0;
     }
-    header_build(p, symbol);
-    uint64_t hash = header_hash(g_hdr);
+    key_build(p, symbol);
+    logical_build(p, symbol);
+    uint64_t hash = key_hash((const uint64_t *)g_hdr);
     uint32_t i = (uint32_t)hash & g_table_mask;
     for (;;) {
         VisEntry *e = &g_table[i];
         if (!e->handle) {
             break;
         }
-        if (e->hash == hash && header_equal(pool_header(e->handle & VISUAL_OFFSET_MASK), g_hdr)) {
+        if (e->hash == hash && key_equal(pool_header(e->handle & VISUAL_OFFSET_MASK), g_hdr)) {
             return e->handle;
         }
         i = (i + 1) & g_table_mask;

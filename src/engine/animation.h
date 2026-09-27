@@ -41,90 +41,10 @@ typedef struct VisualParams {
     ColorCode bg_code;
 } VisualParams;
 
-// Inline capacity for a formatted symbol. A 24-bit foreground and background
-// pair plus a reset is 42 bytes, so all but pathological styling fits. The
-// frame writer copies the whole fixed block and then advances by formatted_len,
-// which avoids a variable-length memcpy call per cell.
-#define VIS_INLINE_FMT_CAP 64
-
-// The appearance key the pool interns on, packed with no padding and no
-// pointers so a candidate can be compared with one memcmp and hashed eight
-// bytes at a time. It mirrors the fields the previous field-by-field
-// comparator used, including `dim` (stored but never emitted) and any colour
-// that had no resolved code, so pooling semantics are unchanged.
-typedef struct {
-    uint16_t attrs;  // bold|dim|italic|underline|blink|reverse|hidden|strike
-    uint8_t has_colors;
-    uint8_t colors_has_fg;
-    uint8_t colors_fg_is_xterm;
-    uint8_t colors_fg_xterm;
-    uint8_t colors_fg_hex_len;
-    char colors_fg_hex[8];
-    uint8_t colors_fg_rgb[3];
-    uint8_t colors_has_bg;
-    uint8_t colors_bg_is_xterm;
-    uint8_t colors_bg_xterm;
-    uint8_t colors_bg_hex_len;
-    char colors_bg_hex[8];
-    uint8_t colors_bg_rgb[3];
-    uint8_t has_fg_code;
-    uint8_t fg_code_kind;
-    uint8_t fg_code_xterm;
-    char fg_code_hex[16];
-    uint8_t has_bg_code;
-    uint8_t bg_code_kind;
-    uint8_t bg_code_xterm;
-    char bg_code_hex[16];
-} VisKey;
-
-typedef struct CharacterVisual {
-    int refcount;
-    size_t pool_slot;  // index in the visual pool while interned
-    // Bumped whenever this visual's rendered bytes change under the same
-    // pointer (in-place restyle) and on every fresh allocation, so a cached
-    // frame can identify byte content by (pointer-free) version alone.
-    uint32_t version;
-    VisKey key;    // packed appearance key; first member so probes touch it hot
-    char *symbol;  // owned
-    bool bold;
-    bool dim;  // stored but never emitted, faithfully
-    bool italic;
-    bool underline;
-    bool blink;
-    bool reverse;
-    bool hidden;
-    bool strike;
-    bool has_colors;
-    ColorPair colors;
-    bool has_fg_code;
-    ColorCode fg_code;
-    bool has_bg_code;
-    ColorCode bg_code;
-    char formatted_inline[VIS_INLINE_FMT_CAP];
-    char *formatted_heap;  // owned; non-NULL only when the bytes don't fit inline
-    size_t formatted_len;
-} CharacterVisual;
-
-static inline const char *vis_formatted(const CharacterVisual *v) {
-    return v->formatted_heap ? v->formatted_heap : v->formatted_inline;
-}
-
-// Visuals are interned by appearance in a process-wide pool so identical looks
-// share one instance, and reference-counted so the pool evicts a visual as soon
-// as nothing holds it. That keeps effects that churn colours (overflow,
-// spotlights) from growing the pool without bound.
-CharacterVisual *vis_new(const char *symbol, const VisualParams *params);
-CharacterVisual *vis_new_plain(const char *symbol);
-CharacterVisual *vis_ref(CharacterVisual *vis);
-void vis_unref(CharacterVisual *vis);
-// Frees every pooled visual; registered at exit, also usable by tests.
-void vis_pool_reset(void);
-
-typedef struct {
-    CharacterVisual *visual;
-    int64_t duration;
-    int64_t ticks_elapsed;
-} Frame;
+// A visual is a handle into the offset-addressed pool (engine/visual.h): the
+// formatted bytes' pool offset and length, with a header that carries what the
+// visual is. Frame and grid store the handle; nothing refcounts.
+#include "engine/visual.h"
 
 // Eased scenes pick a frame index from (ease, total_steps, step) alone, and
 // every character stepping the same scene shape picks the same indices, so the
@@ -149,6 +69,18 @@ void iq_append(IndexDeque *dst, IndexDeque *src);
 static inline size_t iq_len(const IndexDeque *q) {
     return q->len;
 }
+
+typedef struct Frame {
+    VisualHandle visual;
+    int64_t duration;
+    int64_t ticks_elapsed;
+} Frame;
+
+// Eased scenes pick a frame index from (ease, total_steps, step) alone, and
+// every character stepping the same scene shape picks the same indices, so the
+// sequence is memoized per shape instead of recomputing cos/pow and rounding in
+// every character's tick. Identical to evaluating easing_ease directly.
+int64_t eased_frame_index(const Easing *ease, int64_t total_steps, int64_t step);
 
 typedef struct {
     char *scene_id;  // owned
@@ -192,7 +124,7 @@ typedef struct {
     Color input_bg_color;
     bool input_bold;
     int64_t active_scene_current_step;
-    CharacterVisual *current_visual;
+    VisualHandle current_visual;
     int32_t render_id;  // arena index, for the renderer's change log
 } Animation;
 
@@ -228,8 +160,8 @@ int framemo_put(FrameMemo *m, const char *symbol, Color fg, Scene *scene);
 void framemo_free(FrameMemo *m);
 // Returns 0 on success; sets the active frame's visual (borrowed) and its
 // all_frames index.
-int scene_activate(const Scene *scene, CharacterVisual **out, size_t *frame_index);
-void scene_get_next_visual(Scene *scene, CharacterVisual **out, size_t *frame_index);
+int scene_activate(const Scene *scene, VisualHandle *out, size_t *frame_index);
+void scene_get_next_visual(Scene *scene, VisualHandle *out, size_t *frame_index);
 int scene_apply_gradient_to_symbols(Scene *scene, const char *const *symbols, size_t n_symbols, int64_t duration,
                                     const Gradient *fg, const Gradient *bg);
 void scene_reset(Scene *scene);

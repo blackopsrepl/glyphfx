@@ -455,14 +455,13 @@ void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id) {
 
 // Copies the source visual into the character only when the source frame
 // changed; retains the boxed value semantics effects rely on.
-static void set_current_visual(EngineCtx *ctx, CharId id, const CharacterVisual *src) {
+static void set_current_visual(EngineCtx *ctx, CharId id, VisualHandle src) {
     Animation *anim = &ctx->terminal.arena.items[id].animation;
     if (!src || anim->current_visual == src) {
         return;
     }
-    vis_unref(anim->current_visual);
-    anim->current_visual = vis_ref((CharacterVisual *)src);
-    renderer_handle(id, anim->current_visual ? anim->current_visual->version : 0);
+    anim->current_visual = src;
+    renderer_handle(id, src);
 }
 
 void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char *scene_id) {
@@ -471,7 +470,7 @@ void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char
     if (!scene) {
         return;
     }
-    CharacterVisual *src = NULL;
+    VisualHandle src = 0;
     size_t fidx = 0;
     if (scene_activate(scene, &src, &fidx) != 0) {
         return;
@@ -608,7 +607,7 @@ void engine_step_animation(EngineCtx *ctx, Effect *effect, CharId id) {
     } else if (scene->has_ease) {
         step_eased_scene(ctx, id, scene);
     } else {
-        CharacterVisual *src = NULL;
+        VisualHandle src = 0;
         size_t fidx = 0;
         scene_get_next_visual(scene, &src, &fidx);
         set_current_visual(ctx, id, src);
