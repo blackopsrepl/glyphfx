@@ -2,6 +2,21 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
 
+## [0.3.1](https://github.com/blackopsrepl/glyphfx/compare/v0.3.0...v0.3.1) (2026-09-27)
+
+### Performance
+
+* **engine:** resolve the activation path/scene with one lookup ([e1c8421](https://github.com/blackopsrepl/glyphfx/commit/e1c8421d360350e472e3b794994dcc6cf45b00a3))
+* **events:** build caller keys from cached name handles ([60cc199](https://github.com/blackopsrepl/glyphfx/commit/60cc199bba774f6c8bb5cbfae28b8c7fe3a40288))
+* **events:** compare the waypoint name handle before coordinates ([5337c38](https://github.com/blackopsrepl/glyphfx/commit/5337c3817a34af0d82333da01e4bd1d034485c03))
+* **events:** identify event keys by interned name handles ([dc42eae](https://github.com/blackopsrepl/glyphfx/commit/dc42eae802823007be733529ae716fbd62197b9f))
+* **render:** drive the row cache from a dirty-row bitmap ([f7d02ed](https://github.com/blackopsrepl/glyphfx/commit/f7d02edc8421ff3645d5ca2be5c3f81834fcd194))
+* **tools:** bound the benchmark gate ([376178e](https://github.com/blackopsrepl/glyphfx/commit/376178ef7fcb9a4c5e1faeb82c06260411be6af8))
+
+### Documentation
+
+* add the terminal demo suite ([08773af](https://github.com/blackopsrepl/glyphfx/commit/08773afcfe0331b1dbe75e3f70de7be06e91510b))
+
 ## [0.3.0](https://github.com/blackopsrepl/glyphfx/compare/v0.2.1...v0.3.0) (2026-09-27)
 
 ### Performance
