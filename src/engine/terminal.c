@@ -442,7 +442,7 @@ void terminal_free(Terminal *t) {
     free(t->visible_positions);
     free(t->render_cells);
     free(t->cell_visual);
-    free(t->prev_visual);
+    free(t->row_dirty);
     free(t->cell_head);
     free(t->cell_next);
     free(t->cell_of_char);
@@ -454,7 +454,6 @@ void terminal_free(Terminal *t) {
     free(t->row_lens);
     free(t->row_caps);
     free(t->row_sel);
-    free(t->cell_changed);
     free(t->move_cursor_to_top);
     free(t->frame_iov);
     sb_free(&t->output_buffer);
@@ -567,11 +566,10 @@ static void cell_rewin(Terminal *t, int64_t cell, size_t width) {
         t->painted_cells--;
     }
     t->render_cells[cell] = owner;
-    if (owner == RENDER_EMPTY) {
-        t->cell_visual[cell] = 0;
-    } else {
-        VisualHandle vis = t->arena.items[owner].animation.current_visual;
+    VisualHandle vis = owner == RENDER_EMPTY ? 0 : t->arena.items[owner].animation.current_visual;
+    if (t->cell_visual[cell] != vis) {
         t->cell_visual[cell] = vis;
+        t->row_dirty[cell / (int64_t)width] = 1;
     }
 }
 
@@ -603,7 +601,10 @@ static void grid_move(Terminal *t, CharId id, int32_t new_cell, size_t width) {
             }
             *owner = (uint32_t)id;
             VisualHandle vis = t->arena.items[id].animation.current_visual;
-            t->cell_visual[new_cell] = vis;
+            if (t->cell_visual[new_cell] != vis) {
+                t->cell_visual[new_cell] = vis;
+                t->row_dirty[new_cell / (int64_t)width] = 1;
+            }
         }
     }
 }
@@ -625,9 +626,11 @@ static void grid_replay(Terminal *t, size_t width) {
         } else if (kind == RLOG_HANDLE) {
             int32_t cell = t->cell_of_char[id];
             if (cell >= 0 && t->render_cells[cell] == slot) {
-                // The serialized bytes come from the character's current visual;
-                // the logged version only drives the row cache's change test.
-                t->cell_visual[cell] = t->arena.items[id].animation.current_visual;
+                VisualHandle vis = t->arena.items[id].animation.current_visual;
+                if (t->cell_visual[cell] != vis) {
+                    t->cell_visual[cell] = vis;
+                    t->row_dirty[cell / (int64_t)width] = 1;
+                }
             }
         } else {
             int32_t cell = t->cell_of_char[id];
@@ -644,6 +647,7 @@ static void grid_walk(Terminal *t, size_t width, size_t height, bool lists) {
     size_t cell_count = width * height;
     memset(t->render_cells, 0xFF, cell_count * sizeof(uint32_t));
     memset(t->cell_visual, 0, cell_count * sizeof(VisualHandle));
+    t->all_rows_dirty = true;
     size_t painted = 0;
     if (lists) {
         memset(t->cell_head, 0xFF, cell_count * sizeof(int32_t));
@@ -860,7 +864,7 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
     free(t->row_caps);
     free(t->row_sel);
     free(t->cell_visual);
-    free(t->prev_visual);
+    free(t->row_dirty);
     free(t->cell_head);
     free(t->cell_next);
     free(t->cell_of_char);
@@ -875,7 +879,8 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
     t->row_caps = calloc(height ? height : 1, sizeof(size_t));
     t->row_sel = calloc(height ? height : 1, sizeof(uint8_t));
     t->cell_visual = calloc(cells ? cells : 1, sizeof(VisualHandle));
-    t->prev_visual = calloc(cells ? cells : 1, sizeof(VisualHandle));
+    t->row_dirty = calloc(height ? height : 1, sizeof(uint8_t));
+    t->all_rows_dirty = true;
     t->cell_head = malloc((cells ? cells : 1) * sizeof(int32_t));
     t->cell_next = malloc((t->arena.len ? t->arena.len : 1) * sizeof(int32_t));
     t->cell_of_char = malloc((t->arena.len ? t->arena.len : 1) * sizeof(int32_t));
@@ -898,13 +903,8 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
     g_render_verify = verify && verify[0] && verify[0] != '0';
 }
 
-static bool row_is_clean(const Terminal *t, size_t row_index, size_t width) {
-    if (t->row_lens[row_index] == 0) {
-        return false;
-    }
-    const VisualHandle *cur = &t->cell_visual[row_index * width];
-    const VisualHandle *prev = &t->prev_visual[row_index * width];
-    return memcmp(cur, prev, width * sizeof(VisualHandle)) == 0;
+static bool row_is_clean(const Terminal *t, size_t row_index) {
+    return t->row_lens[row_index] != 0 && !t->all_rows_dirty && !t->row_dirty[row_index];
 }
 
 // Renders the frame into the per-row buffers.
@@ -919,7 +919,7 @@ void terminal_render_rows(Terminal *t) {
     size_t blocks = t->row_blocks;
     for (size_t row = height; row-- > 0;) {
         (void)blocks;
-        if (t->row_lens[row] != 0 && row_is_clean(t, row, width)) {
+        if (row_is_clean(t, row)) {
             if (g_render_verify) {
                 StrBuf check;
                 sb_init(&check);
@@ -956,8 +956,9 @@ void terminal_render_rows(Terminal *t) {
         t->row_sel[row] ^= 1;
         t->row_bytes[row] = out;
         t->row_lens[row] = len;
-        memcpy(&t->prev_visual[row * width], &t->cell_visual[row * width], width * sizeof(VisualHandle));
+        t->row_dirty[row] = 0;
     }
+    t->all_rows_dirty = false;
     t->last_width = width;
     t->last_height = height;
     t->last_clean_rows = clean_rows;
