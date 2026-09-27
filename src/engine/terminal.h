@@ -156,6 +156,8 @@ struct Terminal {
     size_t cache_height;
     bool cache_on;
     bool cache_probing;
+    size_t painted_cells;     // winning paints this frame
+    size_t gate_painted;      // painted cells over the gate window
     size_t gate_seen;
     size_t gate_clean;
     size_t probe_backoff;

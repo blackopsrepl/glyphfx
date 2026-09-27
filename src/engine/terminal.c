@@ -543,6 +543,7 @@ static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_heig
     // Clearing with a vector memset costs less than stamping a second epoch
     // array in the paint loop and re-reading it in the write loop (the
     // reference settles the same trade on the side of one array).
+    t->painted_cells = 0;
     if (cell_count) {
         memset(t->render_cells, 0xFF, cell_count * sizeof(uint32_t));
     }
@@ -565,6 +566,7 @@ static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_heig
             if (t->cache_on) {
                 const CharacterVisual *vis = ch->animation.current_visual;
                 t->cell_version[(size_t)(cell - t->render_cells)] = vis ? vis->version : 0;
+                t->painted_cells++;
             }
         }
     }
@@ -637,6 +639,7 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
     t->cache_probing = true;
     t->gate_seen = 0;
     t->gate_clean = 0;
+    t->gate_painted = 0;
     t->probe_backoff = ROW_CACHE_PROBE;
     const char *verify = getenv("GLYPHFX_RENDER_VERIFY");
     g_render_verify = verify && verify[0] && verify[0] != '0';
@@ -723,6 +726,7 @@ const char *terminal_get_formatted_output_string(Terminal *t) {
     if (cached) {
         t->gate_seen++;
         t->gate_clean += clean_rows;
+        t->gate_painted += t->painted_cells;
         // A probe that is hopeless after a few frames is abandoned at once:
         // chaotic effects pay only the abort, and the backoff grows so the
         // probes thin out, while a settled phase still catches the next one.
@@ -732,18 +736,28 @@ const char *terminal_get_formatted_output_string(Terminal *t) {
             row_cache_invalidate(t);
             t->gate_seen = 0;
             t->gate_clean = 0;
+            t->gate_painted = 0;
             if (t->probe_backoff < ROW_CACHE_PROBE_MAX) {
                 t->probe_backoff *= 2;
             }
         } else if (t->gate_seen >= ROW_CACHE_WINDOW) {
             bool keep;
+            // Sparse canvases serialize to little more than space runs, so the
+            // cache's bookkeeping cannot pay for itself there even when rows
+            // stay clean; require a reasonably filled canvas too. Painted cells
+            // measure that directly (visible characters include the off-canvas
+            // and the not-yet-typed).
+            size_t cells = width * height;
+            bool dense = t->gate_painted * 4 >= t->gate_seen * cells;
             if (t->cache_probing) {
-                keep = t->gate_clean * ROW_CACHE_ON_DEN >= t->gate_seen * height * ROW_CACHE_ON_NUM;
+                keep = dense && t->gate_clean * ROW_CACHE_ON_DEN >= t->gate_seen * height * ROW_CACHE_ON_NUM;
             } else {
-                keep = t->gate_clean * ROW_CACHE_KEEP_DEN >= t->gate_seen * height * ROW_CACHE_KEEP_NUM;
+                bool keep_frac = t->gate_clean * ROW_CACHE_KEEP_DEN >= t->gate_seen * height * ROW_CACHE_KEEP_NUM;
+                keep = keep_frac && dense;
             }
             t->gate_seen = 0;
             t->gate_clean = 0;
+            t->gate_painted = 0;
             if (keep) {
                 t->cache_probing = false;
                 t->probe_backoff = ROW_CACHE_PROBE;
@@ -760,6 +774,7 @@ const char *terminal_get_formatted_output_string(Terminal *t) {
         if (t->gate_seen >= t->probe_backoff) {
             t->gate_seen = 0;
             t->gate_clean = 0;
+            t->gate_painted = 0;
             t->cache_on = true;
             t->cache_probing = true;
             row_cache_invalidate(t);
