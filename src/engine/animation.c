@@ -97,12 +97,13 @@ void vis_format(CharacterVisual *vis) {
     vis->formatted_len = len;
 }
 
-static CharacterVisual *vis_alloc(const char *symbol, const VisualParams *params) {
+static CharacterVisual *vis_alloc(const char *symbol, const VisualParams *params, const VisKey *key) {
     CharacterVisual *vis = calloc(1, sizeof(CharacterVisual));
     if (!vis) {
         return NULL;
     }
     vis->refcount = 1;
+    vis->key = *key;
     vis->pool_slot = SIZE_MAX;
     vis->version = ++g_vis_version;
     vis->symbol = dup_cstr(symbol);
@@ -153,84 +154,72 @@ static size_t g_pool_live;
 static size_t g_pool_used;
 static bool g_pool_atexit;
 
-static uint64_t hash_mix(uint64_t h, const void *p, size_t n) {
+static uint64_t hash_bytes(uint64_t h, const void *p, size_t n) {
     const unsigned char *b = p;
-    for (size_t i = 0; i < n; i++) {
-        h ^= b[i];
-        h *= 1099511628211ULL;
+    size_t i = 0;
+    for (; i + 8 <= n; i += 8) {
+        uint64_t v;
+        memcpy(&v, b + i, 8);
+        h = (h ^ v) * 1099511628211ULL;
+        h ^= h >> 29;
+    }
+    for (; i < n; i++) {
+        h = (h ^ b[i]) * 1099511628211ULL;
     }
     return h;
 }
 
-static uint8_t color_hex_len(const Color *c) {
-    return c->hex_len > sizeof(c->hex) ? (uint8_t)sizeof(c->hex) : c->hex_len;
+// Pack the appearance into the fixed key the pool interns on, exactly mirroring
+// the fields the previous field-by-field comparator used: the eight attributes
+// (including `dim`), both colours at their declared hex length, and both
+// resolved codes over the full 16-byte buffer. Padding is zeroed so equal
+// appearances yield byte-equal keys.
+static void vis_key_build(const VisualParams *p, VisKey *k) {
+    memset(k, 0, sizeof(*k));
+    k->attrs = (uint16_t)((p->bold ? 1u : 0) | (p->dim ? 2u : 0) | (p->italic ? 4u : 0) |
+                          (p->underline ? 8u : 0) | (p->blink ? 16u : 0) | (p->reverse ? 32u : 0) |
+                          (p->hidden ? 64u : 0) | (p->strike ? 128u : 0));
+    k->has_colors = p->has_colors ? 1 : 0;
+    k->colors_has_fg = p->colors.has_fg ? 1 : 0;
+    if (p->colors.has_fg) {
+        const Color *c = &p->colors.fg;
+        uint8_t n = c->hex_len > sizeof(c->hex) ? (uint8_t)sizeof(c->hex) : c->hex_len;
+        k->colors_fg_is_xterm = c->is_xterm ? 1 : 0;
+        k->colors_fg_xterm = c->xterm;
+        k->colors_fg_hex_len = n;
+        memcpy(k->colors_fg_hex, c->hex, n);
+        memcpy(k->colors_fg_rgb, c->rgb, 3);
+    }
+    k->colors_has_bg = p->colors.has_bg ? 1 : 0;
+    if (p->colors.has_bg) {
+        const Color *c = &p->colors.bg;
+        uint8_t n = c->hex_len > sizeof(c->hex) ? (uint8_t)sizeof(c->hex) : c->hex_len;
+        k->colors_bg_is_xterm = c->is_xterm ? 1 : 0;
+        k->colors_bg_xterm = c->xterm;
+        k->colors_bg_hex_len = n;
+        memcpy(k->colors_bg_hex, c->hex, n);
+        memcpy(k->colors_bg_rgb, c->rgb, 3);
+    }
+    k->has_fg_code = p->has_fg_code ? 1 : 0;
+    k->fg_code_kind = (uint8_t)p->fg_code.kind;
+    k->fg_code_xterm = p->fg_code.xterm;
+    memcpy(k->fg_code_hex, p->fg_code.hex, sizeof(k->fg_code_hex));
+    k->has_bg_code = p->has_bg_code ? 1 : 0;
+    k->bg_code_kind = (uint8_t)p->bg_code.kind;
+    k->bg_code_xterm = p->bg_code.xterm;
+    memcpy(k->bg_code_hex, p->bg_code.hex, sizeof(k->bg_code_hex));
 }
 
-// A cheap, defined hash over the appearance. It need not be exact: correctness
-// comes from vis_matches(), so a hash collision costs a comparison, never a
-// wrong merge.
-static uint64_t vis_hash(const char *symbol, const VisualParams *p) {
+static uint64_t vis_hash(const char *symbol, const VisKey *k) {
     uint64_t h = 14695981039346656037ULL;
-    for (const unsigned char *s = (const unsigned char *)symbol; *s; s++) {
-        h ^= *s;
-        h *= 1099511628211ULL;
-    }
-    h = hash_mix(h, &p->bold, 9);  // eight attributes plus has_colors
-    h = hash_mix(h, &p->colors.has_fg, 1);
-    h = hash_mix(h, &p->colors.fg.is_xterm, 2);
-    h = hash_mix(h, &p->colors.fg.hex_len, 1);
-    h = hash_mix(h, p->colors.fg.hex, color_hex_len(&p->colors.fg));
-    h = hash_mix(h, p->colors.fg.rgb, 3);
-    h = hash_mix(h, &p->colors.has_bg, 1);
-    h = hash_mix(h, &p->colors.bg.is_xterm, 2);
-    h = hash_mix(h, &p->colors.bg.hex_len, 1);
-    h = hash_mix(h, p->colors.bg.hex, color_hex_len(&p->colors.bg));
-    h = hash_mix(h, p->colors.bg.rgb, 3);
-    h = hash_mix(h, &p->has_fg_code, 1);
-    h = hash_mix(h, &p->fg_code.kind, sizeof(p->fg_code.kind));
-    h = hash_mix(h, &p->fg_code.xterm, 1);
-    h = hash_mix(h, p->fg_code.hex, sizeof(p->fg_code.hex));
-    h = hash_mix(h, &p->has_bg_code, 1);
-    h = hash_mix(h, &p->bg_code.kind, sizeof(p->bg_code.kind));
-    h = hash_mix(h, &p->bg_code.xterm, 1);
-    h = hash_mix(h, p->bg_code.hex, sizeof(p->bg_code.hex));
+    h = hash_bytes(h, k, sizeof(*k));
+    h = hash_bytes(h, symbol, strlen(symbol));
     return h;
 }
 
-static bool color_key_eq(const Color *a, const Color *b) {
-    if (a->is_xterm != b->is_xterm || a->xterm != b->xterm) {
-        return false;
-    }
-    uint8_t ha = color_hex_len(a);
-    uint8_t hb = color_hex_len(b);
-    if (ha != hb) {
-        return false;
-    }
-    if (ha && memcmp(a->hex, b->hex, ha) != 0) {
-        return false;
-    }
-    return a->rgb[0] == b->rgb[0] && a->rgb[1] == b->rgb[1] && a->rgb[2] == b->rgb[2];
-}
-
-static bool code_key_eq(const ColorCode *a, const ColorCode *b) {
-    if (a->kind != b->kind || a->xterm != b->xterm) {
-        return false;
-    }
-    return memcmp(a->hex, b->hex, sizeof(a->hex)) == 0;
-}
-
-// Exact appearance comparison. Mirrors the fields of the serialized key this
-// replaced, so the pool interns the same set of visuals.
-static bool vis_matches(const CharacterVisual *v, const char *symbol, const VisualParams *p) {
-    return strcmp(v->symbol, symbol) == 0
-        && v->bold == p->bold && v->dim == p->dim && v->italic == p->italic
-        && v->underline == p->underline && v->blink == p->blink && v->reverse == p->reverse
-        && v->hidden == p->hidden && v->strike == p->strike
-        && v->has_colors == p->has_colors
-        && v->colors.has_fg == p->colors.has_fg && color_key_eq(&v->colors.fg, &p->colors.fg)
-        && v->colors.has_bg == p->colors.has_bg && color_key_eq(&v->colors.bg, &p->colors.bg)
-        && v->has_fg_code == p->has_fg_code && code_key_eq(&v->fg_code, &p->fg_code)
-        && v->has_bg_code == p->has_bg_code && code_key_eq(&v->bg_code, &p->bg_code);
+// Exact appearance comparison: one memcmp over the packed key plus the symbol.
+static bool vis_matches(const CharacterVisual *v, const char *symbol, const VisKey *k) {
+    return memcmp(&v->key, k, sizeof(*k)) == 0 && strcmp(v->symbol, symbol) == 0;
 }
 
 void vis_pool_reset(void) {
@@ -278,7 +267,9 @@ static void vis_pool_grow(void) {
 }
 
 CharacterVisual *vis_new(const char *symbol, const VisualParams *params) {
-    uint64_t h = vis_hash(symbol, params);
+    VisKey key;
+    vis_key_build(params, &key);
+    uint64_t h = vis_hash(symbol, &key);
     if (!g_pool_atexit) {
         atexit(vis_pool_reset);
         g_pool_atexit = true;
@@ -294,7 +285,7 @@ CharacterVisual *vis_new(const char *symbol, const VisualParams *params) {
     size_t first_dead = SIZE_MAX;
     while (g_pool[i].occupied) {
         if (g_pool[i].vis) {
-            if (g_pool[i].hash == h && vis_matches(g_pool[i].vis, symbol, params)) {
+            if (g_pool[i].hash == h && vis_matches(g_pool[i].vis, symbol, &key)) {
                 g_pool[i].vis->refcount++;
                 return g_pool[i].vis;
             }
@@ -305,7 +296,7 @@ CharacterVisual *vis_new(const char *symbol, const VisualParams *params) {
     }
     size_t slot = first_dead != SIZE_MAX ? first_dead : i;
     bool reuse = g_pool[slot].occupied;
-    CharacterVisual *vis = vis_alloc(symbol, params);
+    CharacterVisual *vis = vis_alloc(symbol, params, &key);
     if (!vis) {
         return NULL;
     }
@@ -873,7 +864,9 @@ void animation_set_appearance(Animation *anim, bool uses_input_preexisting_color
     vis_unref(anim->current_visual);
     // Not pooled: a character's live appearance is unique to it, so a lookup is
     // pure overhead here (the reference makes the same call).
-    anim->current_visual = vis_alloc(use_symbol, &params);
+    VisKey key;
+    vis_key_build(&params, &key);
+    anim->current_visual = vis_alloc(use_symbol, &params, &key);
     renderer_handle((CharId)anim->render_id, anim->current_visual ? anim->current_visual->version : 0);
 }
 

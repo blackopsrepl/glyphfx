@@ -47,6 +47,36 @@ typedef struct {
 // which avoids a variable-length memcpy call per cell.
 #define VIS_INLINE_FMT_CAP 64
 
+// The appearance key the pool interns on, packed with no padding and no
+// pointers so a candidate can be compared with one memcmp and hashed eight
+// bytes at a time. It mirrors the fields the previous field-by-field
+// comparator used, including `dim` (stored but never emitted) and any colour
+// that had no resolved code, so pooling semantics are unchanged.
+typedef struct {
+    uint16_t attrs;  // bold|dim|italic|underline|blink|reverse|hidden|strike
+    uint8_t has_colors;
+    uint8_t colors_has_fg;
+    uint8_t colors_fg_is_xterm;
+    uint8_t colors_fg_xterm;
+    uint8_t colors_fg_hex_len;
+    char colors_fg_hex[8];
+    uint8_t colors_fg_rgb[3];
+    uint8_t colors_has_bg;
+    uint8_t colors_bg_is_xterm;
+    uint8_t colors_bg_xterm;
+    uint8_t colors_bg_hex_len;
+    char colors_bg_hex[8];
+    uint8_t colors_bg_rgb[3];
+    uint8_t has_fg_code;
+    uint8_t fg_code_kind;
+    uint8_t fg_code_xterm;
+    char fg_code_hex[16];
+    uint8_t has_bg_code;
+    uint8_t bg_code_kind;
+    uint8_t bg_code_xterm;
+    char bg_code_hex[16];
+} VisKey;
+
 typedef struct CharacterVisual {
     int refcount;
     size_t pool_slot;  // index in the visual pool while interned
@@ -54,6 +84,7 @@ typedef struct CharacterVisual {
     // pointer (in-place restyle) and on every fresh allocation, so a cached
     // frame can identify byte content by (pointer-free) version alone.
     uint32_t version;
+    VisKey key;    // packed appearance key; first member so probes touch it hot
     char *symbol;  // owned
     bool bold;
     bool dim;  // stored but never emitted, faithfully
