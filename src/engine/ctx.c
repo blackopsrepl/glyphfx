@@ -533,7 +533,12 @@ static void step_synced_scene(EngineCtx *ctx, CharId id, Scene *scene, SyncMetri
     double total_distance = 0.0;
     double last_distance_reached = 0.0;
     if (ch->motion.active_path) {
-        Path *p = (Path *)om_get(&ch->motion.paths, ch->motion.active_path);
+        // The activation-time slot indexes the path directly, so a synced
+        // step needs no string lookup; it also follows a path rebuilt under the
+        // same name, which a cached pointer would not.
+        Path *p = ch->motion.active_path_slot_valid
+                      ? (Path *)om_value_at(&ch->motion.paths, ch->motion.active_path_slot)
+                      : (Path *)om_get(&ch->motion.paths, ch->motion.active_path);
         if (p) {
             has_path_state = true;
             current_step = p->current_step;
