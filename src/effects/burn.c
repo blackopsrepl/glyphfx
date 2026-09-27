@@ -34,6 +34,7 @@ typedef struct {
     ParticlePool smoke_particles;
     bool has_smoke_particles;
     int64_t emission_counter;
+    FrameMemo *smoke_runs;  // (symbol, fixed first stop) -> template smoke scene
 } Burn;
 
 static void push_color_default(ColorList *list, const char *hex) {
@@ -96,7 +97,7 @@ void burn_free_config(void *cfg_ptr) {
 /// BurnIterator._make_smoke_pool's initialize_smoke: one reusable "smoke"
 /// scene (10-frame 504F4F->C7C7C7 fade) and layer 2.
 static void burn_initialize_smoke(void *user, EngineCtx *ctx, CharId id) {
-    (void)user;
+    Burn *st = user;
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
     size_t sym_len = strlen(ch->input_symbol);
     char *input_symbol = malloc(sym_len + 1);
@@ -106,17 +107,27 @@ static void burn_initialize_smoke(void *user, EngineCtx *ctx, CharId id) {
     Color stops[2];
     color_from_hex("504F4F", &stops[0]);
     color_from_hex("C7C7C7", &stops[1]);
-    Gradient gradient;
-    if (gradient_with_steps(stops, 2, 9, false, &gradient) != 0) {
-        free(input_symbol);
-        return;
-    }
     Easing ease = no_ease();
     ch = &ctx->terminal.arena.items[id];
     const char *smoke_scn = animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, ease, "smoke",
                                                 uses_pre);
     Scene *scene = smoke_scn ? (Scene *)om_get(&ctx->terminal.arena.items[id].animation.scenes, smoke_scn) : NULL;
-    if (scene) {
+    // The 504F4F->C7C7C7 fade over the character's symbol is the same for
+    // every particle with that symbol: build once, let the rest append (the
+    // asm engine runs these frames through visual_run).
+    bool shareable = scene && !scene->has_preexisting_colors && !scene->preexisting_bold;
+    Scene *run = shareable ? framemo_get(st->smoke_runs, input_symbol, stops[0]) : NULL;
+    if (run) {
+        if (scene_append_frames(scene, run) != 0) {
+            free(input_symbol);
+            return;
+        }
+    } else if (scene) {
+        Gradient gradient;
+        if (gradient_with_steps(stops, 2, 9, false, &gradient) != 0) {
+            free(input_symbol);
+            return;
+        }
         for (size_t i = 0; i < gradient.len; i++) {
             VisualParams vp;
             memset(&vp, 0, sizeof(vp));
@@ -125,9 +136,12 @@ static void burn_initialize_smoke(void *user, EngineCtx *ctx, CharId id) {
             vp.colors.fg = gradient.spectrum[i];
             scene_add_frame(scene, input_symbol, 10, &vp);
         }
+        if (shareable) {
+            (void)framemo_put(st->smoke_runs, input_symbol, stops[0], scene);
+        }
+        gradient_free(&gradient);
     }
     ctx->terminal.arena.items[id].layer = 2;
-    gradient_free(&gradient);
     free(input_symbol);
 }
 
@@ -462,6 +476,7 @@ static void burn_destroy(Effect *self) {
     if (st->has_smoke_particles) {
         particle_pool_free(&st->smoke_particles);
     }
+    framemo_free(st->smoke_runs);
     free(st->character_final_color_map);
     free(st->final_present);
     free(st->char_link_order);
@@ -480,6 +495,7 @@ Effect *burn_make(const void *cfg) {
         return NULL;
     }
     st->config = *(const BurnConfig *)cfg;
+    st->smoke_runs = framemo_new();
     effect->ops = &BURN_OPS;
     effect->state = st;
     return effect;
