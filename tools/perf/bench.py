@@ -8,7 +8,10 @@ user+system CPU time. Instructions per effect are reported alongside, since
 they are load-independent and were stable to ~0.1% within a binary.
 
 Usage:
-  tools/perf/bench.py                      # every effect, 3 runs, 4 effects' summary
+  tools/perf/bench.py                      # every effect, 3 runs
+  tools/perf/bench.py --frames 0           # unbounded (hours; effects like
+                                           # thunderstorm run tens of thousands
+                                           # of frames)
   tools/perf/bench.py print errorcorrect   # named effects
   tools/perf/bench.py --runs 5 --json out.json
   tools/perf/bench.py --baseline           # write/refresh the baseline file
@@ -43,8 +46,11 @@ def make_input(path):
 
 
 def args_for(binary, effect):
-    return ["taskset", "-c", CORE, binary, "--seed", "1", "--frame-rate", "0", "--virtual-clock",
-            "--canvas-width", "200", "--canvas-height", "50", "--ignore-terminal-dimensions", effect]
+    args = ["taskset", "-c", CORE, binary, "--seed", "1", "--frame-rate", "0", "--virtual-clock",
+            "--canvas-width", "200", "--canvas-height", "50", "--ignore-terminal-dimensions"]
+    if MAX_FRAMES > 0:
+        args += ["--max-frames", str(MAX_FRAMES)]
+    return args + [effect]
 
 
 def cpu_time(binary, effect, runs):
@@ -73,15 +79,21 @@ def instructions(binary, effect):
 
 
 def main():
-    global CORE, ENV
+    global CORE, ENV, MAX_FRAMES
     ap = argparse.ArgumentParser()
     ap.add_argument("effects", nargs="*")
     ap.add_argument("--runs", type=int, default=3)
     ap.add_argument("--core", default=os.environ.get("BENCH_CORE", "8"))
     ap.add_argument("--json", default="")
     ap.add_argument("--baseline", action="store_true")
+    # A bounded frame count keeps a run to seconds. Effects differ by orders of
+    # magnitude in length (thunderstorm and unstable emit tens of thousands of
+    # frames), so an unbounded sweep is hours; 300 frames is enough to separate
+    # the engines and finishes in seconds.
+    ap.add_argument("--frames", type=int, default=300, help="0 = unbounded (slow)")
     a = ap.parse_args()
     CORE = a.core
+    MAX_FRAMES = a.frames
     ENV = dict(os.environ, COLUMNS="200", LINES="50")
     effects = a.effects or ALL
     make_input(INPUT)
