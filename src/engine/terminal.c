@@ -785,6 +785,33 @@ static void serialize_row(const Terminal *t, size_t row_index, size_t width, Str
     const uint32_t *row = &t->render_cells[row_index * width];
     size_t col = 0;
     while (col < width) {
+        // Four cells per iteration (render.asm's emission quad): when all four
+        // are filled by inline visuals, one capacity check and one unrolled
+        // copy sequence replace four branchy single-cell iterations.
+        if (col + 4 <= width && row[col] != RENDER_EMPTY && row[col + 1] != RENDER_EMPTY &&
+            row[col + 2] != RENDER_EMPTY && row[col + 3] != RENDER_EMPTY) {
+            const CharacterVisual *v0 = t->cell_visual[row_index * width + col];
+            const CharacterVisual *v1 = t->cell_visual[row_index * width + col + 1];
+            const CharacterVisual *v2 = t->cell_visual[row_index * width + col + 2];
+            const CharacterVisual *v3 = t->cell_visual[row_index * width + col + 3];
+            if (v0 && v1 && v2 && v3 && !v0->formatted_heap && !v1->formatted_heap && !v2->formatted_heap &&
+                !v3->formatted_heap) {
+                if (dst->len + 4 * VIS_INLINE_FMT_CAP + 1 > dst->cap) {
+                    sb_grow(dst, dst->len + 4 * VIS_INLINE_FMT_CAP);
+                }
+                memcpy(dst->data + dst->len, v0->formatted_inline, VIS_INLINE_FMT_CAP);
+                dst->len += v0->formatted_len;
+                memcpy(dst->data + dst->len, v1->formatted_inline, VIS_INLINE_FMT_CAP);
+                dst->len += v1->formatted_len;
+                memcpy(dst->data + dst->len, v2->formatted_inline, VIS_INLINE_FMT_CAP);
+                dst->len += v2->formatted_len;
+                memcpy(dst->data + dst->len, v3->formatted_inline, VIS_INLINE_FMT_CAP);
+                dst->len += v3->formatted_len;
+                dst->data[dst->len] = '\0';
+                col += 4;
+                continue;
+            }
+        }
         if (row[col] == RENDER_EMPTY) {
             size_t run = 1;
             while (col + run < width && row[col + run] == RENDER_EMPTY) {
