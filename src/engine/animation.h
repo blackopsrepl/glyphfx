@@ -24,7 +24,7 @@ typedef enum {
     SYNC_STEP,
 } SyncMetric;
 
-typedef struct {
+typedef struct VisualParams {
     bool bold;
     bool dim;
     bool italic;
