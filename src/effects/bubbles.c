@@ -12,6 +12,7 @@
 #include "engine/canvas.h"
 #include "engine/character.h"
 #include "engine/ctx.h"
+#include "utils/pycompat.h"
 #include "engine/motion.h"
 #include "engine/terminal.h"
 #include "utils/easing.h"
@@ -30,6 +31,7 @@ typedef struct {
     CharId anchor_char;
     int64_t lowest_row;
     bool landed;
+    double *trig;  // radius*(cos, sin) per point, made once per bubble
 } Bubble;
 
 typedef struct {
@@ -114,6 +116,7 @@ static void bubble_vec_push(BubbleVec *v, Bubble b) {
 static void bubble_vec_free(BubbleVec *v) {
     for (size_t i = 0; i < v->len; i++) {
         idvec_free(&v->items[i].characters);
+        free(v->items[i].trig);
     }
     free(v->items);
     v->items = NULL;
@@ -161,18 +164,58 @@ void bubbles_free_config(void *cfg_ptr) {
     free(cfg->final_gradient_steps.items);
 }
 
-static void bubble_set_character_coordinates(Bubbles *st, EngineCtx *ctx, Bubble *bubble) {
-    Coord anchor_coord = ctx->terminal.arena.items[bubble->anchor_char].motion.current_coord;
-    CoordVec points = find_coords_on_circle(anchor_coord, bubble->radius, (int64_t)bubble->characters.len, false);
-    for (size_t i = 0; i < bubble->characters.len && i < points.len; i++) {
-        CharId id = bubble->characters.items[i];
-        Coord point = points.items[i];
-        motion_set_coordinate(&ctx->terminal.arena.items[id].motion, point);
-        if (point.row == bubble->lowest_row) {
-            bubble->landed = true;
-        }
+// find_coords_on_circle's trig depends only on the radius and point count, so
+// radius*cos and radius*sin of each point's angle are made once per bubble and
+// every move only adds the anchor, doubles the x offset and rounds, in the
+// same order (bubbles.asm's bub_trig).
+static void bubble_trig_build(Bubble *bubble) {
+    size_t n = bubble->characters.len;
+    if (n == 0 || bubble->radius == 0) {
+        return;
     }
-    coordvec_free(&points);
+    double *trig = malloc(n * 2 * sizeof(double));
+    if (!trig) {
+        return;
+    }
+    double angle_step = 2.0 * M_PI / (double)(int64_t)n;
+    for (size_t i = 0; i < n; i++) {
+        double angle = angle_step * (double)i;
+        trig[2 * i] = (double)bubble->radius * cos(angle);
+        trig[2 * i + 1] = (double)bubble->radius * sin(angle);
+    }
+    bubble->trig = trig;
+}
+
+static void bubble_set_character_coordinates(Bubbles *st, EngineCtx *ctx, Bubble *bubble) {
+    if (!bubble->trig) {
+        bubble_trig_build(bubble);
+    }
+    Coord anchor_coord = ctx->terminal.arena.items[bubble->anchor_char].motion.current_coord;
+    size_t n = bubble->characters.len;
+    if (bubble->trig) {
+        for (size_t i = 0; i < n; i++) {
+            double x = (double)anchor_coord.column + bubble->trig[2 * i];
+            double x_diff = x - (double)anchor_coord.column;
+            x += x_diff;
+            double y = (double)anchor_coord.row + bubble->trig[2 * i + 1];
+            Coord point = coord_new(py_round_half_even(x), py_round_half_even(y));
+            motion_set_coordinate(&ctx->terminal.arena.items[bubble->characters.items[i]].motion, point);
+            if (point.row == bubble->lowest_row) {
+                bubble->landed = true;
+            }
+        }
+    } else {
+        CoordVec points = find_coords_on_circle(anchor_coord, bubble->radius, (int64_t)n, false);
+        for (size_t i = 0; i < n && i < points.len; i++) {
+            CharId id = bubble->characters.items[i];
+            Coord point = points.items[i];
+            motion_set_coordinate(&ctx->terminal.arena.items[id].motion, point);
+            if (point.row == bubble->lowest_row) {
+                bubble->landed = true;
+            }
+        }
+        coordvec_free(&points);
+    }
     if (st->config.pop_condition == POP_ANYWHERE && rng_random(&ctx->rng) < 0.002) {
         bubble->landed = true;
     }
@@ -651,6 +694,8 @@ static const char *bubbles_next_frame(Effect *self, EngineCtx *ctx) {
         for (size_t i = 0; i < animating.len; i++) {
             if (animating.items[i].landed) {
                 idvec_free(&animating.items[i].characters);
+                free(animating.items[i].trig);
+                animating.items[i].trig = NULL;
             } else {
                 bubble_vec_push(&keep, animating.items[i]);
             }
