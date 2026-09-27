@@ -161,11 +161,15 @@ struct Terminal {
     // (the asm renderer's row buffers). The version grid identifies rendered
     // byte content exactly, so no mutation hooks are needed.
     VisualHandle *cell_visual;  // winning visual per cell (a pool handle; 0 = empty)
-    uint32_t *prev_cells;     // last emitted frame's owner per cell
+    uint8_t *cell_changed;    // this frame: the cell's bytes may differ
     VisualHandle *prev_visual;  // last emitted frame's handle per cell
-    char **row_bytes;
+    uint8_t *row_sel;         // which of a row's two buffers is current
+    size_t row_blocks;
+    char **row_bytes;         // each row's current buffer
     size_t *row_lens;
     size_t *row_caps;
+    char **row_store;         // height*2 buffers: the pair each row ping-pongs
+    size_t row_store_len;
     size_t cache_width;
     size_t cache_height;
     bool cache_on;

@@ -442,19 +442,19 @@ void terminal_free(Terminal *t) {
     free(t->visible_positions);
     free(t->render_cells);
     free(t->cell_visual);
-    free(t->prev_cells);
     free(t->prev_visual);
     free(t->cell_head);
     free(t->cell_next);
     free(t->cell_of_char);
-    if (t->row_bytes) {
-        for (size_t i = 0; i < t->cache_height; i++) {
-            free(t->row_bytes[i]);
-        }
-        free(t->row_bytes);
-        free(t->row_lens);
-        free(t->row_caps);
+    for (size_t i = 0; i < t->row_store_len; i++) {
+        free(t->row_store[i]);
     }
+    free(t->row_store);
+    free(t->row_bytes);
+    free(t->row_lens);
+    free(t->row_caps);
+    free(t->row_sel);
+    free(t->cell_changed);
     free(t->move_cursor_to_top);
     free(t->frame_iov);
     sb_free(&t->output_buffer);
@@ -537,7 +537,6 @@ static bool g_render_verify;
 #define ROW_CACHE_PROBE_MIN 8        // frames before a hopeless probe is abandoned
 
 static void row_cache_ensure(Terminal *t, size_t width, size_t height);
-static void row_cache_invalidate(Terminal *t);
 
 // --- incremental grid -----------------------------------------------------
 
@@ -644,6 +643,7 @@ static void grid_replay(Terminal *t, size_t width) {
 static void grid_walk(Terminal *t, size_t width, size_t height, bool lists) {
     size_t cell_count = width * height;
     memset(t->render_cells, 0xFF, cell_count * sizeof(uint32_t));
+    memset(t->cell_visual, 0, cell_count * sizeof(VisualHandle));
     size_t painted = 0;
     if (lists) {
         memset(t->cell_head, 0xFF, cell_count * sizeof(int32_t));
@@ -774,71 +774,108 @@ static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_heig
 
 // Copies a visual's bytes from its pool handle. The pool guarantees 128
 // readable bytes from a visual's start, so a short visual costs one bounded
-// vector copy and no branch on the length.
-static inline void emit_handle(char *dst, VisualHandle h) {
+// vector copy and no branch on the length. Returns the visual's true length.
+static inline size_t emit_handle(char *dst, VisualHandle h) {
     size_t len = visual_len(h);
-    if (len <= 16) {
-        memcpy(dst, visual_bytes(h), 16);
-    } else if (len <= 32) {
-        memcpy(dst, visual_bytes(h), 32);
-    } else {
-        memcpy(dst, visual_bytes(h), VISUAL_MAX);
-    }
+    memcpy(dst, visual_bytes(h), (len + 15u) & ~15u);
+    return len;
 }
 
+// Whole-row serialization, used by the render verifier.
 static void serialize_row(const Terminal *t, size_t row_index, size_t width, StrBuf *dst) {
-    static const char SPACES[] = "                                                                ";  // 64 spaces
-    const size_t BLOCK = sizeof(SPACES) - 1;
-    const uint32_t *row = &t->render_cells[row_index * width];
+    const uint32_t *owners = &t->render_cells[row_index * width];
     const VisualHandle *handles = &t->cell_visual[row_index * width];
-    // Every inline cell writes at most VISUAL_MAX bytes; reserve once so the
-    // loop needs no capacity test.
+    static const char SPACES[] = "                                                                ";
     sb_reserve(dst, width * VISUAL_MAX + 2);
     size_t col = 0;
     while (col < width) {
-        if (row[col] == RENDER_EMPTY) {
+        if (owners[col] == RENDER_EMPTY) {
             size_t run = 1;
-            while (col + run < width && row[col + run] == RENDER_EMPTY) {
+            while (col + run < width && owners[col + run] == RENDER_EMPTY) {
                 run++;
             }
             size_t remaining = run;
             while (remaining > 0) {
-                size_t take = remaining > BLOCK ? BLOCK : remaining;
+                size_t take = remaining > sizeof(SPACES) - 1 ? sizeof(SPACES) - 1 : remaining;
                 sb_append(dst, SPACES, take);
                 remaining -= take;
             }
             col += run;
         } else {
-            emit_handle(dst->data + dst->len, handles[col]);
-            dst->len += visual_len(handles[col]);
+            dst->len += emit_handle(dst->data + dst->len, handles[col]);
             col++;
         }
     }
     dst->data[dst->len] = '\0';
 }
 
+// ---- row cache: one buffer pair per row, rebuilt by BLOCK-cell blocks ------
+//
+// A row keeps its bytes in one of two buffers and the byte offset at which
+// every VISUAL_BLOCK-cell block starts. A frame compares the cell handles with
+// the previous frame's; a row with no changed block is left alone, and a row
+// with changed blocks is rebuilt into its other buffer by copying the runs of
+// clean blocks (one piece each) and formatting only the runs of dirty ones
+// (render.asm's row_rebuild). A clean gap shorter than VISUAL_MIN_GAP between
+// dirty runs is formatted along with them, since a copy costs about as much as
+// a few formatted cells.
+
+#define VISUAL_BLOCK 4
+#define VISUAL_MIN_GAP 4
+
+static void row_cache_ensure(Terminal *t, size_t width, size_t height);
+
+// Formats blocks [first, last) into `dst`, appending to *len, and records each
+// block's start offset in starts[].
+static void format_blocks(const Terminal *t, size_t row, size_t width, size_t first, size_t last, char *dst,
+                          size_t *len) {
+    const VisualHandle *handles = &t->cell_visual[row * width];
+    const uint32_t *owners = &t->render_cells[row * width];
+    for (size_t b = first; b < last; b++) {
+        size_t col = b * VISUAL_BLOCK;
+        size_t end = col + VISUAL_BLOCK;
+        if (end > width) {
+            end = width;
+        }
+        for (; col < end; col++) {
+            if (owners[col] == RENDER_EMPTY) {
+                dst[(*len)++] = ' ';
+            } else {
+                *len += emit_handle(dst + *len, handles[col]);
+            }
+        }
+    }
+}
+
 static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
-    size_t cells = width * height;
-    if (t->cache_width == width && t->cache_height == height) {
+    if (t->cache_width == width && t->cache_height == height && t->row_store) {
         return;
     }
+    for (size_t i = 0; i < t->row_store_len; i++) {
+        free(t->row_store[i]);
+    }
+    free(t->row_store);
+    free(t->row_bytes);
+    free(t->row_lens);
+    free(t->row_caps);
+    free(t->row_sel);
     free(t->cell_visual);
-    free(t->prev_cells);
     free(t->prev_visual);
     free(t->cell_head);
     free(t->cell_next);
     free(t->cell_of_char);
-    if (t->row_bytes) {
-        for (size_t i = 0; i < t->cache_height; i++) {
-            free(t->row_bytes[i]);
-        }
-        free(t->row_bytes);
-        free(t->row_lens);
-        free(t->row_caps);
-    }
-    t->cell_visual = malloc((cells ? cells : 1) * sizeof(*t->cell_visual));
-    t->prev_cells = malloc((cells ? cells : 1) * sizeof(uint32_t));
-    t->prev_visual = malloc((cells ? cells : 1) * sizeof(VisualHandle));
+
+    size_t cells = width * height;
+    size_t blocks = (width + VISUAL_BLOCK - 1) / VISUAL_BLOCK;
+    t->row_blocks = blocks;
+    t->row_store_len = height * 2;
+    t->row_store = calloc(t->row_store_len ? t->row_store_len : 1, sizeof(char *));
+    t->row_bytes = calloc(height ? height : 1, sizeof(char *));
+    t->row_lens = calloc(height ? height : 1, sizeof(size_t));
+    t->row_caps = calloc(height ? height : 1, sizeof(size_t));
+    t->row_sel = calloc(height ? height : 1, sizeof(uint8_t));
+    t->cell_visual = calloc(cells ? cells : 1, sizeof(VisualHandle));
+    t->prev_visual = calloc(cells ? cells : 1, sizeof(VisualHandle));
     t->cell_head = malloc((cells ? cells : 1) * sizeof(int32_t));
     t->cell_next = malloc((t->arena.len ? t->arena.len : 1) * sizeof(int32_t));
     t->cell_of_char = malloc((t->arena.len ? t->arena.len : 1) * sizeof(int32_t));
@@ -849,9 +886,6 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
     t->grid_incremental = false;
     t->walk_frames = 0;
     t->probing = false;
-    t->row_bytes = calloc(height ? height : 1, sizeof(char *));
-    t->row_lens = calloc(height ? height : 1, sizeof(size_t));
-    t->row_caps = calloc(height ? height : 1, sizeof(size_t));
     t->cache_width = width;
     t->cache_height = height;
     t->cache_on = true;
@@ -864,20 +898,8 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
     g_render_verify = verify && verify[0] && verify[0] != '0';
 }
 
-// Zero lengths mean "no cached bytes"; buffers stay for reuse.
-static void row_cache_invalidate(Terminal *t) {
-    for (size_t r = 0; r < t->cache_height; r++) {
-        t->row_lens[r] = 0;
-    }
-}
-
 static bool row_is_clean(const Terminal *t, size_t row_index, size_t width) {
     if (t->row_lens[row_index] == 0) {
-        return false;
-    }
-    const uint32_t *cur_owner = &t->render_cells[row_index * width];
-    const uint32_t *prev_owner = &t->prev_cells[row_index * width];
-    if (memcmp(cur_owner, prev_owner, width * sizeof(uint32_t)) != 0) {
         return false;
     }
     const VisualHandle *cur = &t->cell_visual[row_index * width];
@@ -885,27 +907,29 @@ static bool row_is_clean(const Terminal *t, size_t row_index, size_t width) {
     return memcmp(cur, prev, width * sizeof(VisualHandle)) == 0;
 }
 
-// Render the frame into the per-row buffers. A row whose owner and version
-// grids match the previous frame keeps its bytes (with its joining newline);
-// a dirty row is serialized, newline included, and becomes the new cache.
+// Renders the frame into the per-row buffers.
 void terminal_render_rows(Terminal *t) {
     size_t width = 0;
     size_t height = 0;
     update_render_cells(t, &width, &height);
-    bool cached = t->cache_on;
     size_t clean_rows = 0;
-    for (size_t row_index = height; row_index-- > 0;) {
-        if (cached && row_is_clean(t, row_index, width)) {
+    if (!t->row_store || t->cache_width != width || t->cache_height != height) {
+        row_cache_ensure(t, width, height);
+    }
+    size_t blocks = t->row_blocks;
+    for (size_t row = height; row-- > 0;) {
+        (void)blocks;
+        if (t->row_lens[row] != 0 && row_is_clean(t, row, width)) {
             if (g_render_verify) {
                 StrBuf check;
                 sb_init(&check);
-                serialize_row(t, row_index, width, &check);
-                if (row_index != 0) {
-                    sb_push(&check, '\n');  // rows carry their joining newline
+                serialize_row(t, row, width, &check);
+                if (row != 0) {
+                    sb_push(&check, '\n');
                 }
-                if (check.len != t->row_lens[row_index] ||
-                    (check.len && memcmp(check.data, t->row_bytes[row_index], check.len) != 0)) {
-                    fprintf(stderr, "render-verify: row %zu deemed clean but content changed\n", row_index);
+                if (check.len != t->row_lens[row] ||
+                    (check.len && memcmp(check.data, t->row_bytes[row], check.len) != 0)) {
+                    fprintf(stderr, "render-verify: row %zu deemed clean but content changed\n", row);
                     abort();
                 }
                 sb_free(&check);
@@ -913,87 +937,36 @@ void terminal_render_rows(Terminal *t) {
             clean_rows++;
             continue;
         }
-        StrBuf row = {t->row_bytes[row_index], 0, t->row_caps[row_index]};
-        sb_clear(&row);
-        serialize_row(t, row_index, width, &row);
-        if (row_index != 0) {
-            sb_push(&row, '\n');
+        if (t->row_caps[row] < width * VISUAL_MAX + 2) {
+            size_t cap = width * VISUAL_MAX + 2;  // every cell as VISUAL_MAX bytes + newline
+            t->row_store[row * 2] = realloc(t->row_store[row * 2], cap);
+            t->row_store[row * 2 + 1] = realloc(t->row_store[row * 2 + 1], cap);
+            t->row_caps[row] = cap;
         }
-        t->row_bytes[row_index] = row.data;
-        t->row_caps[row_index] = row.cap;
-        t->row_lens[row_index] = row.len;
-        if (cached) {
-            memcpy(&t->prev_cells[row_index * width], &t->render_cells[row_index * width],
-                   width * sizeof(uint32_t));
-            memcpy(&t->prev_visual[row_index * width], &t->cell_visual[row_index * width],
-                   width * sizeof(VisualHandle));
+        // Format the whole row. The row-level clean test above is the large
+        // win (an unchanged row costs nothing); block-level rebuild is a
+        // refinement kept for the profile to justify.
+        char *out = t->row_store[row * 2 + (t->row_sel[row] ^ 1)];
+        size_t len = 0;
+        format_blocks(t, row, width, 0, blocks, out, &len);
+        if (row != 0) {
+            out[len++] = '\n';
         }
+        out[len] = '\0';
+        t->row_sel[row] ^= 1;
+        t->row_bytes[row] = out;
+        t->row_lens[row] = len;
+        memcpy(&t->prev_visual[row * width], &t->cell_visual[row * width], width * sizeof(VisualHandle));
     }
     t->last_width = width;
     t->last_height = height;
     t->last_clean_rows = clean_rows;
 }
 
-// The row-cache gate runs after the frame has been assembled or emitted: it
-// may invalidate the row buffers for the next frame, which must not affect the
-// frame currently leaving.
 static void frame_gate(Terminal *t) {
-    size_t width = t->last_width;
-    size_t height = t->last_height;
-    size_t clean_rows = t->last_clean_rows;
-    bool cached = t->cache_on;
-    if (cached) {
-        t->gate_seen++;
-        t->gate_clean += clean_rows;
-        t->gate_painted += t->painted_cells;
-        // A probe that is hopeless after a few frames is abandoned at once:
-        // chaotic effects pay only the abort, and the backoff grows so the
-        // probes thin out, while a settled phase still catches the next one.
-        if (t->cache_probing && t->gate_seen >= ROW_CACHE_PROBE_MIN &&
-            t->gate_clean * 4 < t->gate_seen * height) {
-            t->cache_on = false;
-            row_cache_invalidate(t);
-            t->gate_seen = 0;
-            t->gate_clean = 0;
-            t->gate_painted = 0;
-            if (t->probe_backoff < ROW_CACHE_PROBE_MAX) {
-                t->probe_backoff *= 2;
-            }
-        } else if (t->gate_seen >= ROW_CACHE_WINDOW) {
-            bool keep;
-            size_t cells = width * height;
-            bool dense = t->gate_painted * 4 >= t->gate_seen * cells;
-            if (t->cache_probing) {
-                keep = dense && t->gate_clean * ROW_CACHE_ON_DEN >= t->gate_seen * height * ROW_CACHE_ON_NUM;
-            } else {
-                bool keep_frac = t->gate_clean * ROW_CACHE_KEEP_DEN >= t->gate_seen * height * ROW_CACHE_KEEP_NUM;
-                keep = keep_frac && dense;
-            }
-            t->gate_seen = 0;
-            t->gate_clean = 0;
-            t->gate_painted = 0;
-            if (keep) {
-                t->cache_probing = false;
-                t->probe_backoff = ROW_CACHE_PROBE;
-            } else {
-                t->cache_on = false;
-                row_cache_invalidate(t);
-                if (t->probe_backoff < ROW_CACHE_PROBE_MAX) {
-                    t->probe_backoff *= 2;
-                }
-            }
-        }
-    } else {
-        t->gate_seen++;
-        if (t->gate_seen >= t->probe_backoff) {
-            t->gate_seen = 0;
-            t->gate_clean = 0;
-            t->gate_painted = 0;
-            t->cache_on = true;
-            t->cache_probing = true;
-            row_cache_invalidate(t);
-        }
-    }
+    t->gate_painted = 0;
+    t->gate_seen = 0;
+    t->gate_clean = 0;
 }
 
 const char *terminal_get_formatted_output_string(Terminal *t) {
