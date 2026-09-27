@@ -64,6 +64,12 @@ bool caller_key_matches(const CallerKey *a, const CallerKey *b) {
             }
             return strcmp(a->id, b->id) == 0;
         case CALLER_WAYPOINT:
+            // The name handle goes first: it rejects a non-matching entry
+            // before the coordinate and control-point compares.
+            if (a->waypoint.waypoint_handle && b->waypoint.waypoint_handle &&
+                a->waypoint.waypoint_handle != b->waypoint.waypoint_handle) {
+                return false;
+            }
             if (!coord_eq(a->waypoint.coord, b->waypoint.coord)) {
                 return false;
             }
