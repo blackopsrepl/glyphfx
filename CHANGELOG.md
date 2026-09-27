@@ -2,6 +2,13 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
 
+## [0.1.9](https://github.com/blackopsrepl/glyphfx/compare/v0.1.8...v0.1.9) (2026-09-27)
+
+### Performance
+
+* **matrix:** share resolve frames by symbol and final color ([8988c0b](https://github.com/blackopsrepl/glyphfx/commit/8988c0b433c6fc3ba2f3edfc05d797543a59ac3e))
+* **render:** maintain the cell grid incrementally from a mutation log ([22cf6aa](https://github.com/blackopsrepl/glyphfx/commit/22cf6aad0b86027dffa9b067a2131e050f233e8a))
+
 ## [0.1.8](https://github.com/blackopsrepl/glyphfx/compare/v0.1.7...v0.1.8) (2026-09-27)
 
 ### Performance
