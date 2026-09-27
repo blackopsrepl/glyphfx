@@ -438,7 +438,6 @@ void terminal_free(Terminal *t) {
     free(t->visible_characters);
     free(t->visible_positions);
     free(t->render_cells);
-    free(t->cell_epoch);
     free(t->move_cursor_to_top);
     sb_free(&t->output_buffer);
     memset(t, 0, sizeof(*t));
@@ -497,27 +496,24 @@ void terminal_set_character_visibility(Terminal *t, CharId id, bool is_visible) 
     }
 }
 
+// Empty cells hold this sentinel; a CharId never collides with it (the arena
+// is far smaller than 2^32).
+#define RENDER_EMPTY UINT32_MAX
+
 static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_height) {
     size_t width = t->visible_right > 0 ? (size_t)t->visible_right : 0;
     size_t height = t->visible_top > 0 ? (size_t)t->visible_top : 0;
     size_t cell_count = width * height;
     if (cell_count > t->render_cells_len) {
         t->render_cells = realloc(t->render_cells, cell_count * sizeof(uint32_t));
-        t->cell_epoch = realloc(t->cell_epoch, cell_count * sizeof(uint32_t));
         t->render_cells_len = cell_count;
     }
-    // Stamp each frame instead of clearing the grid: a cell belongs to this
-    // frame only if its epoch was set now, so the O(cells) clear disappears.
-    if (width != t->grid_width || height != t->grid_height || t->render_epoch == UINT32_MAX) {
-        if (t->cell_epoch && cell_count) {
-            memset(t->cell_epoch, 0, cell_count * sizeof(uint32_t));
-        }
-        t->grid_width = width;
-        t->grid_height = height;
-        t->render_epoch = 0;
+    // Clearing with a vector memset costs less than stamping a second epoch
+    // array in the paint loop and re-reading it in the write loop (the
+    // reference settles the same trade on the side of one array).
+    if (cell_count) {
+        memset(t->render_cells, 0xFF, cell_count * sizeof(uint32_t));
     }
-    t->render_epoch++;
-    uint32_t epoch = t->render_epoch;
     for (size_t i = 0; i < t->visible_characters_len; i++) {
         CharId id = t->visible_characters[i];
         EffectCharacter *ch = &t->arena.items[id];
@@ -525,33 +521,30 @@ static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_heig
         int64_t column = ch->motion.current_coord.column + t->canvas_column_offset;
         if (t->visible_bottom <= row && row <= t->visible_top && t->visible_left <= column &&
             column <= t->visible_right) {
-            size_t cell_index = (size_t)(row - 1) * width + (size_t)(column - 1);
-            if (t->cell_epoch[cell_index] != epoch) {
-                t->render_cells[cell_index] = (uint32_t)id;
-                t->cell_epoch[cell_index] = epoch;
-            } else {
-                EffectCharacter *painted = &t->arena.items[t->render_cells[cell_index]];
-                if (ch->layer > painted->layer ||
-                    (ch->layer == painted->layer && ch->character_id > painted->character_id)) {
-                    t->render_cells[cell_index] = (uint32_t)id;
+            uint32_t *cell = &t->render_cells[(size_t)(row - 1) * width + (size_t)(column - 1)];
+            if (*cell != RENDER_EMPTY) {
+                EffectCharacter *painted = &t->arena.items[*cell];
+                if (ch->layer <= painted->layer &&
+                    (ch->layer != painted->layer || ch->character_id <= painted->character_id)) {
+                    continue;
                 }
             }
+            *cell = (uint32_t)id;
         }
     }
     *out_width = width;
     *out_height = height;
 }
 
-static void serialize_row(const Terminal *t, size_t row_index, size_t width, uint32_t epoch, StrBuf *dst) {
+static void serialize_row(const Terminal *t, size_t row_index, size_t width, StrBuf *dst) {
     static const char SPACES[] = "                                                                ";  // 64 spaces
     const size_t BLOCK = sizeof(SPACES) - 1;
     const uint32_t *row = &t->render_cells[row_index * width];
-    const uint32_t *stamp = &t->cell_epoch[row_index * width];
     size_t col = 0;
     while (col < width) {
-        if (stamp[col] != epoch) {
+        if (row[col] == RENDER_EMPTY) {
             size_t run = 1;
-            while (col + run < width && stamp[col + run] != epoch) {
+            while (col + run < width && row[col + run] == RENDER_EMPTY) {
                 run++;
             }
             size_t remaining = run;
@@ -581,19 +574,16 @@ static void serialize_row(const Terminal *t, size_t row_index, size_t width, uin
 }
 
 const char *terminal_get_formatted_output_string(Terminal *t) {
-    static const char SPACES[] = "                                                                ";  // 64 spaces
-    (void)SPACES;
     size_t width = 0;
     size_t height = 0;
     update_render_cells(t, &width, &height);
-    uint32_t epoch = t->render_epoch;
     StrBuf *sb = &t->output_buffer;
     sb_clear(sb);
     for (size_t row_index = height; row_index-- > 0;) {
         if (row_index + 1 < height) {
             sb_push(sb, '\n');
         }
-        serialize_row(t, row_index, width, epoch, sb);
+        serialize_row(t, row_index, width, sb);
     }
     return sb->data ? sb->data : "";
 }
