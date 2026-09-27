@@ -50,6 +50,10 @@ typedef struct {
 typedef struct CharacterVisual {
     int refcount;
     size_t pool_slot;  // index in the visual pool while interned
+    // Bumped whenever this visual's rendered bytes change under the same
+    // pointer (in-place restyle) and on every fresh allocation, so a cached
+    // frame can identify byte content by (pointer-free) version alone.
+    uint32_t version;
     char *symbol;  // owned
     bool bold;
     bool dim;  // stored but never emitted, faithfully

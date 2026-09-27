@@ -142,6 +142,23 @@ struct Terminal {
     size_t visible_positions_len;
     uint32_t *render_cells;
     size_t render_cells_len;
+    // Frame cache: a row whose cell owners and visual versions all match the
+    // previous emitted frame is copied from its cached bytes, not re-formatted
+    // (the asm renderer's row buffers). The version grid identifies rendered
+    // byte content exactly, so no mutation hooks are needed.
+    uint32_t *cell_version;   // this frame's winning visual version per cell
+    uint32_t *prev_cells;     // last emitted frame's owner per cell
+    uint32_t *prev_version;   // last emitted frame's version per cell
+    char **row_bytes;
+    size_t *row_lens;
+    size_t *row_caps;
+    size_t cache_width;
+    size_t cache_height;
+    bool cache_on;
+    bool cache_probing;
+    size_t gate_seen;
+    size_t gate_clean;
+    size_t probe_backoff;
     StrBuf output_buffer;  // reused across frames
     char *move_cursor_to_top;
     int64_t frame_rate;

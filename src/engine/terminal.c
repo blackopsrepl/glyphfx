@@ -438,6 +438,17 @@ void terminal_free(Terminal *t) {
     free(t->visible_characters);
     free(t->visible_positions);
     free(t->render_cells);
+    free(t->cell_version);
+    free(t->prev_cells);
+    free(t->prev_version);
+    if (t->row_bytes) {
+        for (size_t i = 0; i < t->cache_height; i++) {
+            free(t->row_bytes[i]);
+        }
+        free(t->row_bytes);
+        free(t->row_lens);
+        free(t->row_caps);
+    }
     free(t->move_cursor_to_top);
     sb_free(&t->output_buffer);
     memset(t, 0, sizeof(*t));
@@ -500,10 +511,31 @@ void terminal_set_character_visibility(Terminal *t, CharId id, bool is_visible) 
 // is far smaller than 2^32).
 #define RENDER_EMPTY UINT32_MAX
 
+// GLYPHFX_RENDER_VERIFY=1 re-serializes rows the cache deemed clean and aborts
+// on a mismatch: a cheap proof that the version grid catches every content
+// change, run over the parity suite and full-size workloads.
+static bool g_render_verify;
+
+// Clean-row gating: the cache's bookkeeping costs a little every frame, so it
+// is only kept on where most rows turn out clean. The asm renderer knows this
+// from its change log; here the writer measures the clean fraction.
+#define ROW_CACHE_ON_NUM 3
+#define ROW_CACHE_ON_DEN 4     // establish the cache above 3/4 clean
+#define ROW_CACHE_KEEP_NUM 1
+#define ROW_CACHE_KEEP_DEN 2   // keep it above 1/2 clean
+#define ROW_CACHE_WINDOW 64
+#define ROW_CACHE_PROBE 128          // first probe delay while off
+#define ROW_CACHE_PROBE_MAX 2048     // backoff cap keeps settled phases reachable
+#define ROW_CACHE_PROBE_MIN 8        // frames before a hopeless probe is abandoned
+
+static void row_cache_ensure(Terminal *t, size_t width, size_t height);
+static void row_cache_invalidate(Terminal *t);
+
 static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_height) {
     size_t width = t->visible_right > 0 ? (size_t)t->visible_right : 0;
     size_t height = t->visible_top > 0 ? (size_t)t->visible_top : 0;
     size_t cell_count = width * height;
+    row_cache_ensure(t, width, height);
     if (cell_count > t->render_cells_len) {
         t->render_cells = realloc(t->render_cells, cell_count * sizeof(uint32_t));
         t->render_cells_len = cell_count;
@@ -530,6 +562,10 @@ static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_heig
                 }
             }
             *cell = (uint32_t)id;
+            if (t->cache_on) {
+                const CharacterVisual *vis = ch->animation.current_visual;
+                t->cell_version[(size_t)(cell - t->render_cells)] = vis ? vis->version : 0;
+            }
         }
     }
     *out_width = width;
@@ -573,17 +609,161 @@ static void serialize_row(const Terminal *t, size_t row_index, size_t width, Str
     }
 }
 
+static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
+    size_t cells = width * height;
+    if (t->cache_width == width && t->cache_height == height) {
+        return;
+    }
+    free(t->cell_version);
+    free(t->prev_cells);
+    free(t->prev_version);
+    if (t->row_bytes) {
+        for (size_t i = 0; i < t->cache_height; i++) {
+            free(t->row_bytes[i]);
+        }
+        free(t->row_bytes);
+        free(t->row_lens);
+        free(t->row_caps);
+    }
+    t->cell_version = malloc((cells ? cells : 1) * sizeof(uint32_t));
+    t->prev_cells = malloc((cells ? cells : 1) * sizeof(uint32_t));
+    t->prev_version = malloc((cells ? cells : 1) * sizeof(uint32_t));
+    t->row_bytes = calloc(height ? height : 1, sizeof(char *));
+    t->row_lens = calloc(height ? height : 1, sizeof(size_t));
+    t->row_caps = calloc(height ? height : 1, sizeof(size_t));
+    t->cache_width = width;
+    t->cache_height = height;
+    t->cache_on = true;
+    t->cache_probing = true;
+    t->gate_seen = 0;
+    t->gate_clean = 0;
+    t->probe_backoff = ROW_CACHE_PROBE;
+    const char *verify = getenv("GLYPHFX_RENDER_VERIFY");
+    g_render_verify = verify && verify[0] && verify[0] != '0';
+}
+
+// Zero lengths mean "no cached bytes"; buffers stay for reuse.
+static void row_cache_invalidate(Terminal *t) {
+    for (size_t r = 0; r < t->cache_height; r++) {
+        t->row_lens[r] = 0;
+    }
+}
+
+static bool row_is_clean(const Terminal *t, size_t row_index, size_t width) {
+    if (t->row_lens[row_index] == 0) {
+        return false;
+    }
+    const uint32_t *cur_owner = &t->render_cells[row_index * width];
+    const uint32_t *prev_owner = &t->prev_cells[row_index * width];
+    if (memcmp(cur_owner, prev_owner, width * sizeof(uint32_t)) != 0) {
+        return false;
+    }
+    const uint32_t *cur_ver = &t->cell_version[row_index * width];
+    const uint32_t *prev_ver = &t->prev_version[row_index * width];
+    return memcmp(cur_ver, prev_ver, width * sizeof(uint32_t)) == 0;
+}
+
+static void row_cache_store(Terminal *t, size_t row_index, const char *bytes, size_t len) {
+    if (t->row_caps[row_index] < len) {
+        size_t cap = t->row_caps[row_index] ? t->row_caps[row_index] * 2 : len * 2;
+        while (cap < len) {
+            cap *= 2;
+        }
+        char *grown = realloc(t->row_bytes[row_index], cap);
+        if (!grown) {
+            return;
+        }
+        t->row_bytes[row_index] = grown;
+        t->row_caps[row_index] = cap;
+    }
+    if (len) {
+        memcpy(t->row_bytes[row_index], bytes, len);
+    }
+    t->row_lens[row_index] = len;
+}
+
 const char *terminal_get_formatted_output_string(Terminal *t) {
     size_t width = 0;
     size_t height = 0;
     update_render_cells(t, &width, &height);
     StrBuf *sb = &t->output_buffer;
     sb_clear(sb);
+    bool cached = t->cache_on;
+    size_t clean_rows = 0;
     for (size_t row_index = height; row_index-- > 0;) {
         if (row_index + 1 < height) {
             sb_push(sb, '\n');
         }
-        serialize_row(t, row_index, width, sb);
+        if (cached && row_is_clean(t, row_index, width)) {
+            if (g_render_verify) {
+                StrBuf check;
+                sb_init(&check);
+                serialize_row(t, row_index, width, &check);
+                if (check.len != t->row_lens[row_index] ||
+                    (check.len && memcmp(check.data, t->row_bytes[row_index], check.len) != 0)) {
+                    fprintf(stderr, "render-verify: row %zu deemed clean but content changed\n", row_index);
+                    abort();
+                }
+                sb_free(&check);
+            }
+            sb_append(sb, t->row_bytes[row_index], t->row_lens[row_index]);
+            clean_rows++;
+        } else {
+            size_t start = sb->len;
+            serialize_row(t, row_index, width, sb);
+            if (cached) {
+                row_cache_store(t, row_index, sb->data ? sb->data + start : "", sb->len - start);
+                memcpy(&t->prev_cells[row_index * width], &t->render_cells[row_index * width],
+                       width * sizeof(uint32_t));
+                memcpy(&t->prev_version[row_index * width], &t->cell_version[row_index * width],
+                       width * sizeof(uint32_t));
+            }
+        }
+    }
+    if (cached) {
+        t->gate_seen++;
+        t->gate_clean += clean_rows;
+        // A probe that is hopeless after a few frames is abandoned at once:
+        // chaotic effects pay only the abort, and the backoff grows so the
+        // probes thin out, while a settled phase still catches the next one.
+        if (t->cache_probing && t->gate_seen >= ROW_CACHE_PROBE_MIN &&
+            t->gate_clean * 4 < t->gate_seen * height) {
+            t->cache_on = false;
+            row_cache_invalidate(t);
+            t->gate_seen = 0;
+            t->gate_clean = 0;
+            if (t->probe_backoff < ROW_CACHE_PROBE_MAX) {
+                t->probe_backoff *= 2;
+            }
+        } else if (t->gate_seen >= ROW_CACHE_WINDOW) {
+            bool keep;
+            if (t->cache_probing) {
+                keep = t->gate_clean * ROW_CACHE_ON_DEN >= t->gate_seen * height * ROW_CACHE_ON_NUM;
+            } else {
+                keep = t->gate_clean * ROW_CACHE_KEEP_DEN >= t->gate_seen * height * ROW_CACHE_KEEP_NUM;
+            }
+            t->gate_seen = 0;
+            t->gate_clean = 0;
+            if (keep) {
+                t->cache_probing = false;
+                t->probe_backoff = ROW_CACHE_PROBE;
+            } else {
+                t->cache_on = false;
+                row_cache_invalidate(t);
+                if (t->probe_backoff < ROW_CACHE_PROBE_MAX) {
+                    t->probe_backoff *= 2;
+                }
+            }
+        }
+    } else {
+        t->gate_seen++;
+        if (t->gate_seen >= t->probe_backoff) {
+            t->gate_seen = 0;
+            t->gate_clean = 0;
+            t->cache_on = true;
+            t->cache_probing = true;
+            row_cache_invalidate(t);
+        }
     }
     return sb->data ? sb->data : "";
 }

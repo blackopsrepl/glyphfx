@@ -38,6 +38,10 @@ static bool resolve_color_code(bool has_color, const Color *color, bool no_color
 // the pool at exit.
 static StrBuf g_fmt_scratch;
 
+// Monotonic visual byte-version: fresh allocations and in-place restyles draw
+// from it, so equal versions mean equal rendered bytes at any moment.
+static uint32_t g_vis_version;
+
 void vis_format(CharacterVisual *vis) {
     // Effects restyle characters constantly, so the SGR string is assembled in a
     // buffer retained across calls instead of allocating one per visual.
@@ -99,6 +103,7 @@ static CharacterVisual *vis_alloc(const char *symbol, const VisualParams *params
     }
     vis->refcount = 1;
     vis->pool_slot = SIZE_MAX;
+    vis->version = ++g_vis_version;
     vis->symbol = dup_cstr(symbol);
     vis->bold = params->bold;
     vis->dim = params->dim;
@@ -860,6 +865,7 @@ void animation_set_appearance(Animation *anim, bool uses_input_preexisting_color
             }
         }
         vis_format(cur);
+        cur->version = ++g_vis_version;
         return;
     }
     vis_unref(anim->current_visual);
