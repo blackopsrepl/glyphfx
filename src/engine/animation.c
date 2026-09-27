@@ -270,6 +270,7 @@ void scene_reset(Scene *scene) {
     for (size_t i = 0; i < scene->all_frames_len; i++) {
         scene->all_frames[i].ticks_elapsed = 0;
     }
+    scene->easing_current_step = 0;
 }
 
 static size_t count_codepoints(const char *s) {
