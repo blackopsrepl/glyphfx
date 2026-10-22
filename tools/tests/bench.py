@@ -7,7 +7,7 @@ import sys
 import time
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-ORACLE = os.environ.get("GLYPHFX_TTFX", os.path.join(ROOT, "reference/target/release/ttfx"))
+ORACLE = os.environ.get("GLYPHFX_TTFX", os.path.join(os.environ.get("CARGO_TARGET_DIR", os.path.join(ROOT, "reference/target")), "release/ttfx"))
 SUBJECT = os.environ.get("GLYPHFX_BIN", os.path.join(ROOT, "build/glyphfx"))
 COLS = int(os.environ.get("GLYPHFX_BENCH_COLS", "160"))
 ROWS = int(os.environ.get("GLYPHFX_BENCH_LINES", "40"))

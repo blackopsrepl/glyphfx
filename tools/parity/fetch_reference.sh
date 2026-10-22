@@ -8,6 +8,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DEST="$ROOT/reference"
 URL="${TTFX_URL:-https://github.com/omacom/ttfx.git}"
+TARGET="${CARGO_TARGET_DIR:-$DEST/target}"
 REF="${1:-${TTFX_REF:-54d21f046f22512b113056a1964077d7b7bf04cc}}"
 
 if [ -d "$DEST/.git" ]; then
@@ -20,5 +21,5 @@ else
 fi
 
 echo "building oracle..."
-cargo build --release --manifest-path "$DEST/Cargo.toml"
-echo "oracle: $DEST/target/release/ttfx"
+cargo build --release --target-dir "$TARGET" --manifest-path "$DEST/Cargo.toml"
+echo "oracle: $TARGET/release/ttfx"

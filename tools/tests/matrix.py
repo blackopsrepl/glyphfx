@@ -29,7 +29,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "docs/benchmarks/matrix.tsv"
 GF = str(ROOT / "build/glyphfx")
-RUST = os.environ.get("GLYPHFX_TTFX", str(ROOT / "reference/target/release/ttfx"))
+RUST = os.environ.get("GLYPHFX_TTFX", os.path.join(os.environ.get("CARGO_TARGET_DIR", str(ROOT / "reference/target")), "release/ttfx"))
 ASM = os.environ.get("GLYPHFX_TTFX_ASM", "/tmp/opencode/ttfx/target/release/ttfx")
 EFFECTS = ["beams", "binarypath", "blackhole", "bouncyballs", "bubbles", "burn",
     "colorshift", "crumble", "decrypt", "errorcorrect", "expand", "fireworks",

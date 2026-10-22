@@ -4,7 +4,7 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-ORACLE="${GLYPHFX_TTFX:-$ROOT/reference/target/release/ttfx}"
+ORACLE="${GLYPHFX_TTFX:-${CARGO_TARGET_DIR:-$ROOT/reference/target}/release/ttfx}"
 SUBJECT="${GLYPHFX_BIN:-$ROOT/build/glyphfx}"
 INPUTS_DIR="$ROOT/tools/parity/inputs"
 TMP="$(mktemp -d)"
