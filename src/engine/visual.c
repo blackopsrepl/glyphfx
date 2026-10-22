@@ -282,8 +282,12 @@ VisualHandle visual_make(const char *symbol, const struct VisualParams *p) {
         len = VISUAL_MAX;
     }
     uint32_t base = g_pool_top;
-    uint32_t need = (uint32_t)VH_SIZE + VISUAL_MAX + VISUAL_SLACK;
-    if (base + need > POOL_LIMIT) {
+    // Only the payload is owned by this record. The renderer may overread
+    // VISUAL_SLACK bytes, but those bytes can belong to following records: it
+    // discards everything past visual_len(). Keep the final overread mapped
+    // without reserving a fresh 128-byte payload AND slack for every glyph.
+    uint32_t need = ((uint32_t)VH_SIZE + (uint32_t)len + 15u) & ~15u;
+    if (base + need + VISUAL_SLACK > POOL_LIMIT) {
         return 0;  // pool exhausted, faithfully
     }
     char *rec = (char *)g_visual_pool + base;
