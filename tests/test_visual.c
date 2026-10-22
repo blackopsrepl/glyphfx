@@ -110,6 +110,20 @@ int main(void) {
     params_plain(&p);
     CHECK_EQ_INT(visual_make(big, &p), 0);
 
+    // Long, large-canvas fades create more than 55k distinct appearances.
+    // The pool must not freeze them merely because each short visual reserved
+    // a separate maximum-sized payload and overread region.
+    for (unsigned i = 0; i < 70000; i++) {
+        char hex[7];
+        snprintf(hex, sizeof(hex), "%06x", i);
+        params_fg_hex(&p, hex);
+        VisualHandle h = visual_make("Z", &p);
+        CHECK(h != 0);
+        if (!h) break;
+        CHECK(strcmp(visual_symbol(h), "Z") == 0);
+    }
+    CHECK(memcmp(visual_bytes(rgb), "\x1b[38;2;255;136;0mX\x1b[0m", visual_len(rgb)) == 0);
+
     visual_free();
     return test_summary("test_visual");
 }
