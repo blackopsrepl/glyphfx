@@ -777,11 +777,26 @@ static void update_render_cells(Terminal *t, size_t *out_width, size_t *out_heig
 }
 
 // Copies a visual's bytes from its pool handle. The pool guarantees 128
-// readable bytes from a visual's start, so a short visual costs one bounded
-// vector copy and no branch on the length. Returns the visual's true length.
+// readable bytes from a visual's start, so short visuals use fixed-size
+// vector copies rather than a libc call. Returns the visual's true length.
 static inline size_t emit_handle(char *dst, VisualHandle h) {
     size_t len = visual_len(h);
-    memcpy(dst, visual_bytes(h), (len + 15u) & ~15u);
+    const char *src = visual_bytes(h);
+    // Fixed-size copies inline to vector loads/stores. A variable-size memcpy
+    // here otherwise calls libc once per painted cell, even for tiny glyphs.
+    memcpy(dst, src, 16);
+    if (len > 16) {
+        memcpy(dst + 16, src + 16, 16);
+        if (len > 32) {
+            memcpy(dst + 32, src + 32, 16);
+            if (len > 48) {
+                memcpy(dst + 48, src + 48, 16);
+                if (len > 64) {
+                    memcpy(dst + 64, src + 64, (len - 64 + 15u) & ~15u);
+                }
+            }
+        }
+    }
     return len;
 }
 

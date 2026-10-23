@@ -4,14 +4,7 @@
 For every effect this checks, in order:
   1. Correctness: a full `--parity-dump` run must exit 0, produce at least one
      frame, and hash to the same byte stream recorded in the baseline.
-#  2. Speed: the fixed workload timed best-of-N must not exceed the baseline.
-#  A bare best-of can only tighten a noisy measurement, which is not a claim
-#  that this machine is at least as fast. A single CI container run is noisy
-#  enough to flip the historical gate by 5-25%. The gate takes a clear enough
-#  best (median best-of-run across CALIBRATED_RUNS independent repetitions,
-#  never a wider threshold) and stays fail-closed. This reduces noise on
-#  repeatable regressions; real regressions still fail because their increase
-#  is sustained across independent runs.
+  2. Speed: the fixed workload timed best-of-N must not exceed the baseline.
 
 Nothing that cannot be verified is allowed to pass:
   * a timed run that exits non-zero, times out, or is killed fails the gate;
@@ -22,8 +15,7 @@ Nothing that cannot be verified is allowed to pass:
     --force is given, and it only ever lowers a time (tightens the bar).
 
 The gate has no tolerance: any effect whose measured time exceeds its baseline
-fails. Repeated independent trials reduce CI noise without widening the bar.
-The baseline is only ever lowered, so the bar rises with every verified
+fails. The baseline is only ever lowered, so the bar rises with every verified
 improvement. Re-baseline deliberately with --update after a verified change;
 never widen the threshold to pass.
 
@@ -140,29 +132,16 @@ def validate(binary: str, effect: str, data: bytes, env: dict) -> tuple[int, str
     return int(m.group(1)), hashlib.sha256(p.stdout).hexdigest()
 
 
-def _median(values: list[float]) -> float:
-    ordered = sorted(values)
-    mid = len(ordered) // 2
-    if len(ordered) % 2:
-        return ordered[mid]
-    return 0.5 * (ordered[mid - 1] + ordered[mid])
-
-
-def time_run(binary: str, effect: str, data: bytes, env: dict, runs: int,
-             repetitions: int = 1) -> float:
-    """Median of independent best-of-`runs` measurements in milliseconds."""
-    measurements = []
-    for _ in range(repetitions):
-        best = float("inf")
-        for _ in range(runs):
-            t = time.perf_counter()
-            p = _run(_base_args(binary, effect), data, env, capture_stdout=False)
-            dt = time.perf_counter() - t
-            if p.returncode != 0:
-                raise GateError(f"{effect}: timed run exited {p.returncode}")
-            best = min(best, dt)
-        measurements.append(best * 1000.0)
-    return _median(measurements)
+def time_run(binary: str, effect: str, data: bytes, env: dict, runs: int) -> float:
+    best = float("inf")
+    for _ in range(runs):
+        t = time.perf_counter()
+        p = _run(_base_args(binary, effect), data, env, capture_stdout=False)
+        dt = time.perf_counter() - t
+        if p.returncode != 0:
+            raise GateError(f"{effect}: timed run exited {p.returncode}")
+        best = min(best, dt)
+    return best * 1000.0
 
 
 def load_baseline() -> tuple[str, dict[str, tuple[float, int, str]]]:
@@ -195,10 +174,7 @@ def save_baseline(key: str, vals: dict[str, tuple[float, int, str]]) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--binary", default=str(ROOT / "build/glyphfx"))
-    ap.add_argument("--runs", type=int, default=5,
-                    help="timed repetitions within each measurement")
-    ap.add_argument("--repetitions", type=int, default=11,
-                    help="independent best-of-runs measurements before taking their median")
+    ap.add_argument("--runs", type=int, default=5)
     ap.add_argument("--allow-machine", action="store_true",
                     help="do not fail when the baseline was recorded on another CPU")
     ap.add_argument("--update", action="store_true", help="tighten the baseline to this run")
@@ -230,7 +206,7 @@ def main() -> int:
         print("  fail-closed: re-baseline on this machine, or pass --allow-machine", file=sys.stderr)
         return 3
 
-    print(f"perf gate: {len(EFFECTS)} effects, median best of {a.runs} x {a.repetitions}, machine {key}")
+    print(f"perf gate: {len(EFFECTS)} effects, best of {a.runs}, machine {key}")
     measured: dict[str, tuple[float, int, str]] = {}
     regressions: list[tuple[str, float, float]] = []
     try:
@@ -240,7 +216,7 @@ def main() -> int:
             if base is not None and not (a.update and a.force):
                 if frames != base[1] or sha != base[2]:
                     raise GateError(f"{e}: parity stream changed ({frames} frames, {sha[:12]})")
-            ms = time_run(a.binary, e, data, env, a.runs, a.repetitions)
+            ms = time_run(a.binary, e, data, env, a.runs)
             measured[e] = (ms, frames, sha)
             if base is not None and ms > base[0]:
                 regressions.append((e, base[0], ms))
