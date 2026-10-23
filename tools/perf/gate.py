@@ -197,7 +197,7 @@ def main() -> int:
     ap.add_argument("--binary", default=str(ROOT / "build/glyphfx"))
     ap.add_argument("--runs", type=int, default=5,
                     help="timed repetitions within each measurement")
-    ap.add_argument("--repetitions", type=int, default=5,
+    ap.add_argument("--repetitions", type=int, default=11,
                     help="independent best-of-runs measurements before taking their median")
     ap.add_argument("--allow-machine", action="store_true",
                     help="do not fail when the baseline was recorded on another CPU")
