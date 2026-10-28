@@ -76,7 +76,7 @@ help: banner
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "static" "statically linked build"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "install" "install to PREFIX ($(PREFIX))"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "version" "print the version"
-	@printf "  $(CYAN)%-24s$(RESET) %s\n" "bump-{patch,minor,major}" "cut a release with commit-and-tag-version"
+	@printf "  $(CYAN)%-24s$(RESET) %s\n" "bump-{patch,minor,major}" "cut a release with csemver"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "clean" "remove $(BUILD)/"
 	@printf "\n$(GRAY)  CC=$(CC)  CFLAGS=$(CFLAGS)$(RESET)\n"
 
@@ -183,18 +183,18 @@ version:
 
 bump-patch: release-check
 	$(call section,Release $(ARROW) patch)
-	@npx commit-and-tag-version --release-as patch
+	@csemver --release-as patch
 
 bump-minor: release-check
 	$(call section,Release $(ARROW) minor)
-	@npx commit-and-tag-version --release-as minor
+	@csemver --release-as minor
 
 bump-major: release-check
 	$(call section,Release $(ARROW) major)
-	@npx commit-and-tag-version --release-as major
+	@csemver --release-as major
 
 bump-dry:
-	@npx commit-and-tag-version --dry-run
+	@csemver --dry-run
 
 # ============== Clean ==============
 clean: banner

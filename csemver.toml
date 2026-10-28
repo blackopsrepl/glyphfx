@@ -1,0 +1,44 @@
+# Release configuration for csemver. csemver reads only this file and runs no
+# configuration code; versions are read and written by its native updaters.
+#
+# VERSION is the source of truth: the Makefile reads it into
+# build/glyphfx_version.h, so the binary reports whatever the release commit
+# wrote here. packaging/PKGBUILD downloads the tagged archive, so its pkgver
+# must move with every release or it keeps building an old tag. The
+# changelog is generated from conventional commits and must never be
+# hand-edited.
+#
+# feat and fix drive the version bump; the other visible types are listed in
+# the changelog without selecting a bump of their own, matching how the
+# conventional preset treated them under the previous release tool.
+tagPrefix = "v"
+releaseCommitMessageFormat = "chore(release): {{currentTag}}"
+commitUrlFormat = "https://github.com/blackopsrepl/glyphfx/commit/{{hash}}"
+compareUrlFormat = "https://github.com/blackopsrepl/glyphfx/compare/{{previousTag}}...{{currentTag}}"
+issueUrlFormat = "https://github.com/blackopsrepl/glyphfx/issues/{{id}}"
+header = """
+# Changelog
+
+All notable changes to glyphfx are documented here. This file is generated from conventional commits by csemver; do not edit by hand.
+"""
+
+packageFiles = [
+  { filename = "VERSION", type = "plain-text" },
+]
+
+bumpFiles = [
+  { filename = "VERSION", type = "plain-text" },
+  { filename = "packaging/PKGBUILD", type = "regex", pattern = '^pkgver=([0-9]+\.[0-9]+\.[0-9]+)$', versionGroup = 1 },
+]
+
+types = [
+  { type = "feat", section = "Features", effect = "bump" },
+  { type = "fix", section = "Bug Fixes", effect = "bump" },
+  { type = "perf", section = "Performance", effect = "changelog" },
+  { type = "refactor", section = "Refactoring", effect = "changelog" },
+  { type = "test", section = "Tests", effect = "changelog" },
+  { type = "build", section = "Build", effect = "changelog" },
+  { type = "ci", section = "CI", effect = "changelog" },
+  { type = "docs", section = "Documentation", effect = "changelog" },
+  { type = "chore", effect = "hidden" },
+]
