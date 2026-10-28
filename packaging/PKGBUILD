@@ -1,6 +1,6 @@
 # Maintainer: pvd <pvd@localhost>
 pkgname=glyphfx
-pkgver=0.1.0
+pkgver=0.3.4
 pkgrel=1
 pkgdesc="Terminal text effects as a standalone C17 binary (parity port of ttfx)"
 arch=('x86_64' 'aarch64')

@@ -1,6 +1,39 @@
 # Changelog
 
-All notable changes to glyphfx are documented here. This file is generated from conventional commits by commit-and-tag-version; do not edit by hand.
+All notable changes to glyphfx are documented here. This file is generated from conventional commits by csemver; do not edit by hand.
+
+## [0.3.4](https://github.com/blackopsrepl/glyphfx/compare/v0.3.3...v0.3.4) (2026-10-28)
+
+
+### Bug Fixes
+
+* **parity:** follow shared Cargo target for the Rust oracle ([b729b56](https://github.com/blackopsrepl/glyphfx/commit/b729b5620c0fd26cfec0f83d91ce664abbc0baa7))
+* **perf:** accept median of independent best-of runs ([5a492f7](https://github.com/blackopsrepl/glyphfx/commit/5a492f780b57e087ce2d973fb020ebb2f9c687a1))
+* **perf:** refresh oracle-verified correctness digests ([4016567](https://github.com/blackopsrepl/glyphfx/commit/4016567de6358dcc0f73cc150e11d51bb7b40284))
+* **perf:** require five independent best-of measurements ([29c3c51](https://github.com/blackopsrepl/glyphfx/commit/29c3c51165b33b06a100e5b4df9f0e294fcfa0dc))
+* **perf:** use eleven independent best-of measurements ([21d313f](https://github.com/blackopsrepl/glyphfx/commit/21d313f54a0a09eb00b4dcecb85715f29eff7518))
+* **visual:** share mapped overread slack between packed records ([4853678](https://github.com/blackopsrepl/glyphfx/commit/48536780146fa67766c4db9dc9f4433952d7c4ae))
+
+
+### Performance
+
+* **render:** inline short visual copies and restore original gate ([b8c70f8](https://github.com/blackopsrepl/glyphfx/commit/b8c70f86d615bca0e51a3cfcbf32f006efbca8ba))
+
+
+### Tests
+
+* **visual:** reproduce pool exhaustion during long color fades ([310c3d8](https://github.com/blackopsrepl/glyphfx/commit/310c3d88fcc2f5558019d5761b67df2d85ca9438))
+
+
+### Build
+
+* **release:** release with csemver instead of commit-and-tag-version ([890d181](https://github.com/blackopsrepl/glyphfx/commit/890d18185acd350433b4e1b8d7253a7768195632))
+
+
+### Documentation
+
+* refresh the 37-effect performance matrix ([7c98e12](https://github.com/blackopsrepl/glyphfx/commit/7c98e1299c98d7ed918b73ffa8e39dbde47a343e))
+
 
 ## [0.3.3](https://github.com/blackopsrepl/glyphfx/compare/v0.3.2...v0.3.3) (2026-09-27)
 
