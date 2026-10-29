@@ -7,6 +7,8 @@ the byte-parity oracle.
 
 Fixed workload: 200x50 canvas, 190x46 text, seed 1, --frame-rate 0
 --virtual-clock, pinned, best of N, output to /dev/null. Every run must exit 0.
+Runs are reaped with a blocking wait4: subprocess.run(timeout=...) polls with
+sleeps growing to 50 ms and quantized every measurement to a poll boundary.
 
 Writes docs/benchmarks/matrix.tsv (machine header + one row per effect) and
 prints a markdown table. gen_readme.py renders the README table from this file,
@@ -21,8 +23,10 @@ import os
 import platform
 import random
 import re
+import signal
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -84,13 +88,25 @@ def measure(binary: str, effect: str, data: bytes, runs: int, extra_env: dict) -
                    "--canvas-width", str(COLS), "--canvas-height", str(ROWS), effect]
     env = dict(os.environ); env.update(extra_env); env["COLUMNS"] = str(COLS); env["LINES"] = str(ROWS)
     best = float("inf")
-    for _ in range(runs):
-        t = time.perf_counter()
-        p = subprocess.run(cmd, input=data, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           env=env, timeout=TIMEOUT)
-        if p.returncode != 0:
-            raise SystemExit(f"{Path(binary).name} {effect}: exit {p.returncode}")
-        best = min(best, time.perf_counter() - t)
+    with tempfile.TemporaryFile() as stdin:
+        stdin.write(data)
+        for _ in range(runs):
+            stdin.seek(0)
+            t = time.perf_counter()
+            p = subprocess.Popen(cmd, stdin=stdin, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, env=env)
+            old = signal.signal(signal.SIGALRM, lambda *_: p.kill())
+            signal.alarm(TIMEOUT)
+            try:
+                _, status, _ = os.wait4(p.pid, 0)
+            finally:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old)
+            dt = time.perf_counter() - t
+            p.returncode = os.waitstatus_to_exitcode(status)
+            if p.returncode != 0:
+                raise SystemExit(f"{Path(binary).name} {effect}: exit {p.returncode}")
+            best = min(best, dt)
     return best * 1000.0
 
 

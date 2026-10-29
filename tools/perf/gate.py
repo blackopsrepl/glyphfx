@@ -34,8 +34,10 @@ import os
 import platform
 import random
 import re
+import signal
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -135,14 +137,32 @@ def validate(binary: str, effect: str, data: bytes, env: dict) -> tuple[int, str
 
 
 def time_run(binary: str, effect: str, data: bytes, env: dict, runs: int) -> float:
+    # Timed runs read stdin from a file and are reaped with a blocking wait4.
+    # subprocess.run(timeout=...) polls the child with sleeps that grow to
+    # 50 ms, which snapped every measurement up to the next poll boundary
+    # (7.5, 15.5, 31.5, 63.5, 113.5, 163.5 ms, ...). The timeout is enforced
+    # by an alarm instead, so it costs nothing while the child runs.
     best = float("inf")
-    for _ in range(runs):
-        t = time.perf_counter()
-        p = _run(_base_args(binary, effect), data, env, capture_stdout=False)
-        dt = time.perf_counter() - t
-        if p.returncode != 0:
-            raise GateError(f"{effect}: timed run exited {p.returncode}")
-        best = min(best, dt)
+    with tempfile.TemporaryFile() as stdin:
+        stdin.write(data)
+        for _ in range(runs):
+            stdin.seek(0)
+            t = time.perf_counter()
+            p = subprocess.Popen(_base_args(binary, effect), stdin=stdin,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
+            old = signal.signal(signal.SIGALRM, lambda *_: p.kill())
+            signal.alarm(TIMEOUT)
+            try:
+                _, status, _ = os.wait4(p.pid, 0)
+            finally:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old)
+            dt = time.perf_counter() - t
+            p.returncode = os.waitstatus_to_exitcode(status)
+            if p.returncode != 0:
+                raise GateError(f"{effect}: timed run exited {p.returncode}"
+                                + (" (killed at timeout)" if p.returncode == -signal.SIGKILL else ""))
+            best = min(best, dt)
     return best * 1000.0
 
 
