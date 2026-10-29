@@ -21,6 +21,8 @@ jobs:
         run: make parity
       - name: Byte-exact effect parity
         run: GLYPHFX_MAX_FRAMES=600 make effects
+      - name: Original effects (determinism, goldens, final frame)
+        run: make originals
       - name: CLI corpus
         run: tools/tests/cli_corpus.sh
       - name: PTY byte stream
