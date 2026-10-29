@@ -21,6 +21,8 @@ jobs:
         run: make parity
       - name: Byte-exact effect parity
         run: GLYPHFX_MAX_FRAMES=600 make effects
+      - name: Original effects (determinism, goldens, final frame)
+        run: make originals
       - name: CLI corpus
         run: tools/tests/cli_corpus.sh
       - name: PTY byte stream
@@ -36,3 +38,5 @@ jobs:
         run: make
       - name: Unit tests
         run: make check
+      - name: Original effects (determinism and final frame; goldens are glibc-pinned)
+        run: python3 tools/tests/originals.py --no-goldens
