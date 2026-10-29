@@ -47,7 +47,9 @@ EFFECTS = ["beams", "binarypath", "blackhole", "bouncyballs", "bubbles", "burn",
     "highlight", "laseretch", "matrix", "middleout", "orbittingvolley", "overflow",
     "pour", "print", "rain", "randomsequence", "rings", "scattered", "slice", "slide",
     "smoke", "spotlights", "spray", "swarm", "sweep", "synthgrid", "thunderstorm",
-    "unstable", "vhstape", "waves", "wipe"]
+    "unstable", "vhstape", "waves", "wipe",
+    # glyphfx originals: no ttfx counterpart, gated for speed and output the same way.
+    "bannerwave", "burnout", "comet", "copper"]
 
 COLS, ROWS, SEED = 200, 50, 1
 TIMEOUT = 300
