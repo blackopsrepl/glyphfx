@@ -793,6 +793,24 @@ const char *cli_effect_name(const void *effect_entry) {
     return entry ? entry->name : "";
 }
 
+static void print_effect_names(size_t from, size_t to) {
+    printf("  ");
+    int col = 0;
+    for (size_t i = from; i < to; i++) {
+        const EffectEntry *entry = effect_entry_at(i);
+        if (!entry) {
+            continue;
+        }
+        printf("%s", entry->name);
+        col++;
+        if (col % 5 == 0) {
+            printf("\n  ");
+        } else {
+            printf(" ");
+        }
+    }
+}
+
 void cli_print_help(void) {
     printf("glyphfx %s\n", GLYPHFX_VERSION);
     printf("Terminal text effects.\n\n");
@@ -808,22 +826,10 @@ void cli_print_help(void) {
         }
         printf("  %s--%s\n", shortbuf, ROOT_OPTS[i].name);
     }
-    printf("\nEffects:\n  ");
-    size_t count = effect_entry_count();
-    int col = 0;
-    for (size_t i = 0; i < count; i++) {
-        const EffectEntry *entry = effect_entry_at(i);
-        if (!entry) {
-            continue;
-        }
-        printf("%s", entry->name);
-        col++;
-        if (col % 5 == 0) {
-            printf("\n  ");
-        } else {
-            printf(" ");
-        }
-    }
+    printf("\nEffects:\n");
+    print_effect_names(0, effect_parity_count());
+    printf("\n\nglyphfx originals (no ttfx counterpart; --random-effect draws them only via --include-effects):\n");
+    print_effect_names(effect_parity_count(), effect_entry_count());
     printf("\n\nUse 'glyphfx <effect> --help' for options of a specific effect.\n");
 }
 

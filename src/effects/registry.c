@@ -5,13 +5,32 @@
 static const EffectEntry *const EFFECTS[] = {
 #define GLYPHFX_ENTRY_PTR(name) &name##_entry,
     GLYPHFX_EFFECT_NAMES(GLYPHFX_ENTRY_PTR)
+    GLYPHFX_ORIGINAL_EFFECT_NAMES(GLYPHFX_ENTRY_PTR)
 #undef GLYPHFX_ENTRY_PTR
 };
 
+#define GLYPHFX_COUNT_ONE(name) +1
+#define PARITY_COUNT ((size_t)(0 GLYPHFX_EFFECT_NAMES(GLYPHFX_COUNT_ONE)))
 #define EFFECT_COUNT (sizeof(EFFECTS) / sizeof(EFFECTS[0]))
 
 size_t effect_entry_count(void) {
     return EFFECT_COUNT;
+}
+
+size_t effect_parity_count(void) {
+    return PARITY_COUNT;
+}
+
+bool effect_is_original(const EffectEntry *entry) {
+    if (entry == NULL) {
+        return false;
+    }
+    for (size_t i = PARITY_COUNT; i < EFFECT_COUNT; i++) {
+        if (EFFECTS[i] == entry) {
+            return true;
+        }
+    }
+    return false;
 }
 
 const EffectEntry *effect_entry_at(size_t index) {
