@@ -48,6 +48,14 @@ EFFECTS = [
     ("wipe", "Wipes the text across the terminal to reveal characters."),
 ]
 
+# glyphfx originals: no ttfx counterpart, documented in docs/ORIGINALS.md.
+ORIGINALS = [
+    ("bannerwave", "A bright front reveals the text while every column rides a travelling sine, then the text lies flat."),
+    ("burnout", "Exit effect: the text holds, then burns away through ember colours, shades and rising sparks."),
+    ("comet", "Characters fly arcs from the bottom of the canvas on fading trails, land bright and cool into place."),
+    ("copper", "Copper bars bounce behind dimmed text, lighting whole rows, then a sweep settles the final colours."),
+]
+
 
 def matrix_table():
     """Render the full performance matrix recorded by tools/tests/matrix.py."""
@@ -88,11 +96,11 @@ def matrix_table():
     return "\n".join(out)
 
 
-def effects_table():
+def effects_table(effects=EFFECTS):
     rows = []
-    for i in range(0, len(EFFECTS), 2):
+    for i in range(0, len(effects), 2):
         cells = []
-        for name, desc in EFFECTS[i:i + 2]:
+        for name, desc in effects[i:i + 2]:
             cells.append(f"| <b>{name}</b><br><img src=\"docs/effects/{name}.gif\" width=\"400\" alt=\"{name}\"><br><sub>{desc}</sub> ")
         while len(cells) < 2:
             cells.append("| ")
@@ -165,6 +173,19 @@ All 37, each with a full option surface (`glyphfx <effect> --help`).
 |:---:|:---:|
 {effects_table()}
 
+## glyphfx originals
+
+Four effects that ttfx does not have, from the SolverForge demoscene
+productions. They follow the same contract (text in, the text in place at the
+end; `burnout` is the one exit effect) but sit outside byte parity:
+`--random-effect` draws them only when they are named in `--include-effects`,
+and `make originals` holds them to determinism, golden streams and a
+final-frame check instead. Details in [docs/ORIGINALS.md](docs/ORIGINALS.md).
+
+|     |     |
+|:---:|:---:|
+{effects_table(ORIGINALS)}
+
 ## Benchmarks
 
 Startup is under a millisecond (about 0.3 ms for `glyphfx --version`). The full
@@ -178,7 +199,7 @@ provenance; glyphfx is on par with it across the matrix):
 ```
 <producer> | glyphfx [terminal options] <effect> [effect options]
 
-glyphfx --help                 # all 37 effects and the terminal options
+glyphfx --help                 # the 37 effects, the 4 originals, and the terminal options
 glyphfx <effect> --help        # options for one effect
 glyphfx --random-effect        # surprise me (--include-effects / --exclude-effects to filter)
 glyphfx --print-completion bash|zsh
@@ -214,6 +235,10 @@ tools/tests/cli_corpus.sh    # exit codes and stdout/stderr routing
 tools/tests/tty_compare.py   # the full pty prep+frames+teardown stream
 tools/tests/tty_signals.py   # SIGINT/SIGTERM/close/resize behavior
 ```
+
+The four originals have no oracle to match; `make originals` checks that they
+are deterministic, match their recorded golden streams, and end on the right
+final frame.
 
 The oracle is a local ttfx checkout, fetched on demand and gitignored:
 

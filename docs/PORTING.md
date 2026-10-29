@@ -4,6 +4,10 @@ glyphfx is a byte-exact parity port of ttfx. Each effect is one C file plus a
 header, a registry entry, and parity cases. The reference is
 `reference/src/effects/<name>.rs`; the target is parity with the oracle binary.
 
+This guide covers the ported set only. Effects glyphfx ships without a ttfx
+counterpart (`bannerwave`, `burnout`, `comet`, `copper`) have no oracle and no
+parity cases; they follow [ORIGINALS.md](ORIGINALS.md).
+
 ## Definition of done
 
 ```
