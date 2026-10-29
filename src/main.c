@@ -195,6 +195,11 @@ int main(int argc, char **argv) {
             if (!entry) {
                 continue;
             }
+            // The originals join the draw only when named, so a seeded
+            // --random-effect run picks exactly what ttfx picks.
+            if (effect_is_original(entry) && !cfg.include_effects.provided) {
+                continue;
+            }
             if (cfg.include_effects.provided) {
                 bool included = false;
                 for (size_t k = 0; k < cfg.include_effects.len; k++) {

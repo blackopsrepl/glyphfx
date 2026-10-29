@@ -5,6 +5,7 @@
 #ifndef GLYPHFX_REGISTRY_H
 #define GLYPHFX_REGISTRY_H
 
+#include <stdbool.h>
 #include <stddef.h>
 
 #include "cli.h"
@@ -65,11 +66,24 @@ typedef struct {
     X(waves)                         \
     X(wipe)
 
+// glyphfx originals: effects with no ttfx counterpart. They are registered
+// after the ttfx set so every ttfx entry keeps its index, and they sit outside
+// the byte-parity contract (see docs/ORIGINALS.md).
+#define GLYPHFX_ORIGINAL_EFFECT_NAMES(X) \
+    X(bannerwave)                        \
+    X(burnout)                           \
+    X(comet)                             \
+    X(copper)
+
 #define GLYPHFX_DECLARE_ENTRY(name) extern const EffectEntry name##_entry GLYPHFX_WEAK;
 GLYPHFX_EFFECT_NAMES(GLYPHFX_DECLARE_ENTRY)
+GLYPHFX_ORIGINAL_EFFECT_NAMES(GLYPHFX_DECLARE_ENTRY)
 
 const EffectEntry *effect_find(const char *name);
 const EffectEntry *effect_entry_at(size_t index);
 size_t effect_entry_count(void);
+// Entries [0, effect_parity_count()) are the ttfx port; the rest are originals.
+size_t effect_parity_count(void);
+bool effect_is_original(const EffectEntry *entry);
 
 #endif
