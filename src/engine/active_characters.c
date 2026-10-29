@@ -7,6 +7,8 @@ void ac_init(ActiveCharacters *ac) {
     ac->bits = NULL;
     ac->nwords = 0;
     ac->len = 0;
+    ac->lo = 0;
+    ac->hi = 0;
 }
 
 void ac_free(ActiveCharacters *ac) {
@@ -27,6 +29,8 @@ void ac_clear(ActiveCharacters *ac) {
         memset(ac->bits, 0, ac->nwords * sizeof(uint64_t));
     }
     ac->len = 0;
+    ac->lo = 0;
+    ac->hi = 0;
 }
 
 static void ac_ensure(ActiveCharacters *ac, CharId id) {
@@ -67,6 +71,17 @@ bool ac_insert(ActiveCharacters *ac, CharId id) {
     }
     ac->bits[word] |= mask;
     ac->len++;
+    if (ac->hi <= ac->lo) {
+        ac->lo = word;
+        ac->hi = word + 1;
+    } else {
+        if (word < ac->lo) {
+            ac->lo = word;
+        }
+        if (word >= ac->hi) {
+            ac->hi = word + 1;
+        }
+    }
     return true;
 }
 
@@ -85,7 +100,9 @@ bool ac_remove(ActiveCharacters *ac, CharId id) {
 }
 
 void ac_retain(ActiveCharacters *ac, bool (*keep)(CharId id, void *ctx), void *ctx) {
-    for (size_t w = 0; w < ac->nwords; w++) {
+    size_t lo = ac->lo;
+    size_t hi = ac->hi < ac->nwords ? ac->hi : ac->nwords;
+    for (size_t w = lo; w < hi; w++) {
         uint64_t bits = ac->bits[w];
         while (bits) {
             unsigned b = (unsigned)__builtin_ctzll(bits);
@@ -97,11 +114,21 @@ void ac_retain(ActiveCharacters *ac, bool (*keep)(CharId id, void *ctx), void *c
             bits &= bits - 1;
         }
     }
+    // narrow the window to the words still holding members
+    while (lo < hi && ac->bits[lo] == 0) {
+        lo++;
+    }
+    while (hi > lo && ac->bits[hi - 1] == 0) {
+        hi--;
+    }
+    ac->lo = lo < hi ? lo : 0;
+    ac->hi = lo < hi ? hi : 0;
 }
 
 void ac_snapshot_into(const ActiveCharacters *ac, CharId *dst) {
     size_t k = 0;
-    for (size_t w = 0; w < ac->nwords; w++) {
+    size_t hi = ac->hi < ac->nwords ? ac->hi : ac->nwords;
+    for (size_t w = ac->lo; w < hi; w++) {
         uint64_t bits = ac->bits[w];
         while (bits) {
             unsigned b = (unsigned)__builtin_ctzll(bits);

@@ -15,6 +15,11 @@ typedef struct {
     uint64_t *bits;
     size_t nwords;
     size_t len;  // number of set bits
+    // Every set bit lies in words [lo, hi) (empty when hi <= lo): inserts
+    // widen the window, a retain pass narrows it, and the passes over the set
+    // visit only those words.
+    size_t lo;
+    size_t hi;
 } ActiveCharacters;
 
 void ac_init(ActiveCharacters *ac);
