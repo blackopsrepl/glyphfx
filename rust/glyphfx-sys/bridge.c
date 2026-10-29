@@ -15,15 +15,19 @@ typedef struct {
     bool initialized;
 } GlyphfxClip;
 
+// The engine keeps per-run state in globals (the render log, the bound
+// context's dozes); every entry point swaps this clip's in and out.
 static void bind(GlyphfxClip *clip) {
     g_rlog = clip->log;
     render_log_bind(&clip->ctx.terminal);
+    engine_bind(&clip->ctx);
 }
 
 static void detach(GlyphfxClip *clip) {
     clip->log = g_rlog;
     memset(&g_rlog, 0, sizeof(g_rlog));
     render_log_bind(NULL);
+    engine_bind(NULL);
 }
 
 void glyphfx_close(GlyphfxClip *clip) {

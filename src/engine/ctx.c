@@ -21,6 +21,7 @@ int engine_ctx_init(EngineCtx *ctx, const char *input_data, const TerminalConfig
     ctx->rng = rng;
     ctx->clock = clock;
     ac_init(&ctx->active_characters);
+    doze_init(&ctx->doze, ctx);
     ctx->preexisting_colors_present = false;
     for (size_t i = 0; i < ctx->terminal.input_characters_len; i++) {
         EffectCharacter *ch = &ctx->terminal.arena.items[ctx->terminal.input_characters[i]];
@@ -33,9 +34,10 @@ int engine_ctx_init(EngineCtx *ctx, const char *input_data, const TerminalConfig
 }
 
 void engine_ctx_free(EngineCtx *ctx) {
+    // Drop the dozes first: nothing may settle them into the freed arena.
+    doze_free(&ctx->doze);
     terminal_free(&ctx->terminal);
     ac_free(&ctx->active_characters);
-    free(ctx->scratch);
     memset(ctx, 0, sizeof(*ctx));
 }
 
@@ -222,6 +224,7 @@ static void path_insert_segment_front(Path *p, const Segment *seg) {
 }
 
 void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char *path_id) {
+    doze_wake(id);
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
     long slot = om_slot(&ch->motion.paths, path_id);
     Path *p = slot < 0 ? NULL : (Path *)om_value_at(&ch->motion.paths, (size_t)slot);
@@ -389,7 +392,7 @@ static Coord path_step(EngineCtx *ctx, Effect *effect, CharId id, const char *pa
     return find_coord_on_line(seg->start.coord, seg->end.coord, t);
 }
 
-void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id) {
+static void motion_move_now(EngineCtx *ctx, Effect *effect, CharId id) {
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
     ch->motion.previous_coord = ch->motion.current_coord;
     if (!ch->motion.active_path) {
@@ -465,6 +468,7 @@ static void set_current_visual(EngineCtx *ctx, CharId id, VisualHandle src) {
 }
 
 void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char *scene_id) {
+    doze_wake(id);
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
     long scene_slot = om_slot(&ch->animation.scenes, scene_id);
     Scene *scene = scene_slot < 0 ? NULL : (Scene *)om_value_at(&ch->animation.scenes, (size_t)scene_slot);
@@ -491,6 +495,7 @@ void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char
 }
 
 void engine_deactivate_scene(EngineCtx *ctx, CharId id, const char *scene_id) {
+    doze_wake(id);
     Animation *anim = &ctx->terminal.arena.items[id].animation;
     if (!scene_id) {
         free(anim->active_scene);
@@ -593,7 +598,7 @@ static void step_eased_scene(EngineCtx *ctx, CharId id, Scene *scene) {
     }
 }
 
-void engine_step_animation(EngineCtx *ctx, Effect *effect, CharId id) {
+static void step_animation_now(EngineCtx *ctx, Effect *effect, CharId id) {
     Animation *anim = &ctx->terminal.arena.items[id].animation;
     if (!anim->active_scene) {
         return;
@@ -615,9 +620,26 @@ void engine_step_animation(EngineCtx *ctx, Effect *effect, CharId id) {
     complete_scene_if_finished(ctx, effect, id, scene);
 }
 
+static void tick_now(EngineCtx *ctx, Effect *effect, CharId id) {
+    motion_move_now(ctx, effect, id);
+    step_animation_now(ctx, effect, id);
+}
+
+// The public tick entry points serve effects that tick characters themselves;
+// a dozing character settles first so it ticks from its true state.
+void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id) {
+    doze_wake(id);
+    motion_move_now(ctx, effect, id);
+}
+
+void engine_step_animation(EngineCtx *ctx, Effect *effect, CharId id) {
+    doze_wake(id);
+    step_animation_now(ctx, effect, id);
+}
+
 void engine_tick(EngineCtx *ctx, Effect *effect, CharId id) {
-    engine_motion_move(ctx, effect, id);
-    engine_step_animation(ctx, effect, id);
+    doze_wake(id);
+    tick_now(ctx, effect, id);
 }
 
 static bool retain_keep(CharId id, void *ctxp) {
@@ -625,26 +647,76 @@ static bool retain_keep(CharId id, void *ctxp) {
     return character_is_active(&ctx->terminal.arena.items[id]);
 }
 
+void engine_bind(EngineCtx *ctx) {
+    g_doze = ctx ? &ctx->doze : NULL;
+}
+
 void engine_update(EngineCtx *ctx, Effect *effect) {
-    // Tick a snapshot of the active set: ticks can activate characters, which
-    // would invalidate an in-place walk. Reuse one buffer across frames instead
-    // of allocating the copy every frame.
-    size_t n = ac_len(&ctx->active_characters);
-    if (n > ctx->scratch_len) {
-        CharId *grown = realloc(ctx->scratch, (n ? n : 1) * sizeof(CharId));
-        if (!grown) {
-            return;
+    // Tick a snapshot of the active set in ascending order (ticks can change
+    // the live set), leaving out the characters dozing through this update.
+    ActiveCharacters *ac = &ctx->active_characters;
+    Doze *d = &ctx->doze;
+    engine_bind(ctx);
+    if (!doze_grow(d, ctx->terminal.arena.len)) {
+        fputs("glyphfx: out of memory (doze)\n", stderr);
+        abort();
+    }
+    uint32_t now = ++d->count;
+    // Only the set's window [lo, hi) can hold members (and so dozers).
+    size_t lo = ac->lo;
+    size_t words = ac->hi;
+    if (words > ac->nwords) {
+        words = ac->nwords;
+    }
+    if (words > d->nwords) {
+        words = d->nwords;
+    }
+    if (lo < words) {
+        memcpy(d->snapshot + lo, ac->bits + lo, (words - lo) * sizeof(uint64_t));
+    }
+    for (size_t w = lo; d->live && w < words; w++) {
+        uint64_t dozing = d->bits[w];
+        while (dozing) {
+            unsigned b = (unsigned)__builtin_ctzll(dozing);
+            dozing &= dozing - 1;
+            if (d->until[(w << 6) | b] >= now) {
+                d->snapshot[w] &= ~(1ULL << b);
+            }
         }
-        ctx->scratch = grown;
-        ctx->scratch_len = n;
     }
-    if (n) {
-        ac_snapshot_into(&ctx->active_characters, ctx->scratch);
+    d->snapshot_words = words;
+    d->in_update = true;
+    for (size_t w = lo; w < words; w++) {
+        // Pop from a register copy; snapshot[w] then only collects the
+        // characters woken ahead of the cursor, which rejoin this word.
+        uint64_t m = d->snapshot[w];
+        d->snapshot[w] = 0;
+        while (m) {
+            unsigned b = (unsigned)__builtin_ctzll(m);
+            m &= m - 1;
+            CharId id = (CharId)((w << 6) | b);
+            d->cursor = id;
+            if (d->bits[w] & (1ULL << b)) {
+                doze_settle(d, id);  // its doze ran out with the last update
+            }
+            tick_now(ctx, effect, id);
+            // Only a character without a path and with a scene can doze; the
+            // test reads the character the tick just touched.
+            const EffectCharacter *ch = &ctx->terminal.arena.items[id];
+            if (!ch->motion.active_path && ch->animation.active_scene) {
+                doze_try(d, id);
+            }
+            if (d->snapshot[w]) {
+                m |= d->snapshot[w];
+                d->snapshot[w] = 0;
+            }
+        }
     }
-    for (size_t i = 0; i < n; i++) {
-        engine_tick(ctx, effect, ctx->scratch[i]);
-    }
-    ac_retain(&ctx->active_characters, retain_keep, ctx);
+    d->in_update = false;
+    d->cursor = CHAR_ID_NONE;
+    d->snapshot_words = 0;
+    // Dozers stay: a doze only covers ticks that leave the character active.
+    ac_retain_except(ac, d->bits, d->nwords, retain_keep, ctx);
 }
 
 const char *engine_frame(EngineCtx *ctx) {

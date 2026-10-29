@@ -391,6 +391,7 @@ static int prepare_scenes(Fireworks *st, Effect *self, EngineCtx *ctx) {
                 rc = -1;
             }
             if (rc == 0) {
+                scene_wake(scene);
                 scene->is_looping = true;
             }
 

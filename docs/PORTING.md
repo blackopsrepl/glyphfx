@@ -140,6 +140,10 @@ EF_FLOAT_RANGE EF_CUSTOM`
    handled inside scenes via `uses_input_preexisting_colors`.
 5. Insertion order is behavior. Use `OrdMap` for insertion-ordered id->value
    maps; iterate `active_characters` only through `ac_snapshot` (ascending id).
+6. Characters doze through ticks nothing can observe (`engine/doze.h`). Change
+   playback state only through the engine and `scene_*` calls, which end a
+   doze first. Before writing a `Scene` field directly (`is_looping`,
+   `has_ease`, `has_sync`, ...), call `scene_wake(scene)`.
 
 ## Parity cases
 

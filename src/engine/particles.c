@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "engine/doze.h"
+
 ParticleReset particle_reset_default(void) {
     ParticleReset r;
     r.clear_paths = true;
@@ -85,6 +87,7 @@ bool particle_pool_is_empty(const ParticlePool *pool) {
 }
 
 static void reset_particle(EngineCtx *ctx, CharId id, ParticleReset reset) {
+    doze_wake(id);
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
     if (reset.deactivate_path) {
         motion_deactivate_path(&ch->motion, NULL);
@@ -176,6 +179,7 @@ CharId particle_pool_emit(ParticlePool *pool, EngineCtx *ctx, Coord origin, cons
 }
 
 void particle_pool_reclaim(ParticlePool *pool, EngineCtx *ctx, CharId id, bool hide, bool deactivate) {
+    doze_wake(id);
     if (hide) {
         terminal_set_character_visibility(&ctx->terminal, id, false);
     }

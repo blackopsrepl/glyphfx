@@ -352,6 +352,7 @@ static int blackhole_prepare(Blackhole *st, EngineCtx *ctx, Effect *self) {
                 rc = -1;
                 break;
             }
+            scene_wake(scene);
             scene->has_sync = true;
             scene->sync = SYNC_DISTANCE;
 

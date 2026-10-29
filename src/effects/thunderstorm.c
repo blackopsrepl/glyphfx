@@ -639,6 +639,7 @@ static void lightning_strike(Effect *self, EngineCtx *ctx) {
     for (size_t i = 0; i < text_len; i++) {
         Scene *scene = (Scene *)om_get(&ctx->terminal.arena.items[text_chars[i]].animation.scenes, "flash");
         if (scene) {
+            scene_wake(scene);
             scene->has_ease = true;
             scene->ease = flash_ease;
         }

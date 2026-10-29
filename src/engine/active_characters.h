@@ -32,6 +32,9 @@ bool ac_contains(const ActiveCharacters *ac, CharId id);
 bool ac_insert(ActiveCharacters *ac, CharId id);
 bool ac_remove(ActiveCharacters *ac, CharId id);
 void ac_retain(ActiveCharacters *ac, bool (*keep)(CharId id, void *ctx), void *ctx);
+// ac_retain over the members not set in `skip` (the others are kept as is).
+void ac_retain_except(ActiveCharacters *ac, const uint64_t *skip, size_t skip_words,
+                      bool (*keep)(CharId id, void *ctx), void *ctx);
 // Ascending snapshot; caller frees.
 void ac_snapshot(const ActiveCharacters *ac, CharId **out, size_t *out_len);
 // Ascending snapshot into a caller buffer of at least ac_len() entries.

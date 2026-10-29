@@ -7,6 +7,7 @@
 #include <stdbool.h>
 
 #include "engine/active_characters.h"
+#include "engine/doze.h"
 #include "engine/effect.h"
 #include "engine/input.h"
 #include "engine/terminal.h"
@@ -18,8 +19,7 @@ typedef struct EngineCtx {
     Rng rng;
     Clock clock;
     ActiveCharacters active_characters;
-    CharId *scratch;
-    size_t scratch_len;
+    Doze doze;  // characters parked through their pure ticks (engine/doze.h)
     bool preexisting_colors_present;
 } EngineCtx;
 
@@ -33,6 +33,11 @@ void engine_step_animation(EngineCtx *ctx, Effect *effect, CharId id);
 void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id);
 void engine_tick(EngineCtx *ctx, Effect *effect, CharId id);
 void engine_update(EngineCtx *ctx, Effect *effect);
+// Makes ctx the context whose dozes the engine's context-free hooks (scene and
+// active-set calls, engine/doze.h) end; NULL unbinds. engine_update binds its
+// own context. A host that interleaves several contexts in one process binds
+// each one before calling into it (the Rust bridge does, in bind()).
+void engine_bind(EngineCtx *ctx);
 const char *engine_frame(EngineCtx *ctx);
 void engine_handle_event(EngineCtx *ctx, Effect *effect, CharId id, Event event, const CallerKey *caller);
 void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char *path_id);

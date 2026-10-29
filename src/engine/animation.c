@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "utils/hexterm.h"
+#include "engine/doze.h"
 #include "engine/render_log.h"
 #include "utils/strbuf.h"
 #include "utils/strhash.h"
@@ -52,7 +53,14 @@ static Scene *scene_new(const char *scene_id, bool is_looping, bool has_sync, Sy
     scene->has_ease = has_ease;
     scene->ease = ease;
     scene->head = 0;
+    scene->owner = -1;
     return scene;
+}
+
+void scene_wake(const Scene *scene) {
+    if (scene->owner >= 0) {
+        doze_wake((CharId)scene->owner);
+    }
 }
 
 void scene_free(Scene *scene) {
@@ -68,6 +76,7 @@ void scene_free(Scene *scene) {
 }
 
 int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const VisualParams *params_in) {
+    scene_wake(scene);
     VisualParams params = *params_in;
     if (scene->has_preexisting_colors) {
         params.colors = scene->preexisting_colors;
@@ -122,6 +131,7 @@ int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const Vi
 }
 
 int scene_append_frames(Scene *dst, const Scene *src) {
+    scene_wake(dst);
     for (size_t i = 0; i < src->all_frames_len; i++) {
         const Frame *from = &src->all_frames[i];
         if (from->duration < 1) {
@@ -266,6 +276,7 @@ void scene_get_next_visual(Scene *scene, VisualHandle *out, size_t *frame_index)
 }
 
 void scene_reset(Scene *scene) {
+    scene_wake(scene);
     scene->head = 0;
     for (size_t i = 0; i < scene->all_frames_len; i++) {
         scene->all_frames[i].ticks_elapsed = 0;
@@ -570,6 +581,7 @@ void animation_free(Animation *anim) {
 
 void animation_set_appearance(Animation *anim, bool uses_input_preexisting_colors, const char *symbol,
                               const ColorPair *colors) {
+    doze_wake((CharId)anim->render_id);
     const char *use_symbol = symbol ? symbol : anim->input_symbol;
     ColorPair effective;
     if (colors) {
@@ -629,6 +641,7 @@ const char *animation_new_scene(Animation *anim, bool is_looping, bool has_sync,
     if (!scene) {
         return NULL;
     }
+    scene->owner = anim->render_id;
     if (anim->existing_color_handling == EXISTING_COLOR_ALWAYS && uses_input_preexisting_colors) {
         scene->has_preexisting_colors = true;
         scene->preexisting_colors.has_fg = anim->has_input_fg;
@@ -670,6 +683,7 @@ Scene *animation_active_scene(Animation *anim) {
 }
 
 void animation_clear_scenes(Animation *anim) {
+    doze_wake((CharId)anim->render_id);
     for (size_t i = 0; i < om_len(&anim->scenes); i++) {
         scene_free((Scene *)om_value_at(&anim->scenes, i));
     }

@@ -320,6 +320,7 @@ static int make_bubble(Bubbles *st, EngineCtx *ctx, Effect *self, Coord origin, 
             if (ch2->animation.active_scene) {
                 Scene *active = (Scene *)om_get(&ch2->animation.scenes, ch2->animation.active_scene);
                 if (active) {
+                    scene_wake(active);
                     active->is_looping = true;
                 }
             }

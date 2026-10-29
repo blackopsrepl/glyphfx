@@ -110,6 +110,7 @@ typedef struct {
     bool has_preexisting_colors;
     ColorPair preexisting_colors;
     bool preexisting_bold;
+    int32_t owner;  // arena slot of the character that owns the scene, or -1
 } Scene;
 
 struct Easing;
@@ -171,5 +172,8 @@ void scene_get_next_visual(Scene *scene, VisualHandle *out, size_t *frame_index)
 int scene_apply_gradient_to_symbols(Scene *scene, const char *const *symbols, size_t n_symbols, int64_t duration,
                                     const Gradient *fg, const Gradient *bg);
 void scene_reset(Scene *scene);
+// Ends the owning character's doze (engine/doze.h). Call before writing a
+// Scene's fields directly; the scene_* functions above already do.
+void scene_wake(const Scene *scene);
 
 #endif

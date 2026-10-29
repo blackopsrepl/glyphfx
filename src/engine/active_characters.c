@@ -3,6 +3,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "engine/ctx.h"
+#include "engine/doze.h"
+
+// Only the engine's own active set holds dozers; effects also use this type
+// for scratch sets, whose changes must not end a doze.
+static bool doze_owns_set(const ActiveCharacters *ac) {
+    return g_doze && g_doze->live && ac == &g_doze->ctx->active_characters;
+}
+
 void ac_init(ActiveCharacters *ac) {
     ac->bits = NULL;
     ac->nwords = 0;
@@ -25,6 +34,9 @@ bool ac_is_empty(const ActiveCharacters *ac) {
 }
 
 void ac_clear(ActiveCharacters *ac) {
+    if (doze_owns_set(ac)) {
+        doze_wake_all();
+    }
     if (ac->bits) {
         memset(ac->bits, 0, ac->nwords * sizeof(uint64_t));
     }
@@ -86,6 +98,9 @@ bool ac_insert(ActiveCharacters *ac, CharId id) {
 }
 
 bool ac_remove(ActiveCharacters *ac, CharId id) {
+    if (doze_owns_set(ac)) {
+        doze_wake(id);
+    }
     size_t word = (size_t)id >> 6;
     if (word >= ac->nwords) {
         return false;
@@ -99,11 +114,17 @@ bool ac_remove(ActiveCharacters *ac, CharId id) {
     return true;
 }
 
-void ac_retain(ActiveCharacters *ac, bool (*keep)(CharId id, void *ctx), void *ctx) {
+// Drop the members `keep` rejects, skipping those set in `skip`, then narrow
+// the window to the words still holding members.
+static void retain_window(ActiveCharacters *ac, const uint64_t *skip, size_t skip_words,
+                          bool (*keep)(CharId id, void *ctx), void *ctx) {
     size_t lo = ac->lo;
     size_t hi = ac->hi < ac->nwords ? ac->hi : ac->nwords;
     for (size_t w = lo; w < hi; w++) {
         uint64_t bits = ac->bits[w];
+        if (w < skip_words) {
+            bits &= ~skip[w];
+        }
         while (bits) {
             unsigned b = (unsigned)__builtin_ctzll(bits);
             CharId id = (CharId)((w << 6) | b);
@@ -114,7 +135,9 @@ void ac_retain(ActiveCharacters *ac, bool (*keep)(CharId id, void *ctx), void *c
             bits &= bits - 1;
         }
     }
-    // narrow the window to the words still holding members
+    // keep() may have inserted members anywhere; the window already covers them
+    lo = ac->lo;
+    hi = ac->hi < ac->nwords ? ac->hi : ac->nwords;
     while (lo < hi && ac->bits[lo] == 0) {
         lo++;
     }
@@ -123,6 +146,15 @@ void ac_retain(ActiveCharacters *ac, bool (*keep)(CharId id, void *ctx), void *c
     }
     ac->lo = lo < hi ? lo : 0;
     ac->hi = lo < hi ? hi : 0;
+}
+
+void ac_retain(ActiveCharacters *ac, bool (*keep)(CharId id, void *ctx), void *ctx) {
+    retain_window(ac, NULL, 0, keep, ctx);
+}
+
+void ac_retain_except(ActiveCharacters *ac, const uint64_t *skip, size_t skip_words,
+                      bool (*keep)(CharId id, void *ctx), void *ctx) {
+    retain_window(ac, skip, skip_words, keep, ctx);
 }
 
 void ac_snapshot_into(const ActiveCharacters *ac, CharId *dst) {
