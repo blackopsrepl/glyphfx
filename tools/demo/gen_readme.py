@@ -70,26 +70,31 @@ def matrix_table():
         elif line.startswith("#") or not line.strip():
             continue
         parts = line.rstrip("\n").split("\t")
-        if len(parts) != 4:
+        if len(parts) == 4:
+            parts.append("nan")  # recorded before the fx column existed
+        if len(parts) != 5:
             continue
-        name, g, r, s = parts
-        rows.append((name, float(g), float(r), float(s)))
+        name, g, r, s, x = parts
+        rows.append((name, float(g), float(r), float(s), float(x)))
     out = [
         f"Best-of-N total run time at 200&times;50 with pacing disabled "
         f"(`--frame-rate 0`), seed 1, on `{machine}`. "
         "Speedups above 1.00&times; mean glyphfx is faster.",
         "",
-        "| effect | glyphfx | ttfx (asm) | vs asm | ttfx (Rust) | vs Rust |",
-        "|---|---:|---:|---:|---:|---:|",
+        "| effect | glyphfx | ttfx (fx) | vs fx | ttfx (asm) | vs asm | ttfx (Rust) | vs Rust |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
-    for name, g, r, s in rows:
-        if s == s and s > 0:  # not NaN
-            vs_s = f"**{s / g:.2f}&times;**" if g else "n/a"
-            asm = f"{s:.1f} ms"
-        else:
-            vs_s, asm = "-", "-"
+
+    def col(v, g):
+        if v == v and v > 0:  # not NaN
+            return f"{v:.1f} ms", (f"**{v / g:.2f}&times;**" if g else "n/a")
+        return "-", "-"
+
+    for name, g, r, s, x in rows:
+        fx, vs_x = col(x, g)
+        asm, vs_s = col(s, g)
         vs_r = f"{r / g:.2f}&times;" if g else "n/a"
-        out.append(f"| {name} | {g:.1f} ms | {asm} | {vs_s} | {r:.1f} ms | {vs_r} |")
+        out.append(f"| {name} | {g:.1f} ms | {fx} | {vs_x} | {asm} | {vs_s} | {r:.1f} ms | {vs_r} |")
     out.append("")
     out.append("Reproduce with `python3 tools/tests/matrix.py` "
                "(and `make perf` to gate against regression).")

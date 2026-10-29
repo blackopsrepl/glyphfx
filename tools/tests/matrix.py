@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Full 37-effect performance matrix: glyphfx vs the ttfx asm engine.
+"""Full 37-effect performance matrix: glyphfx vs ttfx's engines.
 
-The asm build is the performance target; the Rust 0.3.3 port is recorded
-alongside as provenance (parity with it is already established) and doubles as
-the byte-parity oracle.
+The target is ttfx's fx engine (ttfx >= 0.5, portable Rust; upstream removed
+the x86-64 asm engine in 7444eea because fx matches or beats it). The asm build
+(ttfx at 73c7a44) is still measured when present, for the record; the Rust
+0.3.3 port is recorded as provenance and doubles as the byte-parity oracle.
 
 Fixed workload: 200x50 canvas, 190x46 text, seed 1, --frame-rate 0
 --virtual-clock, pinned, best of N, output to /dev/null. Every run must exit 0.
@@ -35,6 +36,7 @@ OUT = ROOT / "docs/benchmarks/matrix.tsv"
 GF = str(ROOT / "build/glyphfx")
 RUST = os.environ.get("GLYPHFX_TTFX", os.path.join(os.environ.get("CARGO_TARGET_DIR", str(ROOT / "reference/target")), "release/ttfx"))
 ASM = os.environ.get("GLYPHFX_TTFX_ASM", "/tmp/opencode/ttfx/target/release/ttfx")
+FX = os.environ.get("GLYPHFX_TTFX_FX", "")
 EFFECTS = ["beams", "binarypath", "blackhole", "bouncyballs", "bubbles", "burn",
     "colorshift", "crumble", "decrypt", "errorcorrect", "expand", "fireworks",
     "highlight", "laseretch", "matrix", "middleout", "orbittingvolley", "overflow",
@@ -116,22 +118,26 @@ def main() -> int:
     a = ap.parse_args()
     data = workload_input()
     have_asm = Path(ASM).exists()
+    have_fx = bool(FX) and Path(FX).exists()
     print(f"matrix: {len(EFFECTS)} effects, best of {a.runs}, machine {machine_key()}")
-    print(f"  glyphfx {GF}\n  rust    {RUST}\n  asm     {ASM if have_asm else '(not built)'}")
+    print(f"  glyphfx {GF}\n  rust    {RUST}\n  asm     {ASM if have_asm else '(not built)'}"
+          f"\n  fx      {FX if have_fx else '(not built; set GLYPHFX_TTFX_FX)'}")
     rows = []
     for e in EFFECTS:
         g = measure(GF, e, data, a.runs, {})
-        r = measure(RUST, e, data, a.runs, {"TTFX_ASM": "0"})
+        r = measure(RUST, e, data, a.runs, {"TTFX_ASM": "0", "TTFX_FX": "0"})
         s = measure(ASM, e, data, a.runs, {}) if have_asm else float("nan")
-        rows.append((e, g, r, s))
-        extra = f"  vs asm {s:7.1f} ({g/s:4.2f}x)" if have_asm else ""
+        x = measure(FX, e, data, a.runs, {"TTFX_FX": "force", "TTFX_THREADS": "1"}) if have_fx else float("nan")
+        rows.append((e, g, r, s, x))
+        extra = f"  vs fx {x:7.1f} ({g/x:4.2f}x)" if have_fx else ""
+        extra += f"  vs asm {s:7.1f} ({g/s:4.2f}x)" if have_asm else ""
         print(f"  {e:<15} glyphfx {g:7.1f}{extra}  rust(ref) {r:7.1f}", flush=True)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with OUT.open("w") as f:
         f.write(f"# machine {machine_key()}\n# best-of-{a.runs} ms, 200x50, seed 1\n")
-        f.write("# effect\tglyphfx\trust\tasm\n")
-        for e, g, r, s in rows:
-            f.write(f"{e}\t{g:.1f}\t{r:.1f}\t{s:.1f}\n")
+        f.write("# effect\tglyphfx\trust\tasm\tfx\n")
+        for e, g, r, s, x in rows:
+            f.write(f"{e}\t{g:.1f}\t{r:.1f}\t{s:.1f}\t{x:.1f}\n")
     print(f"wrote {OUT.relative_to(ROOT)}")
     return 0
 
