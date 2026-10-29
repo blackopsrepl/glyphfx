@@ -44,12 +44,26 @@ calls outside this boundary may run concurrently with it.
 
 ## Distribution and Planner integration
 
-These are intentionally **git-only packages** (`publish = false`). Cargo retains
-the full git checkout, so the sys build script resolves `../../src` and `VERSION`
-relative to its own manifest, not the consumer's working directory. Do not
-publish `.crate` archives: registry distribution first requires moving or
-packaging all engine sources inside the sys package. No misleading `include`
-list claims to package files outside the crate root.
+Both crates are registry-ready MIT packages. The repository root is the
+`glyphfx-sys` package: its archive includes the existing engine source tree,
+VERSION, LICENSE and NOTICE, plus the bridge and Rust ownership boundary.
+The safe package contains Rust only and a versioned sys dependency. Neither
+build downloads engine sources or relies on files outside its package root.
+Publish `glyphfx-sys` before `glyphfx`; no publication is part of verification.
+Applications can use `glyphfx = "0.1.0"` once both packages are published.
+
+The previous nested sys manifest used `../../src` and `publish = false`.
+That worked from a git checkout but could not produce a self-contained registry
+archive. Moving the sys manifest to the existing engine root fixes that packaging
+regression without copying the C tree; the build script now resolves only paths
+inside its package. Both manifests carry registry metadata and MIT attribution.
+
+To verify before publication, first run `cargo package -p glyphfx-sys`, then
+unpack its generated `.crate` archive outside the checkout. Run the safe
+package command with `--config 'patch.crates-io.glyphfx-sys.path="/absolute/path/to/unpacked/glyphfx-sys-0.1.0"'`.
+The patch is verification-only: the safe archive retains a normal registry
+version dependency. Unpack that archive alongside sys and run its tests with
+the same patch to verify both independent package outputs.
 
 After publishing the reusable API commit, Planner replaces its temporary path:
 
@@ -70,9 +84,13 @@ styled ratatui buffers and contains neither C nor unsafe Rust.
 ## Verification
 
 ```sh
-cargo test -j3 --manifest-path rust/glyphfx/Cargo.toml
-cargo clippy -j3 --manifest-path rust/glyphfx/Cargo.toml --all-targets -- -D warnings
-cargo clippy -j3 --manifest-path rust/glyphfx-sys/Cargo.toml --all-targets -- -D warnings
+cargo test -j2 --workspace
+cargo clippy -j2 --workspace --all-targets -- -D warnings
+cargo package -j2 -p glyphfx-sys
+# Once glyphfx-sys is published (or patched locally for verification):
+cargo package -j2 -p glyphfx
+# Verify both archives before sys is published (Python 3.12+):
+python3 tools/verify_rust_packages.py
 ```
 
 Tests run every effect through actual engine completion, compare every frame

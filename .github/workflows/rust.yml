@@ -1,0 +1,27 @@
+name: Rust bindings
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_BUILD_JOBS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Check formatting
+        run: cargo fmt --all --check
+      - name: Check safe and native Rust boundaries
+        run: cargo clippy --workspace --all-targets -j2 -- -D warnings
+      - name: Run real engine tests (all 37 effects, interleaving and Unicode)
+        run: cargo test --workspace -j2 -- --nocapture
+      - name: Verify standalone sys and safe crate archives
+        run: python3 tools/verify_rust_packages.py

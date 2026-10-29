@@ -53,6 +53,22 @@ fn invalid_inputs_are_errors_and_live_clip_survives() {
 }
 
 #[test]
+fn unicode_survives_real_engine_frames() {
+    let mut clip = Clip::new("wipe", "界é🙂e\u{301}", 16, 4).unwrap();
+    let mut seen = [false; 5];
+    let mut count = 0;
+    while let Some(frame) = clip.next_frame() {
+        for (present, ch) in seen.iter_mut().zip(['界', 'é', '🙂', 'e', '\u{301}']) {
+            *present |= frame.contains(ch);
+        }
+        count += 1;
+        assert!(count < 20_000);
+    }
+    assert!(clip.is_finished());
+    assert!(seen.into_iter().all(|present| present));
+}
+
+#[test]
 fn independent_threads_and_early_drop() {
     let handles: Vec<_> = ["wipe", "matrix", "beams"]
         .into_iter()

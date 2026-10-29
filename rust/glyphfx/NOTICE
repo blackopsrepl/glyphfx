@@ -1,0 +1,16 @@
+# Attribution
+
+glyphfx is a C17 implementation of the terminal text-effects design, animation
+engine, and command-line surface of TerminalTextEffects, as implemented by ttfx.
+The relevant licenses and copyrights:
+
+    TerminalTextEffects
+    https://github.com/ChrisBuilds/terminaltexteffects
+    MIT License, Copyright (c) 2023 ChrisBuilds
+
+    ttfx
+    https://github.com/omacom/ttfx
+    MIT License, Copyright (c) 2026 37signals / omacom-io
+
+glyphfx is an independent C17 implementation validated against the ttfx binary.
+ttfx is not vendored; tools/parity/fetch_reference.sh clones it on demand.

@@ -1,0 +1,28 @@
+[package]
+name = "glyphfx-sys"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+description = "Synchronized native boundary and bundled C17 engine for glyphfx text effects"
+repository = "https://github.com/blackopsrepl/glyphfx"
+readme = "rust/glyphfx-sys/README.md"
+keywords = ["terminal", "animation", "text", "ffi"]
+categories = ["external-ffi-bindings", "visualization"]
+links = "glyphfx_engine"
+build = "rust/glyphfx-sys/build.rs"
+autobins = false
+autotests = false
+autoexamples = false
+autobenches = false
+include = ["/src/**/*.c", "/src/**/*.h", "/VERSION", "/LICENSE", "/NOTICE", "/rust/glyphfx-sys/README.md", "/rust/glyphfx-sys/build.rs", "/rust/glyphfx-sys/bridge.c", "/rust/glyphfx-sys/src/lib.rs"]
+
+[lib]
+path = "rust/glyphfx-sys/src/lib.rs"
+
+[workspace]
+members = ["rust/glyphfx"]
+resolver = "2"
+
+[build-dependencies]
+cc = { version = "1", features = ["parallel"] }

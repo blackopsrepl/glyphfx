@@ -18,9 +18,8 @@ fn sources(dir: &Path, build: &mut cc::Build) {
 }
 
 fn main() {
-    // Cargo git dependencies retain the entire checkout, including ../../src.
-    // These crates deliberately cannot be published without packaging the engine.
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    // The sys package root is the engine root, including in registry archives.
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let out = env::var("OUT_DIR").unwrap();
     let version = fs::read_to_string(root.join("VERSION")).unwrap();
     fs::write(
@@ -35,7 +34,7 @@ fn main() {
         .define("_DEFAULT_SOURCE", None)
         .include(root.join("src"))
         .include(&out)
-        .file("bridge.c")
+        .file(root.join("rust/glyphfx-sys/bridge.c"))
         .cargo_metadata(false);
     sources(&root.join("src"), &mut build);
     build.compile("glyphfx_engine");
@@ -43,7 +42,7 @@ fn main() {
     // Registry entries are weak in C: force extraction of every effect object.
     println!("cargo:rustc-link-lib=static:+whole-archive=glyphfx_engine");
     println!("cargo:rustc-link-lib=m");
-    println!("cargo:rerun-if-changed=bridge.c");
+    println!("cargo:rerun-if-changed=rust/glyphfx-sys/bridge.c");
     println!("cargo:rerun-if-changed={}", root.join("src").display());
     println!("cargo:rerun-if-changed={}", root.join("VERSION").display());
 }
