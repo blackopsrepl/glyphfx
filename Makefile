@@ -40,7 +40,7 @@ EFFECT_CASES := $(wildcard tools/parity/cases/*.txt)
 
 # ============== Phony Targets ==============
 .PHONY: all build help banner check test parity effects release static install debug clean version \
-        bump-patch bump-minor bump-major bump-dry perf perf-update release-check
+        bump-patch bump-minor bump-major bump-dry perf perf-update release-check originals
 
 # ============== Default Target ==============
 .DEFAULT_GOAL := build
@@ -69,6 +69,7 @@ help: banner
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "check" "run the C unit tests"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "parity" "byte-exact M0 option matrix vs the ttfx oracle"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "effects" "byte-exact frame parity for every effect"
+	@printf "  $(CYAN)%-24s$(RESET) %s\n" "originals" "determinism and golden checks for the glyphfx originals"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "perf" "fail on any benchmark slower than the committed baseline"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "perf-update" "tighten the perf baseline to this run (improvements only)"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "debug" "ASan/UBSan build"
@@ -136,6 +137,12 @@ effects: banner $(BUILD)/glyphfx
 	if [ $$fail -eq 0 ]; then printf "$(GREEN)$(CHECK) all effects byte-exact$(RESET)\n"; \
 	else printf "$(RED)$(CROSS) effect parity failed$(RESET)\n" && exit 1; fi
 
+# The originals have no oracle: determinism, goldens, final-frame and CLI checks.
+originals: banner $(BUILD)/glyphfx
+	$(call section,Original Effects)
+	@python3 tools/tests/originals.py && printf "$(GREEN)$(CHECK) originals deterministic and on golden$(RESET)\n" \
+		|| (printf "$(RED)$(CROSS) originals failed$(RESET)\n" && exit 1)
+
 # ============== Performance ==============
 perf: banner $(BUILD)/glyphfx
 	$(call section,Performance Regression Gate)
@@ -150,6 +157,7 @@ release-check: banner $(BUILD)/glyphfx
 	$(call section,Release Gate)
 	@$(MAKE) --no-print-directory check
 	@$(MAKE) --no-print-directory effects
+	@$(MAKE) --no-print-directory originals
 	@$(MAKE) --no-print-directory perf
 
 # ============== Release Builds ==============
