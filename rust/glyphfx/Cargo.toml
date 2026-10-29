@@ -1,0 +1,10 @@
+[package]
+name = "glyphfx"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Frame-by-frame, UI-agnostic glyphfx text effects"
+publish = false
+
+[dependencies]
+glyphfx-sys = { path = "../glyphfx-sys", version = "0.1.0" }

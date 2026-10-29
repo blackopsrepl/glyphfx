@@ -15,3 +15,7 @@ __pycache__/
 
 # nisaba disposable index cache
 repo_facts.db.idx
+
+# Rust bindings are consumed from a full git checkout
+/rust/*/target/
+/rust/*/Cargo.lock
