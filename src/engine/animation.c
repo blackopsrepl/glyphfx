@@ -479,54 +479,74 @@ static int32_t eased_compute(const Easing *e, int64_t total, int64_t step) {
     return (int32_t)idx;
 }
 
-int64_t eased_frame_index(const Easing *ease, int64_t total_steps, int64_t step) {
-    if (total_steps <= 0 || step < 0) {
-        return 0;
-    }
-    EasedSeq *seq = NULL;
+static EasedSeq *eseq_find(const Easing *ease, int64_t total_steps) {
     for (size_t i = 0; i < g_eseq_len; i++) {
         if (g_eseq[i].total == total_steps && g_eseq[i].ease.kind == ease->kind &&
             g_eseq[i].ease.x1 == ease->x1 && g_eseq[i].ease.y1 == ease->y1 &&
             g_eseq[i].ease.x2 == ease->x2 && g_eseq[i].ease.y2 == ease->y2) {
-            seq = &g_eseq[i];
-            break;
+            return &g_eseq[i];
         }
     }
-    if (!seq) {
-        if (g_eseq_len == g_eseq_cap) {
-            size_t cap = g_eseq_cap ? g_eseq_cap * 2 : 8;
-            EasedSeq *grown = realloc(g_eseq, cap * sizeof(*grown));
-            if (!grown) {
-                return eased_compute(ease, total_steps, step);
-            }
-            g_eseq = grown;
-            g_eseq_cap = cap;
+    if (g_eseq_len == g_eseq_cap) {
+        size_t cap = g_eseq_cap ? g_eseq_cap * 2 : 8;
+        EasedSeq *grown = realloc(g_eseq, cap * sizeof(*grown));
+        if (!grown) {
+            return NULL;
         }
-        seq = &g_eseq[g_eseq_len++];
-        memset(seq, 0, sizeof(*seq));
-        seq->ease = *ease;
-        seq->total = total_steps;
+        g_eseq = grown;
+        g_eseq_cap = cap;
     }
-    size_t want = (size_t)step + 1;
-    if (want > seq->len) {
-        if (want > seq->cap) {
-            size_t cap = seq->cap ? seq->cap : 16;
-            while (cap < want) {
-                cap *= 2;
-            }
-            int32_t *grown = realloc(seq->vals, cap * sizeof(*grown));
-            if (!grown) {
-                return eased_compute(ease, total_steps, step);
-            }
-            seq->vals = grown;
-            seq->cap = cap;
+    EasedSeq *seq = &g_eseq[g_eseq_len++];
+    memset(seq, 0, sizeof(*seq));
+    seq->ease = *ease;
+    seq->total = total_steps;
+    return seq;
+}
+
+// Extends the memo through step want-1; false on allocation failure.
+static bool eseq_fill(EasedSeq *seq, size_t want) {
+    if (want <= seq->len) {
+        return true;
+    }
+    if (want > seq->cap) {
+        size_t cap = seq->cap ? seq->cap : 16;
+        while (cap < want) {
+            cap *= 2;
         }
-        for (size_t i = seq->len; i < want; i++) {
-            seq->vals[i] = eased_compute(ease, total_steps, (int64_t)i);
+        int32_t *grown = realloc(seq->vals, cap * sizeof(*grown));
+        if (!grown) {
+            return false;
         }
-        seq->len = want;
+        seq->vals = grown;
+        seq->cap = cap;
+    }
+    for (size_t i = seq->len; i < want; i++) {
+        seq->vals[i] = eased_compute(&seq->ease, seq->total, (int64_t)i);
+    }
+    seq->len = want;
+    return true;
+}
+
+int64_t eased_frame_index(const Easing *ease, int64_t total_steps, int64_t step) {
+    if (total_steps <= 0 || step < 0) {
+        return 0;
+    }
+    EasedSeq *seq = eseq_find(ease, total_steps);
+    if (!seq || !eseq_fill(seq, (size_t)step + 1)) {
+        return eased_compute(ease, total_steps, step);
     }
     return seq->vals[step];
+}
+
+const int32_t *eased_frame_seq(const Easing *ease, int64_t total_steps) {
+    if (total_steps <= 0) {
+        return NULL;
+    }
+    EasedSeq *seq = eseq_find(ease, total_steps);
+    if (!seq || !eseq_fill(seq, (size_t)total_steps)) {
+        return NULL;
+    }
+    return seq->vals;
 }
 
 

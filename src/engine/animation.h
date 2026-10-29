@@ -81,6 +81,9 @@ typedef struct Frame {
 // sequence is memoized per shape instead of recomputing cos/pow and rounding in
 // every character's tick. Identical to evaluating easing_ease directly.
 int64_t eased_frame_index(const Easing *ease, int64_t total_steps, int64_t step);
+// The whole memoized sequence for one shape: eased_frame_index for every step
+// in [0, total_steps), or NULL on allocation failure.
+const int32_t *eased_frame_seq(const Easing *ease, int64_t total_steps);
 
 typedef struct {
     char *scene_id;  // owned
