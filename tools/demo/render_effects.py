@@ -276,6 +276,8 @@ EFFECTS = [
     ("spray", []), ("swarm", []), ("sweep", []), ("synthgrid", []),
     ("thunderstorm", ["--storm-time", "1"]), ("unstable", []),
     ("vhstape", ["--total-glitch-time", "300"]), ("waves", []), ("wipe", []),
+    # glyphfx originals (docs/ORIGINALS.md)
+    ("bannerwave", []), ("burnout", []), ("comet", []), ("copper", []),
 ]
 
 # The README hero: a larger render of one effect, same tight canvas and budget.

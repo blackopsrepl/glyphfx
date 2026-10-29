@@ -81,6 +81,20 @@ All 37, each with a full option surface (`glyphfx <effect> --help`).
 | <b>vhstape</b><br><img src="docs/effects/vhstape.gif" width="400" alt="vhstape"><br><sub>Lines of characters glitch left and right and lose detail like an old VHS tape.</sub> | <b>waves</b><br><img src="docs/effects/waves.gif" width="400" alt="waves"><br><sub>Waves travel across the terminal leaving behind the characters.</sub> |
 | <b>wipe</b><br><img src="docs/effects/wipe.gif" width="400" alt="wipe"><br><sub>Wipes the text across the terminal to reveal characters.</sub> | |
 
+## glyphfx originals
+
+Four effects that ttfx does not have, from the SolverForge demoscene
+productions. They follow the same contract (text in, the text in place at the
+end; `burnout` is the one exit effect) but sit outside byte parity:
+`--random-effect` draws them only when they are named in `--include-effects`,
+and `make originals` holds them to determinism, golden streams and a
+final-frame check instead. Details in [docs/ORIGINALS.md](docs/ORIGINALS.md).
+
+|     |     |
+|:---:|:---:|
+| <b>bannerwave</b><br><img src="docs/effects/bannerwave.gif" width="400" alt="bannerwave"><br><sub>A bright front reveals the text while every column rides a travelling sine, then the text lies flat.</sub> | <b>burnout</b><br><img src="docs/effects/burnout.gif" width="400" alt="burnout"><br><sub>Exit effect: the text holds, then burns away through ember colours, shades and rising sparks.</sub> |
+| <b>comet</b><br><img src="docs/effects/comet.gif" width="400" alt="comet"><br><sub>Characters fly arcs from the bottom of the canvas on fading trails, land bright and cool into place.</sub> | <b>copper</b><br><img src="docs/effects/copper.gif" width="400" alt="copper"><br><sub>Copper bars bounce behind dimmed text, lighting whole rows, then a sweep settles the final colours.</sub> |
+
 ## Benchmarks
 
 Startup is under a millisecond (about 0.3 ms for `glyphfx --version`). The full
@@ -136,7 +150,7 @@ Reproduce with `python3 tools/tests/matrix.py` (and `make perf` to gate against 
 ```
 <producer> | glyphfx [terminal options] <effect> [effect options]
 
-glyphfx --help                 # all 37 effects and the terminal options
+glyphfx --help                 # the 37 effects, the 4 originals, and the terminal options
 glyphfx <effect> --help        # options for one effect
 glyphfx --random-effect        # surprise me (--include-effects / --exclude-effects to filter)
 glyphfx --print-completion bash|zsh
@@ -172,6 +186,10 @@ tools/tests/cli_corpus.sh    # exit codes and stdout/stderr routing
 tools/tests/tty_compare.py   # the full pty prep+frames+teardown stream
 tools/tests/tty_signals.py   # SIGINT/SIGTERM/close/resize behavior
 ```
+
+The four originals have no oracle to match; `make originals` checks that they
+are deterministic, match their recorded golden streams, and end on the right
+final frame.
 
 The oracle is a local ttfx checkout, fetched on demand and gitignored:
 
