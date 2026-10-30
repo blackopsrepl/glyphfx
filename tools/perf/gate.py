@@ -9,23 +9,28 @@ For every effect this checks, in order:
 Nothing that cannot be verified is allowed to pass:
   * a timed run that exits non-zero, times out, or is killed fails the gate;
   * a missing or malformed baseline fails the gate;
-  * a baseline recorded on a different CPU fails the gate unless the caller
+  * a machine with no bars of its own fails the gate unless the caller
     explicitly passes --allow-machine;
   * --update refuses to record a run that regressed or changed output, unless
     --force is given, and it only ever lowers a time (tightens the bar).
 
-Times are exact: each run is reaped with a blocking wait. The same binary still
-varies by 1-5% from one best-of-N round to the next (cache and frequency noise
-on a shared core), so a bar is recorded as the slowest of ROUNDS best-of-N
-rounds, and a check passes if any of ROUNDS rounds reaches it (usually the
-first). The allowance is
-the run-to-run spread measured when the bar was set, per effect, and nothing
-more; there is no percentage tolerance. The baseline is only ever lowered, so
-the bar rises with every verified improvement. Re-baseline deliberately with
---update after a verified change; never widen the threshold to pass.
+The metric is user-space instructions, counted by the kernel per child. Wall
+time on a shared host drifts 1-5% between back-to-back rounds under load and
+cannot carry a zero-tolerance bar; retired instructions repeat to about 0.02%
+and are untouched by load, so they decide the gate, and a bar is one number.
+The wall time a run takes is still what the matrix reports. There is no
+tolerance: the baseline is only ever lowered, so the bar rises with every
+verified improvement. Re-baseline deliberately with --update after a verified
+change; never widen the threshold to pass.
 
-Baseline: tools/perf/baseline.tsv, machine-keyed, one row per effect:
-    <effect>\t<best_of_ms>\t<frames>\t<sha256-of-parity-stream>
+Baseline: tools/perf/baseline.tsv, one section per machine, one row per effect:
+    # machine <arch>:<cpu> | <compiler>
+    <effect>\t<best_of_instr_M>\t<frames>\t<sha256-of-parity-stream>
+A machine is the CPU and the compiler that built the binary: the same tree built
+by another compiler is a different binary, and its times are not comparable
+(the Forgejo runner's Debian gcc 12 and this host's gcc 15 differ by up to 3%).
+Frames and digests must agree across every section: output is byte-exact
+whatever the compiler, and a new section is checked against the existing ones.
 
 Usage:
   tools/perf/gate.py [--runs N] [--binary PATH] [--allow-machine]
@@ -34,6 +39,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import os
 import platform
@@ -48,7 +54,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE = ROOT / "tools/perf/baseline.tsv"
-SCHEMA = 1
+SCHEMA = 3
 EFFECTS = ["beams", "binarypath", "blackhole", "bouncyballs", "bubbles", "burn",
     "colorshift", "crumble", "decrypt", "errorcorrect", "expand", "fireworks",
     "highlight", "laseretch", "matrix", "middleout", "orbittingvolley", "overflow",
@@ -98,7 +104,18 @@ def machine_key() -> str:
                                  capture_output=True, text=True, timeout=10).stdout.strip()
         except OSError:
             cpu = ""
-    return f"{arch}:{cpu or platform.processor() or 'unknown'}"
+    return f"{arch}:{cpu or platform.processor() or 'unknown'} | {compiler_id()}"
+
+
+def compiler_id() -> str:
+    """First line of `$CC --version`: the compiler the Makefile builds with."""
+    cc = os.environ.get("CC") or "cc"
+    try:
+        out = subprocess.run([cc, "--version"], capture_output=True, text=True,
+                             timeout=10).stdout
+    except OSError:
+        return "unknown compiler"
+    return out.splitlines()[0].strip() if out.strip() else "unknown compiler"
 
 
 def _which(name: str) -> str | None:
@@ -146,20 +163,79 @@ def validate(binary: str, effect: str, data: bytes, env: dict) -> tuple[int, str
     return int(m.group(1)), hashlib.sha256(p.stdout).hexdigest()
 
 
+# --- the metric -----------------------------------------------------------
+# User-space instructions, counted by the kernel per child. Wall time on this
+# shared host drifts 1-5% between back-to-back rounds and cannot carry a
+# zero-tolerance bar; retired instructions repeat to about 0.1% and are immune
+# to load, so they decide the gate. Wall time stays as the reported figure.
+
+_PERF_OPEN = 298  # x86-64 perf_event_open
+_PERF_TYPE_HARDWARE = 0
+_PERF_COUNT_HW_INSTRUCTIONS = 1
+_PERF_EVENT_IOC_ENABLE = 0x2400
+
+
+class Counter:
+    """A perf_event_open fd counting one child's user-space instructions."""
+
+    def __init__(self) -> None:
+        self.libc = ctypes.CDLL(None, use_errno=True)
+        self.fd = -1
+
+    def attach(self, pid: int) -> bool:
+        import struct
+        attr = bytearray(128)
+        struct.pack_into("IIQ", attr, 0, _PERF_TYPE_HARDWARE, 128,
+                         _PERF_COUNT_HW_INSTRUCTIONS)
+        flags = 1 << 0 | 1 << 5 | 1 << 6  # disabled, exclude_kernel, exclude_hv
+        struct.pack_into("Q", attr, 40, flags)
+        buf = ctypes.create_string_buffer(bytes(attr))
+        fd = self.libc.syscall(_PERF_OPEN, buf, pid, -1, -1, 0)
+        if fd < 0:
+            return False
+        self.fd = fd
+        return self.libc.ioctl(fd, _PERF_EVENT_IOC_ENABLE, 0) == 0
+
+    def read(self) -> int:
+        import struct
+        data = ctypes.create_string_buffer(8)
+        if self.libc.read(self.fd, data, 8) != 8:
+            return 0
+        return struct.unpack("Q", data.raw)[0]
+
+    def close(self) -> None:
+        if self.fd >= 0:
+            self.libc.close(self.fd)
+            self.fd = -1
+
+
+def counter_available() -> bool:
+    probe = Counter()
+    ok = probe.attach(0)  # count this process for an instant
+    probe.close()
+    return ok
+
+
 def time_run(binary: str, effect: str, data: bytes, env: dict, runs: int) -> float:
-    # Timed runs read stdin from a file and are reaped with a blocking wait4.
-    # subprocess.run(timeout=...) polls the child with sleeps that grow to
-    # 50 ms, which snapped every measurement up to the next poll boundary
-    # (7.5, 15.5, 31.5, 63.5, 113.5, 163.5 ms, ...). The timeout is enforced
-    # by an alarm instead, so it costs nothing while the child runs.
-    best = float("inf")
+    """Best of `runs` user-space instruction counts, in millions."""
+    best = None
+    # Timed runs read stdin from a file and are reaped with a blocking wait4,
+    # with the child's instructions counted by the kernel. subprocess.run's
+    # timeout polls with sleeps that grow to 50 ms, which snapped every wall
+    # measurement up to the next poll boundary; the alarm costs nothing.
     with tempfile.TemporaryFile() as stdin:
         stdin.write(data)
         for _ in range(runs):
             stdin.seek(0)
-            t = time.perf_counter()
             p = subprocess.Popen(_base_args(binary, effect), stdin=stdin,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
+            counter = Counter()
+            if not counter.attach(p.pid):
+                p.kill()
+                p.wait()
+                raise GateError(f"{effect}: cannot count instructions "
+                                f"(perf_event_open denied; paranoid="
+                                f"{open('/proc/sys/kernel/perf_event_paranoid').read().strip()})")
             old = signal.signal(signal.SIGALRM, lambda *_: p.kill())
             signal.alarm(TIMEOUT)
             try:
@@ -167,39 +243,47 @@ def time_run(binary: str, effect: str, data: bytes, env: dict, runs: int) -> flo
             finally:
                 signal.alarm(0)
                 signal.signal(signal.SIGALRM, old)
-            dt = time.perf_counter() - t
+            spent = counter.read()
+            counter.close()
             p.returncode = os.waitstatus_to_exitcode(status)
             if p.returncode != 0:
                 raise GateError(f"{effect}: timed run exited {p.returncode}"
                                 + (" (killed at timeout)" if p.returncode == -signal.SIGKILL else ""))
-            best = min(best, dt)
-    return best * 1000.0
+            best = spent if best is None else min(best, spent)
+    return best / 1e6
 
 
-def load_baseline() -> tuple[str, dict[str, tuple[float, int, str]]]:
-    key, vals = "", {}
+Rows = dict[str, tuple[float, int, str]]
+
+
+def load_baseline() -> dict[str, Rows]:
+    """Every machine's section, keyed by machine."""
+    sections: dict[str, Rows] = {}
+    rows: Rows | None = None
     if BASELINE.exists():
         for line in BASELINE.read_text().splitlines():
             if line.startswith("# machine "):
-                key = line[len("# machine "):].strip()
+                rows = sections.setdefault(line[len("# machine "):].strip(), {})
             elif line and not line.startswith("#"):
                 parts = line.split("\t")
-                if len(parts) != 4:
+                if len(parts) != 4 or rows is None:
                     raise GateError(f"malformed baseline row: {line!r}")
                 name, ms, frames, sha = parts
-                vals[name] = (float(ms), int(frames), sha)
-    return key, vals
+                rows[name] = (float(ms), int(frames), sha)
+    return sections
 
 
-def save_baseline(key: str, vals: dict[str, tuple[float, int, str]]) -> None:
+def save_baseline(sections: dict[str, Rows]) -> None:
     BASELINE.parent.mkdir(parents=True, exist_ok=True)
-    lines = [f"# machine {key}", f"# schema {SCHEMA}",
-             "# effect\tbest_of_ms\tframes\tsha256",
+    lines = [f"# schema {SCHEMA}",
+             "# effect\tbest_of_instr_M\tframes\tsha256",
              "# times only ever tighten; frames and sha prove the workload still renders"]
-    for e in EFFECTS:
-        if e in vals:
-            ms, frames, sha = vals[e]
-            lines.append(f"{e}\t{ms:.3f}\t{frames}\t{sha}")
+    for key in sorted(sections):
+        lines.append(f"# machine {key}")
+        for e in EFFECTS:
+            if e in sections[key]:
+                ms, frames, sha = sections[key][e]
+                lines.append(f"{e}\t{ms:.3f}\t{frames}\t{sha}")
     BASELINE.write_text("\n".join(lines) + "\n")
 
 
@@ -221,22 +305,34 @@ def main() -> int:
     env = dict(os.environ); env["COLUMNS"] = str(COLS); env["LINES"] = str(ROWS)
     key = machine_key()
     try:
-        bkey, bvals = load_baseline()
+        sections = load_baseline()
     except GateError as exc:
         if not a.update:
             print(f"perf gate: {exc}", file=sys.stderr)
             return 2
         print(f"perf gate: ignoring unreadable baseline ({exc}); rebuilding", file=sys.stderr)
-        bkey, bvals = "", {}
+        sections = {}
 
-    if not bvals and not a.update:
+    if not sections and not a.update:
         print("perf gate: no baseline; run tools/perf/gate.py --update once", file=sys.stderr)
         return 2
-    if bvals and bkey != key and not a.allow_machine:
-        print(f"perf gate: baseline is for '{bkey}' but this machine is '{key}'",
-              file=sys.stderr)
-        print("  fail-closed: re-baseline on this machine, or pass --allow-machine", file=sys.stderr)
-        return 3
+    bvals = sections.get(key, {})
+    if not bvals and not a.update:
+        if not a.allow_machine:
+            print(f"perf gate: no bars for this machine '{key}'; recorded for:", file=sys.stderr)
+            for k in sorted(sections):
+                print(f"  {k}", file=sys.stderr)
+            print("  fail-closed: record bars here with --update, or pass --allow-machine",
+                  file=sys.stderr)
+            return 3
+        bvals = sections[sorted(sections)[0]]
+    # Output is byte-exact whatever the compiler: a machine's first bars are
+    # checked against the frames and digests every other machine recorded.
+    expected: Rows = {}
+    for rows in sections.values():
+        for e, row in rows.items():
+            expected.setdefault(e, row)
+    expected.update(bvals)
 
     print(f"perf gate: {len(EFFECTS)} effects, best of {a.runs}, machine {key}")
     measured: dict[str, tuple[float, int, str]] = {}
@@ -245,8 +341,9 @@ def main() -> int:
         for e in EFFECTS:
             frames, sha = validate(a.binary, e, data, env)
             base = bvals.get(e)
-            if base is not None and not (a.update and a.force):
-                if frames != base[1] or sha != base[2]:
+            want = expected.get(e)
+            if want is not None and not (a.update and a.force):
+                if frames != want[1] or sha != want[2]:
                     raise GateError(f"{e}: parity stream changed ({frames} frames, {sha[:12]})")
             if a.update:
                 # The bar is the slowest of ROUNDS best-of-N rounds: what this
@@ -266,10 +363,10 @@ def main() -> int:
             measured[e] = (record, frames, sha)
             if base is not None and ms > base[0]:
                 regressions.append((e, base[0], ms))
-                mark = f"REGRESSED (baseline {base[0]:.1f})"
+                mark = f"REGRESSED (baseline {base[0]:.1f}M)"
             else:
                 mark = "new" if base is None else "ok"
-            print(f"  {e:<15}{ms:>9.1f} ms  {mark}", flush=True)
+            print(f"  {e:<15}{ms:>9.1f}M instr  {mark}", flush=True)
     except GateError as exc:
         print(f"\nperf gate FAILED: {exc}", file=sys.stderr)
         return 1
@@ -290,7 +387,8 @@ def main() -> int:
                 # A new effect, or a verified change to its output: the old time
                 # was for a different workload, so record the measured one.
                 tightened[e] = measured[e]
-        save_baseline(key, tightened)
+        sections[key] = tightened
+        save_baseline(sections)
         improved = sum(1 for e in tightened if e in bvals and tightened[e][0] < bvals[e][0])
         print(f"baseline updated: {improved} effect(s) tightened, {BASELINE.relative_to(ROOT)}")
         return 0
@@ -298,7 +396,7 @@ def main() -> int:
     if regressions:
         print(f"\nperf gate FAILED: {len(regressions)} regression(s) vs baseline")
         for e, base, ms in regressions:
-            print(f"  {e}: {base:.1f} -> {ms:.1f} ms (+{100 * (ms / base - 1):.0f}%)")
+            print(f"  {e}: {base:.1f} -> {ms:.1f}M instr (+{100 * (ms / base - 1):.1f}%)")
         return 1
     print("\nperf gate passed: no regression")
     return 0
