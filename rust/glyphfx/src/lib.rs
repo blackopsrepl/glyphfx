@@ -3,7 +3,8 @@
 //! The clock advances by 1/60 second per frame; default seed is 1.
 #![forbid(unsafe_code)]
 
-/// All engine effects, in registry order.
+/// All engine effects, in registry order: the 37 ttfx effects, then the four
+/// glyphfx originals (see `ORIGINALS`).
 pub const EFFECTS: &[&str] = &[
     "beams",
     "binarypath",
@@ -42,7 +43,15 @@ pub const EFFECTS: &[&str] = &[
     "vhstape",
     "waves",
     "wipe",
+    "bannerwave",
+    "burnout",
+    "comet",
+    "copper",
 ];
+
+/// The glyphfx originals: effects with no ttfx counterpart, outside the
+/// byte-parity contract. `burnout` is the one exit effect (the text burns away).
+pub const ORIGINALS: &[&str] = &["bannerwave", "burnout", "comet", "copper"];
 
 /// Where the input text block settles inside the canvas.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

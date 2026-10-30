@@ -4,7 +4,9 @@
 `glyphfx-sys` builds the existing repository sources using `cc`; there is no
 vendored engine copy. A C17 compiler and a POSIX platform with libm are required
 (verified on Linux). No executable, subprocess, terminal writer, signal handler,
-or wall-clock pacing is used. All 37 effects use their finite engine defaults.
+or wall-clock pacing is used. `EFFECTS` lists all 41 engine effects (the 37 ttfx
+effects, then the four glyphfx originals in `ORIGINALS`); each runs with its
+finite engine defaults. `burnout` is an exit effect: its text burns away.
 
 ```rust
 let mut clip = glyphfx::Clip::new("beams", "Hello", 40, 10)?;
@@ -44,7 +46,7 @@ clips cannot leave a dangling render target. Clips are conservatively thread
 local; separate threads may create independent clips safely. No direct engine
 calls outside this boundary may run concurrently with it.
 
-## Distribution and Planner integration
+## Distribution
 
 Both crates are registry-ready MIT packages. The repository root is the
 `glyphfx-sys` package: its archive includes the existing engine source tree,
@@ -54,34 +56,18 @@ build downloads engine sources or relies on files outside its package root.
 Publish `glyphfx-sys` before `glyphfx`; no publication is part of verification.
 Applications can use `glyphfx = "0.1.0"` once both packages are published.
 
-The previous nested sys manifest used `../../src` and `publish = false`.
-That worked from a git checkout but could not produce a self-contained registry
-archive. Moving the sys manifest to the existing engine root fixes that packaging
-regression without copying the C tree; the build script now resolves only paths
-inside its package. Both manifests carry registry metadata and MIT attribution.
-
-To verify before publication, first run `cargo package -p glyphfx-sys`, then
-unpack its generated `.crate` archive outside the checkout. Run the safe
-package command with `--config 'patch.crates-io.glyphfx-sys.path="/absolute/path/to/unpacked/glyphfx-sys-0.1.0"'`.
-The patch is verification-only: the safe archive retains a normal registry
-version dependency. Unpack that archive alongside sys and run its tests with
-the same patch to verify both independent package outputs.
-
-After publishing the reusable API commit, Planner replaces its temporary path:
+Until then, depend on the git repository at a `main` commit; Cargo discovers
+`rust/glyphfx/Cargo.toml` without a `package` rename or subdirectory URL:
 
 ```toml
-# Remove: glyphfx = { path = "/srv/lab/hack/glyphfx-rust-api/rust/glyphfx" }
-glyphfx = { git = "https://github.com/blackopsrepl/glyphfx.git", rev = "<FULL_API_COMMIT_SHA>" }
+glyphfx = { git = "https://github.com/blackopsrepl/glyphfx.git", rev = "<FULL_COMMIT_SHA>" }
 ```
 
-Cargo discovers `rust/glyphfx/Cargo.toml` in the git repository; no `package`
-rename or subdirectory URL is needed. Then run `cargo update -p glyphfx` and
-commit the resulting Cargo.lock. If publishing only to the local forge, use
-`http://vigilance:3002/blackopsrepl/glyphfx.git` instead. The Planner adapter
-requires the parent integration to add `pub mod glyphfx;` to `src/lib.rs`.
-Its tests also compile the adapter directly so the branch is independently
-testable before that export lands. The adapter returns zero-origin, fully
-styled ratatui buffers and contains neither C nor unsafe Rust.
+`tools/verify_rust_packages.py` checks the archives before publication: it runs
+`cargo package -p glyphfx-sys`, unpacks the archive outside the checkout, builds
+and tests it, then packages and tests the safe crate against the unpacked sys
+archive through a verification-only `patch.crates-io` entry. The safe archive
+keeps a plain registry version dependency.
 
 ## Verification
 
@@ -95,9 +81,7 @@ cargo package -j2 -p glyphfx
 python3 tools/verify_rust_packages.py
 ```
 
-Tests run every effect through actual engine completion, compare every frame
-against an interleaved second execution, exercise independent threads and early
-drop, reject invalid inputs, and run all 37 effects on 1x1, 1x4, 4x1 and 2x2
-canvases. Planner additionally checks real styled buffers and Unicode output,
-plus parser fixtures for RGB/indexed/basic foreground/background, every ratatui
-modifier, resets, combining characters, emoji/flags/ZWJ, clipping and padding.
+Tests check `EFFECTS` against the engine registry, run every effect through
+actual engine completion, compare every frame against an interleaved second
+execution, exercise independent threads and early drop, reject invalid inputs,
+and run every effect on 1x1, 1x4, 4x1 and 2x2 canvases.

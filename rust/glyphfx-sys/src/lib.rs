@@ -31,6 +31,26 @@ extern "C" {
     ) -> *mut RawClip;
     fn glyphfx_next(clip: *mut RawClip) -> *const c_char;
     fn glyphfx_close(clip: *mut RawClip);
+    fn glyphfx_effect_count() -> usize;
+    fn glyphfx_effect_name(index: usize) -> *const c_char;
+}
+
+/// The engine registry's effect names, in registry order.
+pub fn engine_effects() -> Vec<String> {
+    let _guard = lock();
+    // SAFETY: the registry is static; names are static NUL-terminated strings
+    // and a NULL entry (an unlinked weak symbol) is skipped.
+    let count = unsafe { glyphfx_effect_count() };
+    (0..count)
+        .filter_map(|index| {
+            let name = unsafe { glyphfx_effect_name(index) };
+            (!name.is_null()).then(|| {
+                unsafe { CStr::from_ptr(name) }
+                    .to_string_lossy()
+                    .into_owned()
+            })
+        })
+        .collect()
 }
 
 /// Owned engine context. All C calls share a process-wide lock protecting the

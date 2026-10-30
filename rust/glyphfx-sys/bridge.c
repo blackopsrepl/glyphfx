@@ -84,6 +84,16 @@ GlyphfxClip *glyphfx_open(const char *name, const char *text,
     return clip;
 }
 
+// The registry, so the safe crate can check its effect list against the engine.
+size_t glyphfx_effect_count(void) {
+    return effect_entry_count();
+}
+
+const char *glyphfx_effect_name(size_t index) {
+    const EffectEntry *entry = effect_entry_at(index);
+    return entry ? entry->name : NULL;
+}
+
 const char *glyphfx_next(GlyphfxClip *clip) {
     bind(clip);
     const char *frame = clip->effect->ops->next_frame(clip->effect, &clip->ctx);

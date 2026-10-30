@@ -1,4 +1,4 @@
-use glyphfx::{Clip, EFFECTS};
+use glyphfx::{Clip, EFFECTS, ORIGINALS};
 
 fn frames(effect: &str) -> Vec<String> {
     let mut clip = Clip::new(effect, "GLYPH FX\nRust API", 16, 6).unwrap();
@@ -14,8 +14,9 @@ fn frames(effect: &str) -> Vec<String> {
 }
 
 #[test]
-fn all37_complete_deterministically_and_interleave() {
-    assert_eq!(EFFECTS.len(), 37);
+fn all_effects_complete_deterministically_and_interleave() {
+    assert_eq!(EFFECTS.len(), 41);
+    assert_eq!(&EFFECTS[37..], ORIGINALS);
     for &effect in EFFECTS {
         let expected = frames(effect);
         let mut a = Clip::new(effect, "GLYPH FX\nRust API", 16, 6).unwrap();
@@ -30,6 +31,11 @@ fn all37_complete_deterministically_and_interleave() {
             expected.len()
         );
     }
+}
+
+#[test]
+fn effect_list_matches_the_engine_registry() {
+    assert_eq!(glyphfx_sys::engine_effects(), EFFECTS);
 }
 
 #[test]
