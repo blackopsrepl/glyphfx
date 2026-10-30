@@ -42,7 +42,12 @@ void glyphfx_close(GlyphfxClip *clip) {
 
 GlyphfxClip *glyphfx_open(const char *name, const char *text,
                          unsigned short width, unsigned short height,
-                         unsigned long long seed, char *error, size_t error_len) {
+                         unsigned long long seed, unsigned char anchor,
+                         char *error, size_t error_len) {
+    if (anchor > ANCHOR_C) {
+        snprintf(error, error_len, "invalid text anchor: %u", anchor);
+        return NULL;
+    }
     const EffectEntry *entry = effect_find(name);
     if (!entry) {
         snprintf(error, error_len, "unknown effect: %s", name);
@@ -62,7 +67,7 @@ GlyphfxClip *glyphfx_open(const char *name, const char *text,
     tc.canvas_height = height;
     tc.ignore_terminal_dimensions = true;
     tc.anchor_canvas = ANCHOR_NW;
-    tc.anchor_text = ANCHOR_NW;
+    tc.anchor_text = (Anchor)anchor;
     tc.frame_rate = 60;
     PreprocessError err = {0};
     int status = engine_ctx_init(&clip->ctx, text, &tc, rng_seeded(seed),

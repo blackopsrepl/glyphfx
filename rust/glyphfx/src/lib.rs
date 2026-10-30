@@ -44,6 +44,21 @@ pub const EFFECTS: &[&str] = &[
     "wipe",
 ];
 
+/// Where the input text block settles inside the canvas.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Anchor {
+    North,
+    NorthEast,
+    East,
+    SouthEast,
+    South,
+    SouthWest,
+    West,
+    #[default]
+    NorthWest,
+    Center,
+}
+
 /// An independent finite default-config effect. Creation builds only simulation
 /// state; frames are generated on demand. Canvas is limited to 65536 cells.
 /// Input follows the engine's codepoint-per-cell layout; consumers should decode
@@ -51,8 +66,9 @@ pub const EFFECTS: &[&str] = &[
 pub struct Clip(glyphfx_sys::Session);
 
 impl Clip {
+    /// Seed 1, text anchored top-left.
     pub fn new(effect: &str, text: &str, width: u16, height: u16) -> Result<Self, String> {
-        Self::with_seed(effect, text, width, height, 1)
+        Self::with_options(effect, text, width, height, 1, Anchor::NorthWest)
     }
 
     pub fn with_seed(
@@ -62,10 +78,21 @@ impl Clip {
         height: u16,
         seed: u64,
     ) -> Result<Self, String> {
+        Self::with_options(effect, text, width, height, seed, Anchor::NorthWest)
+    }
+
+    pub fn with_options(
+        effect: &str,
+        text: &str,
+        width: u16,
+        height: u16,
+        seed: u64,
+        anchor: Anchor,
+    ) -> Result<Self, String> {
         if !EFFECTS.contains(&effect) {
             return Err(format!("unknown effect: {effect}"));
         }
-        glyphfx_sys::Session::new(effect, text, width, height, seed).map(Self)
+        glyphfx_sys::Session::new(effect, text, width, height, seed, anchor as u8).map(Self)
     }
 
     pub fn next_frame(&mut self) -> Option<String> {

@@ -25,6 +25,7 @@ extern "C" {
         width: u16,
         height: u16,
         seed: u64,
+        anchor: u8,
         error: *mut c_char,
         error_len: usize,
     ) -> *mut RawClip;
@@ -42,12 +43,14 @@ pub struct Session {
 }
 
 impl Session {
+    /// `anchor` is the engine's text anchor: N, NE, E, SE, S, SW, W, NW, C = 0..=8.
     pub fn new(
         effect: &str,
         text: &str,
         width: u16,
         height: u16,
         seed: u64,
+        anchor: u8,
     ) -> Result<Self, String> {
         if width == 0 || height == 0 || u32::from(width) * u32::from(height) > 65_536 {
             return Err("canvas must be nonzero and at most 65536 cells".into());
@@ -72,6 +75,7 @@ impl Session {
                 width,
                 height,
                 seed,
+                anchor,
                 error.as_mut_ptr(),
                 error.len(),
             )

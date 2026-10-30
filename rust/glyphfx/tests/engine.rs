@@ -69,6 +69,38 @@ fn unicode_survives_real_engine_frames() {
 }
 
 #[test]
+fn center_anchor_settles_text_in_the_middle() {
+    let mut clip = Clip::with_options("wipe", "MID", 21, 9, 1, glyphfx::Anchor::Center).unwrap();
+    let mut last = None;
+    while let Some(frame) = clip.next_frame() {
+        last = Some(frame);
+    }
+    let rows: Vec<String> = last
+        .unwrap()
+        .split('\n')
+        .map(|row| {
+            // Drop SGR sequences; the engine emits one per styled cell.
+            let mut plain = String::new();
+            let mut escape = false;
+            for ch in row.chars() {
+                match (escape, ch) {
+                    (false, '\x1b') => escape = true,
+                    (true, 'm') => escape = false,
+                    (false, ch) => plain.push(ch),
+                    _ => {}
+                }
+            }
+            plain
+        })
+        .collect();
+    // Centre geometry is the engine's own (same as `--anchor-text c`); allow its rounding.
+    let row = rows.iter().position(|r| r.contains("MID")).unwrap();
+    assert!((3..=5).contains(&row), "{rows:?}");
+    let column = rows[row].find("MID").unwrap();
+    assert!((8..=10).contains(&column), "{rows:?}");
+}
+
+#[test]
 fn independent_threads_and_early_drop() {
     let handles: Vec<_> = ["wipe", "matrix", "beams"]
         .into_iter()

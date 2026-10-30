@@ -17,6 +17,8 @@ assert!(clip.is_finished());
 ```
 
 Default seed is 1; `Clip::with_seed` chooses another deterministic stream.
+`Clip::with_options` also sets where the text settles (`Anchor::Center`, …;
+default `NorthWest`).
 The virtual clock advances 1/60 second per emitted frame. Construction builds
 simulation state, never prerenders. `is_finished` becomes true when a pull
 observes completion; subsequent pulls are fused. Frames are owned Rust strings.
