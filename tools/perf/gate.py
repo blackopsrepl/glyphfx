@@ -217,12 +217,15 @@ def counter_available() -> bool:
 
 
 def time_run(binary: str, effect: str, data: bytes, env: dict, runs: int) -> float:
-    """Best of `runs` user-space instruction counts, in millions."""
+    """Best of `runs` user-space instruction counts, in millions.
+
+    The counter attaches right after the child is spawned, so the count misses
+    the interpreter-free startup of the target (a few thousand instructions,
+    under 0.02% of any effect here) and includes exec. That residual start
+    jitter is why a bar is the slowest of ROUNDS rounds and a check passes if
+    any round reaches it: the jitter is symmetric, the real cost is not.
+    """
     best = None
-    # Timed runs read stdin from a file and are reaped with a blocking wait4,
-    # with the child's instructions counted by the kernel. subprocess.run's
-    # timeout polls with sleeps that grow to 50 ms, which snapped every wall
-    # measurement up to the next poll boundary; the alarm costs nothing.
     with tempfile.TemporaryFile() as stdin:
         stdin.write(data)
         for _ in range(runs):
@@ -235,7 +238,7 @@ def time_run(binary: str, effect: str, data: bytes, env: dict, runs: int) -> flo
                 p.wait()
                 raise GateError(f"{effect}: cannot count instructions "
                                 f"(perf_event_open denied; paranoid="
-                                f"{open('/proc/sys/kernel/perf_event_paranoid').read().strip()})")
+                                f"{Path('/proc/sys/kernel/perf_event_paranoid').read_text().strip()})")
             old = signal.signal(signal.SIGALRM, lambda *_: p.kill())
             signal.alarm(TIMEOUT)
             try:
@@ -243,13 +246,15 @@ def time_run(binary: str, effect: str, data: bytes, env: dict, runs: int) -> flo
             finally:
                 signal.alarm(0)
                 signal.signal(signal.SIGALRM, old)
-            spent = counter.read()
-            counter.close()
+                spent = counter.read()
+                counter.close()
             p.returncode = os.waitstatus_to_exitcode(status)
             if p.returncode != 0:
                 raise GateError(f"{effect}: timed run exited {p.returncode}"
                                 + (" (killed at timeout)" if p.returncode == -signal.SIGKILL else ""))
-            best = spent if best is None else min(best, spent)
+            # Larger is more complete: the counter can attach a few thousand
+            # instructions late, which only ever lowers a count.
+            best = spent if best is None else max(best, spent)
     return best / 1e6
 
 
