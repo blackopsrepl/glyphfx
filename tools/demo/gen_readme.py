@@ -97,7 +97,9 @@ def matrix_table():
         out.append(f"| {name} | {g:.1f} ms | {fx} | {vs_x} | {asm} | {vs_s} | {r:.1f} ms | {vs_r} |")
     out.append("")
     out.append("Reproduce with `python3 tools/tests/matrix.py` "
-               "(and `make perf` to gate against regression).")
+               "(`GLYPHFX_TTFX_FX` names a ttfx >= 0.5 binary for the fx column, "
+               "`GLYPHFX_TTFX_ASM` a build of ttfx 73c7a44 for the asm column), "
+               "and `make perf` to gate against regression.")
     return "\n".join(out)
 
 
@@ -138,21 +140,20 @@ The effects are a shell toy that lives in a prompt pipeline, so startup and
 throughput matter. glyphfx links nothing but libc and libm — no interpreter, no
 import step, no third-party libraries — and starts in well under a millisecond.
 
-The tempting alternative is to hand-write the hot paths in x86-64 assembly, as
-ttfx experimented with in [an open pull request](https://github.com/omacom/ttfx/pull/35).
-glyphfx does not, deliberately:
+The tempting alternative is hand-written assembly. ttfx tried it: an x86-64
+engine landed in [omacom/ttfx#35](https://github.com/omacom/ttfx/pull/35) and was
+removed again in [7444eea](https://github.com/omacom/ttfx/commit/7444eea), once
+ttfx's portable Rust engine (`fx`) matched or beat it on every effect. glyphfx
+draws the same conclusion:
 
-- **The measured gains were algorithmic, not instruction-level.** That PR's own
-  notes credit structure-of-arrays character storage, pooled visuals, an
-  incremental cell grid, batched writes, and a faster RNG for most of its
-  speedup — all expressible in C. glyphfx has closed the gap with the Rust
-  engine across the matrix; the open target is the assembly engine, chased by
-  transcribing its optimized logic (soa layout, pooling, batching) into
-  portable C rather than re-deriving wins.
-- **Assembly ties the fast path to one ISA.** That engine only runs on
-  x86-64-v4 (AVX-512), which Intel disabled on consumer parts after 11th gen,
-  AMD shipped only from Zen 4, and no ARM or Apple silicon has. Elsewhere it
-  declines and you get the old code. Portable C is the same speed everywhere.
+- **The gains are algorithmic, not instruction-level.** fx credits
+  structure-of-arrays character storage, interned visuals, an incremental cell
+  grid, skipped idle ticks and batched writes for its speed — all expressible in
+  C. fx is glyphfx's performance target, chased by transcribing that design into
+  portable C rather than re-deriving it.
+- **Assembly ties the fast path to one ISA.** The ttfx assembly engine needed
+  NASM and per-tier x86-64 builds; everywhere else it declined and ran the old
+  code. Portable C is the same program on every CPU.
 - **A byte-exact target makes a second implementation a liability.** Every
   effect must reproduce ttfx bit for bit, including banker's rounding and libm
   results; a hand-tuned assembly engine doubles the surface where the two can
@@ -160,11 +161,8 @@ glyphfx does not, deliberately:
 
 > **Why not assembly?** There is no frame budget to win. glyphfx paces itself at
 > 60 fps and hands one batched frame to the terminal per tick; the
-> tens-of-thousands-of-fps figures are a benchmark, not the product. ttfx's own
-> AVX-512 experiment credits data layout and batched writes for its speedup, not
-> instruction selection — and that is portable C work. Hand-written SIMD would
-> accelerate a number nobody watches while trading away the single binary that
-> stays byte-exact with the oracle.
+> thousands-of-fps figures are a benchmark, not the product. Data layout and
+> skipped work are what make the benchmark faster, and that is portable C work.
 
 The result builds anywhere with a C compiler, starts in about 0.3 ms, and
 renders every effect at thousands to tens of thousands of frames per second
@@ -194,8 +192,9 @@ final-frame check instead. Details in [docs/ORIGINALS.md](docs/ORIGINALS.md).
 ## Benchmarks
 
 Startup is under a millisecond (about 0.3 ms for `glyphfx --version`). The full
-37-effect matrix against the ttfx assembly engine (the Rust port is shown for
-provenance; glyphfx is on par with it across the matrix):
+37-effect matrix against ttfx's engines: `fx`, the fastest port and glyphfx's
+target; the removed assembly engine, for the record; and the Rust 0.3.3 engine
+that is glyphfx's byte-parity oracle:
 
 {matrix_table()}
 

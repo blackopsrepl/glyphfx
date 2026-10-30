@@ -23,21 +23,20 @@ The effects are a shell toy that lives in a prompt pipeline, so startup and
 throughput matter. glyphfx links nothing but libc and libm — no interpreter, no
 import step, no third-party libraries — and starts in well under a millisecond.
 
-The tempting alternative is to hand-write the hot paths in x86-64 assembly, as
-ttfx experimented with in [an open pull request](https://github.com/omacom/ttfx/pull/35).
-glyphfx does not, deliberately:
+The tempting alternative is hand-written assembly. ttfx tried it: an x86-64
+engine landed in [omacom/ttfx#35](https://github.com/omacom/ttfx/pull/35) and was
+removed again in [7444eea](https://github.com/omacom/ttfx/commit/7444eea), once
+ttfx's portable Rust engine (`fx`) matched or beat it on every effect. glyphfx
+draws the same conclusion:
 
-- **The measured gains were algorithmic, not instruction-level.** That PR's own
-  notes credit structure-of-arrays character storage, pooled visuals, an
-  incremental cell grid, batched writes, and a faster RNG for most of its
-  speedup — all expressible in C. glyphfx has closed the gap with the Rust
-  engine across the matrix; the open target is the assembly engine, chased by
-  transcribing its optimized logic (soa layout, pooling, batching) into
-  portable C rather than re-deriving wins.
-- **Assembly ties the fast path to one ISA.** That engine only runs on
-  x86-64-v4 (AVX-512), which Intel disabled on consumer parts after 11th gen,
-  AMD shipped only from Zen 4, and no ARM or Apple silicon has. Elsewhere it
-  declines and you get the old code. Portable C is the same speed everywhere.
+- **The gains are algorithmic, not instruction-level.** fx credits
+  structure-of-arrays character storage, interned visuals, an incremental cell
+  grid, skipped idle ticks and batched writes for its speed — all expressible in
+  C. fx is glyphfx's performance target, chased by transcribing that design into
+  portable C rather than re-deriving it.
+- **Assembly ties the fast path to one ISA.** The ttfx assembly engine needed
+  NASM and per-tier x86-64 builds; everywhere else it declined and ran the old
+  code. Portable C is the same program on every CPU.
 - **A byte-exact target makes a second implementation a liability.** Every
   effect must reproduce ttfx bit for bit, including banker's rounding and libm
   results; a hand-tuned assembly engine doubles the surface where the two can
@@ -45,11 +44,8 @@ glyphfx does not, deliberately:
 
 > **Why not assembly?** There is no frame budget to win. glyphfx paces itself at
 > 60 fps and hands one batched frame to the terminal per tick; the
-> tens-of-thousands-of-fps figures are a benchmark, not the product. ttfx's own
-> AVX-512 experiment credits data layout and batched writes for its speedup, not
-> instruction selection — and that is portable C work. Hand-written SIMD would
-> accelerate a number nobody watches while trading away the single binary that
-> stays byte-exact with the oracle.
+> thousands-of-fps figures are a benchmark, not the product. Data layout and
+> skipped work are what make the benchmark faster, and that is portable C work.
 
 The result builds anywhere with a C compiler, starts in about 0.3 ms, and
 renders every effect at thousands to tens of thousands of frames per second
@@ -98,52 +94,53 @@ final-frame check instead. Details in [docs/ORIGINALS.md](docs/ORIGINALS.md).
 ## Benchmarks
 
 Startup is under a millisecond (about 0.3 ms for `glyphfx --version`). The full
-37-effect matrix against the ttfx assembly engine (the Rust port is shown for
-provenance; glyphfx is on par with it across the matrix):
+37-effect matrix against ttfx's engines: `fx`, the fastest port and glyphfx's
+target; the removed assembly engine, for the record; and the Rust 0.3.3 engine
+that is glyphfx's byte-parity oracle:
 
 Best-of-N total run time at 200&times;50 with pacing disabled (`--frame-rate 0`), seed 1, on `x86_64:12th Gen Intel(R) Core(TM) i5-12400`. Speedups above 1.00&times; mean glyphfx is faster.
 
-| effect | glyphfx | ttfx (asm) | vs asm | ttfx (Rust) | vs Rust |
-|---|---:|---:|---:|---:|---:|
-| beams | 264.2 ms | 31.9 ms | **0.12&times;** | 364.5 ms | 1.38&times; |
-| binarypath | 1566.5 ms | 464.5 ms | **0.30&times;** | 1767.8 ms | 1.13&times; |
-| blackhole | 815.2 ms | 164.1 ms | **0.20&times;** | 1015.6 ms | 1.25&times; |
-| bouncyballs | 264.4 ms | 114.1 ms | **0.43&times;** | 614.9 ms | 2.33&times; |
-| bubbles | 564.8 ms | 114.1 ms | **0.20&times;** | 915.4 ms | 1.62&times; |
-| burn | 665.1 ms | 64.0 ms | **0.10&times;** | 665.1 ms | 1.00&times; |
-| colorshift | 464.5 ms | 63.9 ms | **0.14&times;** | 765.4 ms | 1.65&times; |
-| crumble | 414.5 ms | 164.1 ms | **0.40&times;** | 564.9 ms | 1.36&times; |
-| decrypt | 414.5 ms | 64.0 ms | **0.15&times;** | 815.1 ms | 1.97&times; |
-| errorcorrect | 564.7 ms | 63.9 ms | **0.11&times;** | 614.8 ms | 1.09&times; |
-| expand | 214.4 ms | 63.9 ms | **0.30&times;** | 264.2 ms | 1.23&times; |
-| fireworks | 615.0 ms | 164.1 ms | **0.27&times;** | 665.0 ms | 1.08&times; |
-| highlight | 63.9 ms | 15.7 ms | **0.25&times;** | 114.0 ms | 1.78&times; |
-| laseretch | 1015.5 ms | 114.0 ms | **0.11&times;** | 965.5 ms | 0.95&times; |
-| matrix | 364.3 ms | 64.0 ms | **0.18&times;** | 314.3 ms | 0.86&times; |
-| middleout | 164.1 ms | 31.8 ms | **0.19&times;** | 164.1 ms | 1.00&times; |
-| orbittingvolley | 214.1 ms | 63.9 ms | **0.30&times;** | 114.0 ms | 0.53&times; |
-| overflow | 214.3 ms | 31.8 ms | **0.15&times;** | 214.2 ms | 1.00&times; |
-| pour | 164.1 ms | 63.9 ms | **0.39&times;** | 464.6 ms | 2.83&times; |
-| print | 264.2 ms | 15.7 ms | **0.06&times;** | 665.0 ms | 2.52&times; |
-| rain | 214.1 ms | 63.8 ms | **0.30&times;** | 364.4 ms | 1.70&times; |
-| randomsequence | 114.0 ms | 7.8 ms | **0.07&times;** | 114.0 ms | 1.00&times; |
-| rings | 1266.2 ms | 264.4 ms | **0.21&times;** | 1066.6 ms | 0.84&times; |
-| scattered | 314.5 ms | 63.9 ms | **0.20&times;** | 314.4 ms | 1.00&times; |
-| slice | 164.2 ms | 31.8 ms | **0.19&times;** | 164.2 ms | 1.00&times; |
-| slide | 164.2 ms | 63.9 ms | **0.39&times;** | 164.2 ms | 1.00&times; |
-| smoke | 214.2 ms | 31.8 ms | **0.15&times;** | 314.4 ms | 1.47&times; |
-| spotlights | 414.9 ms | 114.1 ms | **0.28&times;** | 514.7 ms | 1.24&times; |
-| spray | 264.3 ms | 63.9 ms | **0.24&times;** | 264.3 ms | 1.00&times; |
-| swarm | 1316.2 ms | 264.2 ms | **0.20&times;** | 1115.6 ms | 0.85&times; |
-| sweep | 114.0 ms | 15.7 ms | **0.14&times;** | 114.0 ms | 1.00&times; |
-| synthgrid | 113.9 ms | 15.8 ms | **0.14&times;** | 214.1 ms | 1.88&times; |
-| thunderstorm | 414.5 ms | 63.9 ms | **0.15&times;** | 564.7 ms | 1.36&times; |
-| unstable | 364.3 ms | 63.9 ms | **0.18&times;** | 364.5 ms | 1.00&times; |
-| vhstape | 464.6 ms | 114.1 ms | **0.25&times;** | 565.5 ms | 1.22&times; |
-| waves | 514.8 ms | 63.9 ms | **0.12&times;** | 1015.6 ms | 1.97&times; |
-| wipe | 63.9 ms | 7.7 ms | **0.12&times;** | 114.0 ms | 1.78&times; |
+| effect | glyphfx | ttfx (fx) | vs fx | ttfx (asm) | vs asm | ttfx (Rust) | vs Rust |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| beams | 126.1 ms | 26.0 ms | **0.21&times;** | 35.9 ms | **0.28&times;** | 324.8 ms | 2.58&times; |
+| binarypath | 1106.2 ms | 178.9 ms | **0.16&times;** | 407.1 ms | **0.37&times;** | 1470.4 ms | 1.33&times; |
+| blackhole | 480.7 ms | 106.3 ms | **0.22&times;** | 119.0 ms | **0.25&times;** | 758.7 ms | 1.58&times; |
+| bouncyballs | 166.9 ms | 53.0 ms | **0.32&times;** | 64.5 ms | **0.39&times;** | 534.3 ms | 3.20&times; |
+| bubbles | 261.5 ms | 79.1 ms | **0.30&times;** | 96.9 ms | **0.37&times;** | 782.5 ms | 2.99&times; |
+| burn | 158.4 ms | 34.6 ms | **0.22&times;** | 51.0 ms | **0.32&times;** | 550.5 ms | 3.48&times; |
+| colorshift | 280.0 ms | 41.6 ms | **0.15&times;** | 33.5 ms | **0.12&times;** | 622.3 ms | 2.22&times; |
+| crumble | 285.8 ms | 85.3 ms | **0.30&times;** | 107.0 ms | **0.37&times;** | 478.2 ms | 1.67&times; |
+| decrypt | 224.2 ms | 33.5 ms | **0.15&times;** | 36.1 ms | **0.16&times;** | 696.0 ms | 3.10&times; |
+| errorcorrect | 83.0 ms | 32.6 ms | **0.39&times;** | 40.7 ms | **0.49&times;** | 535.5 ms | 6.45&times; |
+| expand | 157.1 ms | 46.8 ms | **0.30&times;** | 42.0 ms | **0.27&times;** | 200.2 ms | 1.27&times; |
+| fireworks | 393.7 ms | 112.8 ms | **0.29&times;** | 133.6 ms | **0.34&times;** | 586.7 ms | 1.49&times; |
+| highlight | 28.5 ms | 7.0 ms | **0.25&times;** | 6.2 ms | **0.22&times;** | 69.1 ms | 2.42&times; |
+| laseretch | 241.3 ms | 82.9 ms | **0.34&times;** | 105.6 ms | **0.44&times;** | 901.0 ms | 3.73&times; |
+| matrix | 112.0 ms | 51.8 ms | **0.46&times;** | 56.4 ms | **0.50&times;** | 255.4 ms | 2.28&times; |
+| middleout | 108.6 ms | 18.8 ms | **0.17&times;** | 21.2 ms | **0.20&times;** | 135.9 ms | 1.25&times; |
+| orbittingvolley | 78.0 ms | 28.8 ms | **0.37&times;** | 33.2 ms | **0.43&times;** | 105.2 ms | 1.35&times; |
+| overflow | 132.0 ms | 25.6 ms | **0.19&times;** | 23.5 ms | **0.18&times;** | 162.5 ms | 1.23&times; |
+| pour | 94.2 ms | 33.8 ms | **0.36&times;** | 38.6 ms | **0.41&times;** | 396.3 ms | 4.21&times; |
+| print | 77.7 ms | 14.7 ms | **0.19&times;** | 13.8 ms | **0.18&times;** | 555.4 ms | 7.15&times; |
+| rain | 128.0 ms | 37.6 ms | **0.29&times;** | 50.9 ms | **0.40&times;** | 299.1 ms | 2.34&times; |
+| randomsequence | 39.5 ms | 7.2 ms | **0.18&times;** | 7.4 ms | **0.19&times;** | 74.6 ms | 1.89&times; |
+| rings | 994.0 ms | 165.3 ms | **0.17&times;** | 207.0 ms | **0.21&times;** | 888.2 ms | 0.89&times; |
+| scattered | 148.8 ms | 44.8 ms | **0.30&times;** | 49.8 ms | **0.33&times;** | 236.5 ms | 1.59&times; |
+| slice | 88.9 ms | 17.4 ms | **0.20&times;** | 19.2 ms | **0.22&times;** | 103.7 ms | 1.17&times; |
+| slide | 81.2 ms | 28.1 ms | **0.35&times;** | 28.8 ms | **0.35&times;** | 125.7 ms | 1.55&times; |
+| smoke | 93.7 ms | 16.0 ms | **0.17&times;** | 19.2 ms | **0.20&times;** | 274.9 ms | 2.93&times; |
+| spotlights | 270.2 ms | 54.2 ms | **0.20&times;** | 57.9 ms | **0.21&times;** | 420.0 ms | 1.55&times; |
+| spray | 143.2 ms | 50.1 ms | **0.35&times;** | 55.4 ms | **0.39&times;** | 207.9 ms | 1.45&times; |
+| swarm | 804.0 ms | 178.7 ms | **0.22&times;** | 208.4 ms | **0.26&times;** | 1032.8 ms | 1.28&times; |
+| sweep | 41.9 ms | 9.3 ms | **0.22&times;** | 9.8 ms | **0.23&times;** | 100.7 ms | 2.40&times; |
+| synthgrid | 56.7 ms | 12.7 ms | **0.22&times;** | 12.0 ms | **0.21&times;** | 168.8 ms | 2.98&times; |
+| thunderstorm | 220.9 ms | 28.1 ms | **0.13&times;** | 36.1 ms | **0.16&times;** | 513.1 ms | 2.32&times; |
+| unstable | 239.5 ms | 53.5 ms | **0.22&times;** | 62.1 ms | **0.26&times;** | 303.0 ms | 1.27&times; |
+| vhstape | 293.8 ms | 49.2 ms | **0.17&times;** | 62.4 ms | **0.21&times;** | 533.9 ms | 1.82&times; |
+| waves | 349.4 ms | 31.0 ms | **0.09&times;** | 37.6 ms | **0.11&times;** | 909.5 ms | 2.60&times; |
+| wipe | 33.1 ms | 7.2 ms | **0.22&times;** | 6.9 ms | **0.21&times;** | 71.9 ms | 2.17&times; |
 
-Reproduce with `python3 tools/tests/matrix.py` (and `make perf` to gate against regression).
+Reproduce with `python3 tools/tests/matrix.py` (`GLYPHFX_TTFX_FX` names a ttfx >= 0.5 binary for the fx column, `GLYPHFX_TTFX_ASM` a build of ttfx 73c7a44 for the asm column), and `make perf` to gate against regression.
 
 ## Usage
 
