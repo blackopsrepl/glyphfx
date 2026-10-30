@@ -19,7 +19,12 @@ fn sources(dir: &Path, build: &mut cc::Build) {
 
 fn main() {
     // The sys package root is the engine root, including in registry archives.
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    // Read it at run time: env! would bake in the directory the build script
+    // was compiled for, and a compiler cache (kache) serves one build-script
+    // binary to every checkout with the same source, so a stale copy such as
+    // target/package/ would be compiled instead of this one.
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    let root = Path::new(&manifest_dir);
     let out = env::var("OUT_DIR").unwrap();
     let version = fs::read_to_string(root.join("VERSION")).unwrap();
     fs::write(
