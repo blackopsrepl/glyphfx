@@ -2,6 +2,67 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by csemver; do not edit by hand.
 
+## [0.4.0](https://github.com/blackopsrepl/glyphfx/compare/v0.3.4...v0.4.0) (2026-10-30)
+
+
+### Features
+
+* **effects:** add the bannerwave effect ([2e43e3a](https://github.com/blackopsrepl/glyphfx/commit/2e43e3a54c8ab1f97d3d31e40a36be7488e8d38a))
+* **effects:** add the burnout exit effect ([ad47745](https://github.com/blackopsrepl/glyphfx/commit/ad4774522268acfb567136e8714d845ca0d6be85))
+* **effects:** add the comet effect ([e9e4e22](https://github.com/blackopsrepl/glyphfx/commit/e9e4e22f2ff938e95a79a72ec721eb8b3f3663a4))
+* **effects:** add the copper effect ([6ca9e34](https://github.com/blackopsrepl/glyphfx/commit/6ca9e348e1fd1adbbd15e2d196ca5125e846f2a9))
+* **perf:** measure ttfx's fx engine as the matrix target ([5cfef6d](https://github.com/blackopsrepl/glyphfx/commit/5cfef6db13842f6c8fc10f0d7025043f0aaf8e64))
+* **registry:** register glyphfx originals after the ttfx set ([201862c](https://github.com/blackopsrepl/glyphfx/commit/201862ca7edf7c1d4babfe64878c2d819e808189))
+* **rust:** expose synchronized frame-by-frame engine API ([21e7eb7](https://github.com/blackopsrepl/glyphfx/commit/21e7eb7c03f2f3563eea3febaa60756e1456d6e7))
+* **rust:** let clips anchor their text block ([02aaad5](https://github.com/blackopsrepl/glyphfx/commit/02aaad5a05a5129ba345f9a78d73a4391ac60c89))
+* **rust:** run the glyphfx originals and check EFFECTS against the engine ([48b77b7](https://github.com/blackopsrepl/glyphfx/commit/48b77b72ef2f2c7c43ad812b28e1e9517ea451a9))
+
+
+### Bug Fixes
+
+* **perf:** set each bar from the measured run-to-run spread ([42aaa06](https://github.com/blackopsrepl/glyphfx/commit/42aaa06a648b6a88656b2a421241eaf512628a61))
+* **perf:** time runs with a blocking wait instead of subprocess polling ([fdf7964](https://github.com/blackopsrepl/glyphfx/commit/fdf79640b51a39420e363aa9f50b2607f1eaa956))
+* **rust:** keep the parity oracle out of the Cargo workspace ([7137c83](https://github.com/blackopsrepl/glyphfx/commit/7137c837c2b0be2aaa9df0c124e47f33e720dc6a))
+* **rust:** read the sys package root when the build script runs ([c125b72](https://github.com/blackopsrepl/glyphfx/commit/c125b726af2ea76e4e167dcab2f84568c682a493))
+
+
+### Performance
+
+* **engine:** bound the active set's passes to its occupied words ([a92c36d](https://github.com/blackopsrepl/glyphfx/commit/a92c36d3477720c6a180dd4c0887b24c4b21e9cf))
+* **engine:** doze characters through ticks nothing can observe ([9b92ce7](https://github.com/blackopsrepl/glyphfx/commit/9b92ce7afc86faf7b40c6bf897035e5a6721f8fc))
+* **gate:** gate the four originals for speed and output ([8516dff](https://github.com/blackopsrepl/glyphfx/commit/8516dff5bf73dc6208b8a1465b65ab2b0dc31a33))
+* **gate:** re-record every bar under exact timing ([aa787b6](https://github.com/blackopsrepl/glyphfx/commit/aa787b62885449990974d22d27a56f811f332da4))
+* **gate:** tighten the bars dozing lowered ([882cce2](https://github.com/blackopsrepl/glyphfx/commit/882cce27b67dfb4ffd17bfe88d8de18b3976762d))
+* **gate:** tighten the originals' rows to their best verified runs ([d5ef536](https://github.com/blackopsrepl/glyphfx/commit/d5ef536a4bb3b373793c948721b577d1477637b5))
+
+
+### Refactoring
+
+* **animation:** expose an eased scene's whole frame-index sequence ([3f1aea9](https://github.com/blackopsrepl/glyphfx/commit/3f1aea9d1f04bd2ce146e74afaa6397642e56060))
+
+
+### Tests
+
+* **originals:** hold the originals to determinism, goldens and final frame ([91d5730](https://github.com/blackopsrepl/glyphfx/commit/91d5730afc0ce057cd3b3c84cdbcb4ecefe8aeab))
+
+
+### Build
+
+* **rust:** package self-contained native and safe crates ([00cfe53](https://github.com/blackopsrepl/glyphfx/commit/00cfe53c8a782273bafa3fa2b3902f27a5665ada))
+
+
+### CI
+
+* run the originals suite on Linux and macOS ([0ad7431](https://github.com/blackopsrepl/glyphfx/commit/0ad7431ff35b88188df4328c4bc261bd142df298))
+
+
+### Documentation
+
+* benchmark against ttfx fx with exact timing ([397061e](https://github.com/blackopsrepl/glyphfx/commit/397061e1e9dfb647b469a9654f7760234a3e25ae))
+* document the glyphfx originals ([d5efbe2](https://github.com/blackopsrepl/glyphfx/commit/d5efbe221d1e80d2c30c050ce9138541dae99caa))
+* re-record the matrix with dozing and measure the fx/asm claim ([2043bcd](https://github.com/blackopsrepl/glyphfx/commit/2043bcde037ea531b9398989e685f7648fa305db))
+
+
 ## [0.3.4](https://github.com/blackopsrepl/glyphfx/compare/v0.3.3...v0.3.4) (2026-10-28)
 
 
