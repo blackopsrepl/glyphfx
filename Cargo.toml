@@ -22,6 +22,8 @@ path = "rust/glyphfx-sys/src/lib.rs"
 
 [workspace]
 members = ["rust/glyphfx"]
+# The parity oracle (tools/parity/fetch_reference.sh) is its own Cargo project.
+exclude = ["reference"]
 resolver = "2"
 
 [build-dependencies]
