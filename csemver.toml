@@ -4,7 +4,9 @@
 # VERSION is the source of truth: the Makefile reads it into
 # build/glyphfx_version.h, so the binary reports whatever the release commit
 # wrote here. packaging/PKGBUILD downloads the tagged archive, so its pkgver
-# must move with every release or it keeps building an old tag. The
+# must move with every release or it keeps building an old tag. Both Rust
+# crates, the safe crate's glyphfx-sys requirement and its README install line
+# carry the same version, so a published crate always matches its tag. The
 # changelog is generated from conventional commits and must never be
 # hand-edited.
 #
@@ -29,6 +31,10 @@ packageFiles = [
 bumpFiles = [
   { filename = "VERSION", type = "plain-text" },
   { filename = "packaging/PKGBUILD", type = "regex", pattern = '^pkgver=([0-9]+\.[0-9]+\.[0-9]+)$', versionGroup = 1 },
+  { filename = "Cargo.toml", type = "regex", pattern = '^version = "([0-9]+\.[0-9]+\.[0-9]+)"', versionGroup = 1 },
+  { filename = "rust/glyphfx/Cargo.toml", type = "regex", pattern = '^version = "([0-9]+\.[0-9]+\.[0-9]+)"', versionGroup = 1 },
+  { filename = "rust/glyphfx/Cargo.toml", type = "regex", pattern = '^glyphfx-sys = \{ path = "\.\./\.\.", version = "([0-9]+\.[0-9]+\.[0-9]+)"', versionGroup = 1 },
+  { filename = "rust/glyphfx/README.md", type = "regex", pattern = '`glyphfx = "([0-9]+\.[0-9]+\.[0-9]+)"`', versionGroup = 1 },
 ]
 
 types = [

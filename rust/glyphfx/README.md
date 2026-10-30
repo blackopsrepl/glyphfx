@@ -54,7 +54,7 @@ VERSION, LICENSE and NOTICE, plus the bridge and Rust ownership boundary.
 The safe package contains Rust only and a versioned sys dependency. Neither
 build downloads engine sources or relies on files outside its package root.
 Publish `glyphfx-sys` before `glyphfx`; no publication is part of verification.
-Applications can use `glyphfx = "0.1.0"` once both packages are published.
+Applications can use `glyphfx = "0.4.0"` once both packages are published.
 
 Until then, depend on the git repository at a `main` commit; Cargo discovers
 `rust/glyphfx/Cargo.toml` without a `package` rename or subdirectory URL:

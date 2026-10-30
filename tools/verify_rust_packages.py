@@ -30,13 +30,15 @@ def main():
     # Both archive verification and extracted tests reuse the same target.
     env["CARGO_TARGET_DIR"] = str(target)
     dirty = ["--allow-dirty"] if args.allow_dirty else []
+    # VERSION is the release source of truth; both crates are released with it.
+    version = (root / "VERSION").read_text().strip()
     with tempfile.TemporaryDirectory(prefix="glyphfx-packages-") as temporary:
         independent = Path(temporary)
 
         def unpack(name):
-            with tarfile.open(target / "package" / f"{name}-0.1.0.crate") as archive:
+            with tarfile.open(target / "package" / f"{name}-{version}.crate") as archive:
                 archive.extractall(independent, filter="data")
-            return independent / f"{name}-0.1.0"
+            return independent / f"{name}-{version}"
 
         cargo("package", "-p", "glyphfx-sys", "--list", *dirty)
         cargo("package", "-p", "glyphfx-sys", "-j2", *dirty)
@@ -58,7 +60,7 @@ def main():
         safe_root = unpack("glyphfx")
         manifest = tomllib.loads((safe_root / "Cargo.toml").read_text())
         dependency = manifest["dependencies"]["glyphfx-sys"]
-        assert dependency["version"] == "0.1.0"
+        assert dependency["version"] == version
         assert not {"path", "git"}.intersection(dependency)
         assert "patch" not in manifest
         assert (safe_root / "LICENSE").is_file()
