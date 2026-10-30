@@ -57,13 +57,13 @@ ORIGINALS = [
 ]
 
 
-def matrix_table():
-    """Render the full performance matrix recorded by tools/tests/matrix.py."""
+def load_matrix():
+    """The matrix recorded by tools/tests/matrix.py: (machine, rows)."""
     path = os.path.join(ROOT, "docs/benchmarks/matrix.tsv")
-    if not os.path.exists(path):
-        return "_No matrix recorded; run `python3 tools/tests/matrix.py`._"
     machine = ""
     rows = []
+    if not os.path.exists(path):
+        return machine, rows
     for line in open(path):
         if line.startswith("# machine "):
             machine = line.strip()[len("# machine "):]
@@ -76,6 +76,25 @@ def matrix_table():
             continue
         name, g, r, s, x = parts
         rows.append((name, float(g), float(r), float(s), float(x)))
+    return machine, rows
+
+
+def fx_vs_asm():
+    """How the fx and asm columns of the recorded matrix compare."""
+    _, rows = load_matrix()
+    pairs = [(s, x) for _, _, _, s, x in rows if s == s and x == x and s > 0 and x > 0]
+    if not pairs:
+        return "no recorded run compares them here"
+    faster = sum(x < s for s, x in pairs)
+    return (f"in the matrix below fx is faster on {faster} of the {len(pairs)} "
+            f"effects and asm on the other {len(pairs) - faster}")
+
+
+def matrix_table():
+    """Render the full performance matrix recorded by tools/tests/matrix.py."""
+    machine, rows = load_matrix()
+    if not rows:
+        return "_No matrix recorded; run `python3 tools/tests/matrix.py`._"
     out = [
         f"Best-of-N total run time at 200&times;50 with pacing disabled "
         f"(`--frame-rate 0`), seed 1, on `{machine}`. "
@@ -142,9 +161,10 @@ import step, no third-party libraries — and starts in well under a millisecond
 
 The tempting alternative is hand-written assembly. ttfx tried it: an x86-64
 engine landed in [omacom/ttfx#35](https://github.com/omacom/ttfx/pull/35) and was
-removed again in [7444eea](https://github.com/omacom/ttfx/commit/7444eea), once
-ttfx's portable Rust engine (`fx`) matched or beat it on every effect. glyphfx
-draws the same conclusion:
+removed again in [7444eea](https://github.com/omacom/ttfx/commit/7444eea), which
+states that ttfx's portable Rust engine (`fx`) matches or beats it on every
+effect; {fx_vs_asm()}. fx is the fastest port that ships, and glyphfx draws the
+same conclusion:
 
 - **The gains are algorithmic, not instruction-level.** fx credits
   structure-of-arrays character storage, interned visuals, an incremental cell

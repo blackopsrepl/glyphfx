@@ -25,9 +25,10 @@ import step, no third-party libraries — and starts in well under a millisecond
 
 The tempting alternative is hand-written assembly. ttfx tried it: an x86-64
 engine landed in [omacom/ttfx#35](https://github.com/omacom/ttfx/pull/35) and was
-removed again in [7444eea](https://github.com/omacom/ttfx/commit/7444eea), once
-ttfx's portable Rust engine (`fx`) matched or beat it on every effect. glyphfx
-draws the same conclusion:
+removed again in [7444eea](https://github.com/omacom/ttfx/commit/7444eea), which
+states that ttfx's portable Rust engine (`fx`) matches or beats it on every
+effect; in the matrix below fx is faster on 30 of the 37 effects and asm on the other 7. fx is the fastest port that ships, and glyphfx draws the
+same conclusion:
 
 - **The gains are algorithmic, not instruction-level.** fx credits
   structure-of-arrays character storage, interned visuals, an incremental cell
@@ -102,43 +103,43 @@ Best-of-N total run time at 200&times;50 with pacing disabled (`--frame-rate 0`)
 
 | effect | glyphfx | ttfx (fx) | vs fx | ttfx (asm) | vs asm | ttfx (Rust) | vs Rust |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| beams | 126.1 ms | 26.0 ms | **0.21&times;** | 35.9 ms | **0.28&times;** | 324.8 ms | 2.58&times; |
-| binarypath | 1106.2 ms | 178.9 ms | **0.16&times;** | 407.1 ms | **0.37&times;** | 1470.4 ms | 1.33&times; |
-| blackhole | 480.7 ms | 106.3 ms | **0.22&times;** | 119.0 ms | **0.25&times;** | 758.7 ms | 1.58&times; |
-| bouncyballs | 166.9 ms | 53.0 ms | **0.32&times;** | 64.5 ms | **0.39&times;** | 534.3 ms | 3.20&times; |
-| bubbles | 261.5 ms | 79.1 ms | **0.30&times;** | 96.9 ms | **0.37&times;** | 782.5 ms | 2.99&times; |
-| burn | 158.4 ms | 34.6 ms | **0.22&times;** | 51.0 ms | **0.32&times;** | 550.5 ms | 3.48&times; |
-| colorshift | 280.0 ms | 41.6 ms | **0.15&times;** | 33.5 ms | **0.12&times;** | 622.3 ms | 2.22&times; |
-| crumble | 285.8 ms | 85.3 ms | **0.30&times;** | 107.0 ms | **0.37&times;** | 478.2 ms | 1.67&times; |
-| decrypt | 224.2 ms | 33.5 ms | **0.15&times;** | 36.1 ms | **0.16&times;** | 696.0 ms | 3.10&times; |
-| errorcorrect | 83.0 ms | 32.6 ms | **0.39&times;** | 40.7 ms | **0.49&times;** | 535.5 ms | 6.45&times; |
-| expand | 157.1 ms | 46.8 ms | **0.30&times;** | 42.0 ms | **0.27&times;** | 200.2 ms | 1.27&times; |
-| fireworks | 393.7 ms | 112.8 ms | **0.29&times;** | 133.6 ms | **0.34&times;** | 586.7 ms | 1.49&times; |
-| highlight | 28.5 ms | 7.0 ms | **0.25&times;** | 6.2 ms | **0.22&times;** | 69.1 ms | 2.42&times; |
-| laseretch | 241.3 ms | 82.9 ms | **0.34&times;** | 105.6 ms | **0.44&times;** | 901.0 ms | 3.73&times; |
-| matrix | 112.0 ms | 51.8 ms | **0.46&times;** | 56.4 ms | **0.50&times;** | 255.4 ms | 2.28&times; |
-| middleout | 108.6 ms | 18.8 ms | **0.17&times;** | 21.2 ms | **0.20&times;** | 135.9 ms | 1.25&times; |
-| orbittingvolley | 78.0 ms | 28.8 ms | **0.37&times;** | 33.2 ms | **0.43&times;** | 105.2 ms | 1.35&times; |
-| overflow | 132.0 ms | 25.6 ms | **0.19&times;** | 23.5 ms | **0.18&times;** | 162.5 ms | 1.23&times; |
-| pour | 94.2 ms | 33.8 ms | **0.36&times;** | 38.6 ms | **0.41&times;** | 396.3 ms | 4.21&times; |
-| print | 77.7 ms | 14.7 ms | **0.19&times;** | 13.8 ms | **0.18&times;** | 555.4 ms | 7.15&times; |
-| rain | 128.0 ms | 37.6 ms | **0.29&times;** | 50.9 ms | **0.40&times;** | 299.1 ms | 2.34&times; |
-| randomsequence | 39.5 ms | 7.2 ms | **0.18&times;** | 7.4 ms | **0.19&times;** | 74.6 ms | 1.89&times; |
-| rings | 994.0 ms | 165.3 ms | **0.17&times;** | 207.0 ms | **0.21&times;** | 888.2 ms | 0.89&times; |
-| scattered | 148.8 ms | 44.8 ms | **0.30&times;** | 49.8 ms | **0.33&times;** | 236.5 ms | 1.59&times; |
-| slice | 88.9 ms | 17.4 ms | **0.20&times;** | 19.2 ms | **0.22&times;** | 103.7 ms | 1.17&times; |
-| slide | 81.2 ms | 28.1 ms | **0.35&times;** | 28.8 ms | **0.35&times;** | 125.7 ms | 1.55&times; |
-| smoke | 93.7 ms | 16.0 ms | **0.17&times;** | 19.2 ms | **0.20&times;** | 274.9 ms | 2.93&times; |
-| spotlights | 270.2 ms | 54.2 ms | **0.20&times;** | 57.9 ms | **0.21&times;** | 420.0 ms | 1.55&times; |
-| spray | 143.2 ms | 50.1 ms | **0.35&times;** | 55.4 ms | **0.39&times;** | 207.9 ms | 1.45&times; |
-| swarm | 804.0 ms | 178.7 ms | **0.22&times;** | 208.4 ms | **0.26&times;** | 1032.8 ms | 1.28&times; |
-| sweep | 41.9 ms | 9.3 ms | **0.22&times;** | 9.8 ms | **0.23&times;** | 100.7 ms | 2.40&times; |
-| synthgrid | 56.7 ms | 12.7 ms | **0.22&times;** | 12.0 ms | **0.21&times;** | 168.8 ms | 2.98&times; |
-| thunderstorm | 220.9 ms | 28.1 ms | **0.13&times;** | 36.1 ms | **0.16&times;** | 513.1 ms | 2.32&times; |
-| unstable | 239.5 ms | 53.5 ms | **0.22&times;** | 62.1 ms | **0.26&times;** | 303.0 ms | 1.27&times; |
-| vhstape | 293.8 ms | 49.2 ms | **0.17&times;** | 62.4 ms | **0.21&times;** | 533.9 ms | 1.82&times; |
-| waves | 349.4 ms | 31.0 ms | **0.09&times;** | 37.6 ms | **0.11&times;** | 909.5 ms | 2.60&times; |
-| wipe | 33.1 ms | 7.2 ms | **0.22&times;** | 6.9 ms | **0.21&times;** | 71.9 ms | 2.17&times; |
+| beams | 105.2 ms | 20.9 ms | **0.20&times;** | 26.7 ms | **0.25&times;** | 323.8 ms | 3.08&times; |
+| binarypath | 1105.5 ms | 176.9 ms | **0.16&times;** | 404.9 ms | **0.37&times;** | 1449.6 ms | 1.31&times; |
+| blackhole | 443.3 ms | 105.0 ms | **0.24&times;** | 118.0 ms | **0.27&times;** | 752.9 ms | 1.70&times; |
+| bouncyballs | 152.6 ms | 54.3 ms | **0.36&times;** | 65.6 ms | **0.43&times;** | 526.5 ms | 3.45&times; |
+| bubbles | 250.0 ms | 79.3 ms | **0.32&times;** | 96.9 ms | **0.39&times;** | 792.3 ms | 3.17&times; |
+| burn | 139.3 ms | 34.5 ms | **0.25&times;** | 49.4 ms | **0.35&times;** | 542.4 ms | 3.89&times; |
+| colorshift | 210.4 ms | 41.4 ms | **0.20&times;** | 34.0 ms | **0.16&times;** | 625.2 ms | 2.97&times; |
+| crumble | 261.5 ms | 85.1 ms | **0.33&times;** | 105.8 ms | **0.40&times;** | 464.9 ms | 1.78&times; |
+| decrypt | 160.0 ms | 31.7 ms | **0.20&times;** | 34.2 ms | **0.21&times;** | 696.7 ms | 4.35&times; |
+| errorcorrect | 79.4 ms | 32.6 ms | **0.41&times;** | 40.9 ms | **0.52&times;** | 529.9 ms | 6.67&times; |
+| expand | 145.6 ms | 32.7 ms | **0.22&times;** | 35.1 ms | **0.24&times;** | 191.2 ms | 1.31&times; |
+| fireworks | 385.0 ms | 114.1 ms | **0.30&times;** | 133.7 ms | **0.35&times;** | 565.5 ms | 1.47&times; |
+| highlight | 23.9 ms | 7.0 ms | **0.29&times;** | 6.1 ms | **0.26&times;** | 68.8 ms | 2.88&times; |
+| laseretch | 242.2 ms | 82.7 ms | **0.34&times;** | 105.8 ms | **0.44&times;** | 882.3 ms | 3.64&times; |
+| matrix | 104.0 ms | 52.5 ms | **0.50&times;** | 62.8 ms | **0.60&times;** | 257.7 ms | 2.48&times; |
+| middleout | 98.4 ms | 25.7 ms | **0.26&times;** | 29.1 ms | **0.30&times;** | 137.1 ms | 1.39&times; |
+| orbittingvolley | 79.7 ms | 28.6 ms | **0.36&times;** | 33.0 ms | **0.41&times;** | 105.1 ms | 1.32&times; |
+| overflow | 130.0 ms | 25.7 ms | **0.20&times;** | 23.3 ms | **0.18&times;** | 160.0 ms | 1.23&times; |
+| pour | 91.9 ms | 33.4 ms | **0.36&times;** | 37.9 ms | **0.41&times;** | 390.8 ms | 4.25&times; |
+| print | 73.2 ms | 14.5 ms | **0.20&times;** | 13.9 ms | **0.19&times;** | 550.3 ms | 7.52&times; |
+| rain | 123.3 ms | 37.1 ms | **0.30&times;** | 45.3 ms | **0.37&times;** | 301.4 ms | 2.44&times; |
+| randomsequence | 23.4 ms | 7.3 ms | **0.31&times;** | 7.0 ms | **0.30&times;** | 72.2 ms | 3.09&times; |
+| rings | 992.3 ms | 165.1 ms | **0.17&times;** | 207.4 ms | **0.21&times;** | 884.9 ms | 0.89&times; |
+| scattered | 151.0 ms | 44.5 ms | **0.29&times;** | 50.1 ms | **0.33&times;** | 231.0 ms | 1.53&times; |
+| slice | 86.2 ms | 17.1 ms | **0.20&times;** | 19.2 ms | **0.22&times;** | 104.2 ms | 1.21&times; |
+| slide | 77.9 ms | 26.1 ms | **0.34&times;** | 28.3 ms | **0.36&times;** | 124.7 ms | 1.60&times; |
+| smoke | 67.0 ms | 16.4 ms | **0.24&times;** | 20.0 ms | **0.30&times;** | 279.4 ms | 4.17&times; |
+| spotlights | 264.4 ms | 53.7 ms | **0.20&times;** | 55.1 ms | **0.21&times;** | 414.4 ms | 1.57&times; |
+| spray | 130.9 ms | 50.4 ms | **0.39&times;** | 55.9 ms | **0.43&times;** | 211.6 ms | 1.62&times; |
+| swarm | 801.3 ms | 178.2 ms | **0.22&times;** | 208.9 ms | **0.26&times;** | 1022.1 ms | 1.28&times; |
+| sweep | 31.6 ms | 9.1 ms | **0.29&times;** | 10.0 ms | **0.32&times;** | 101.0 ms | 3.20&times; |
+| synthgrid | 54.5 ms | 13.0 ms | **0.24&times;** | 12.8 ms | **0.23&times;** | 173.5 ms | 3.18&times; |
+| thunderstorm | 114.3 ms | 26.8 ms | **0.23&times;** | 35.8 ms | **0.31&times;** | 507.6 ms | 4.44&times; |
+| unstable | 242.5 ms | 53.4 ms | **0.22&times;** | 62.2 ms | **0.26&times;** | 301.3 ms | 1.24&times; |
+| vhstape | 257.8 ms | 47.7 ms | **0.19&times;** | 62.1 ms | **0.24&times;** | 519.2 ms | 2.01&times; |
+| waves | 271.0 ms | 30.5 ms | **0.11&times;** | 36.7 ms | **0.14&times;** | 857.7 ms | 3.16&times; |
+| wipe | 25.9 ms | 6.3 ms | **0.24&times;** | 5.9 ms | **0.23&times;** | 65.1 ms | 2.51&times; |
 
 Reproduce with `python3 tools/tests/matrix.py` (`GLYPHFX_TTFX_FX` names a ttfx >= 0.5 binary for the fx column, `GLYPHFX_TTFX_ASM` a build of ttfx 73c7a44 for the asm column), and `make perf` to gate against regression.
 
