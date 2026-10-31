@@ -49,8 +49,8 @@ static CallerKey scene_caller(const Scene *scene) {
     CallerKey key;
     memset(&key, 0, sizeof(key));
     key.kind = CALLER_SCENE;
-    key.id = scene->scene_id;
-    key.id_handle = strtab_handle(scene->scene_id);
+    key.id = scene->cold->scene_id;
+    key.id_handle = strtab_handle(scene->cold->scene_id);
     return key;
 }
 
@@ -586,13 +586,27 @@ static void step_synced_scene(EngineCtx *ctx, CharId id, Scene *scene, SyncMetri
 }
 
 static void step_eased_scene(EngineCtx *ctx, CharId id, Scene *scene) {
-    int64_t frame_index = eased_frame_index(&scene->ease, scene->easing_total_steps, scene->easing_current_step);
-    if ((size_t)frame_index < scene->frame_index_map_len) {
-        size_t frame = scene->frame_index_map[frame_index];
+    // The scene shape answers the eased frame per step directly; the walk is
+    // the fallback for a shape the memo cannot hold.
+    const int32_t *shape = scene_easing_shape_seq(scene);
+    int64_t frame_index;
+    size_t frame = 0;
+    int64_t start = 0;
+    bool resolved;
+    if (shape && scene->easing_current_step < scene->cold->easing_total_steps) {
+        int32_t looked = shape[scene->easing_current_step];
+        frame = looked < 0 ? 0 : (size_t)looked;
+        resolved = looked >= 0 && (size_t)looked < scene->all_frames_len;
+    } else {
+        frame_index = eased_frame_index(&scene->cold->ease, scene->cold->easing_total_steps,
+                                        scene->easing_current_step);
+        resolved = scene_frame_at_tick(scene, frame_index, &frame, &start);
+    }
+    if (resolved) {
         set_current_visual(ctx, id, scene->all_frames[frame].visual);
     }
     scene->easing_current_step += 1;
-    if (scene->easing_current_step == scene->easing_total_steps) {
+    if (scene->easing_current_step == scene->cold->easing_total_steps) {
         if (scene->is_looping) {
             scene->easing_current_step = 0;
         } else {

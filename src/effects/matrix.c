@@ -596,7 +596,7 @@ static int matrix_build(Effect *self, EngineCtx *ctx) {
         } else {
             // matrix.asm's visual_run_find: the resolve frames depend only on
             // the symbol and final color, so build them once for each pair.
-            bool shareable = scene && !scene->has_preexisting_colors && !scene->preexisting_bold;
+            bool shareable = scene && !scene->cold->has_preexisting_colors && !scene->cold->preexisting_bold;
             Scene *template = shareable ? framemo_get(st->resolve_runs, input_symbol, final_fg_color) : NULL;
             if (template) {
                 if (scene_append_frames(scene, template) != 0) {

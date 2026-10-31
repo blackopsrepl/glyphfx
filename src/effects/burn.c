@@ -116,7 +116,7 @@ static void burn_initialize_smoke(void *user, EngineCtx *ctx, CharId id) {
     // The 504F4F->C7C7C7 fade over the character's symbol is the same for
     // every particle with that symbol: build once, let the rest append (the
     // asm engine runs these frames through visual_run).
-    bool shareable = scene && !scene->has_preexisting_colors && !scene->preexisting_bold;
+    bool shareable = scene && !scene->cold->has_preexisting_colors && !scene->cold->preexisting_bold;
     Scene *run = shareable ? framemo_get(st->smoke_runs, input_symbol, stops[0]) : NULL;
     if (run) {
         if (scene_append_frames(scene, run) != 0) {

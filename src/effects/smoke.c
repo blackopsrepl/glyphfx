@@ -233,7 +233,7 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
             Color final_fg = map_colors.fg;
             Scene *scene =
                 paint_scn ? (Scene *)om_get(&ctx->terminal.arena.items[id].animation.scenes, paint_scn) : NULL;
-            bool shareable = scene && !scene->has_preexisting_colors && !scene->preexisting_bold;
+            bool shareable = scene && !scene->cold->has_preexisting_colors && !scene->cold->preexisting_bold;
             Scene *run = shareable ? framemo_get(st->paint_runs, input_symbol, final_fg) : NULL;
             if (run) {
                 if (scene_append_frames(scene, run) != 0) {
@@ -282,7 +282,7 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
                     rc = -1;
                 }
             }
-        } else if (smoke_scene && !smoke_scene->has_preexisting_colors && !smoke_scene->preexisting_bold) {
+        } else if (smoke_scene && !smoke_scene->cold->has_preexisting_colors && !smoke_scene->cold->preexisting_bold) {
             // The smoke frames are identical for every character: the first
             // shareable scene applies the gradient and becomes the template;
             // the rest copy its frames (the asm engine keeps one template too).

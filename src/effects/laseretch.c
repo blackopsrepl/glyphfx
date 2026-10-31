@@ -176,7 +176,7 @@ static void laseretch_initialize_spark(void *user, EngineCtx *ctx, CharId spark)
     // The cooling gradient over the symbol is the same for every spark: the
     // first builds the frames, the rest append them (the asm engine's
     // le_init_spark runs them through visual_run).
-    bool shareable = scene && !scene->has_preexisting_colors && !scene->preexisting_bold;
+    bool shareable = scene && !scene->cold->has_preexisting_colors && !scene->cold->preexisting_bold;
     Scene *run = shareable ? framemo_get(init->runs, input_symbol, init->colors[0]) : NULL;
     if (run) {
         if (scene_append_frames(scene, run) != 0) {

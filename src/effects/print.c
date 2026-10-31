@@ -261,7 +261,7 @@ static int print_make_row(Effect *self, EngineCtx *ctx, const CharId *chars, siz
             // The head frames depend on the input symbol and final color only,
             // so later characters with the same pair copy the first one's
             // scene (the asm engine's visual_run_find/keep memo).
-            bool shareable = scene && !scene->has_preexisting_colors && !scene->preexisting_bold;
+            bool shareable = scene && !scene->cold->has_preexisting_colors && !scene->cold->preexisting_bold;
             Scene *tmpl = shareable ? framemo_get(st->head_runs, input_symbol, final_fg) : NULL;
             if (tmpl) {
                 if (scene_append_frames(scene, tmpl) != 0) {

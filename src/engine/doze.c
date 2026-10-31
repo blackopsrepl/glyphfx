@@ -86,7 +86,7 @@ static Scene *dozing_scene(EngineCtx *ctx, CharId id) {
 static uint32_t plain_pure_ticks(const Scene *scene, VisualHandle shown) {
     uint64_t k = 0;
     size_t j = scene->head;
-    int64_t elapsed = scene->all_frames[j].ticks_elapsed;
+    int64_t elapsed = scene->ticks_elapsed;
     while (k < DOZE_MAX_TICKS) {
         const Frame *f = &scene->all_frames[j];
         if (f->visual != shown) {
@@ -110,21 +110,20 @@ static uint32_t plain_pure_ticks(const Scene *scene, VisualHandle shown) {
 // Pure ticks ahead of an eased scene: steps whose frame shows the visual
 // already shown (or no frame at all), stopping before the step that reaches
 // easing_total_steps (which completes a non-looping scene).
-static uint32_t eased_pure_ticks(const Scene *scene, VisualHandle shown) {
-    int64_t total = scene->easing_total_steps;
+static uint32_t eased_pure_ticks(Scene *scene, VisualHandle shown) {
+    int64_t total = scene->cold->easing_total_steps;
     int64_t step = scene->easing_current_step;
     if (total <= 0 || step < 0 || step + 1 >= total) {
         return 0;
     }
-    const int32_t *seq = eased_frame_seq(&scene->ease, total);
-    if (!seq) {
-        return 0;
-    }
+    // The scene's own resolved shape answers a look-ahead per step directly.
+    const int32_t *shape = scene_easing_shape_seq(scene);
+    if (!shape) return 0;
     uint32_t k = 0;
     while (k < DOZE_MAX_TICKS && step + 1 < total) {
-        int64_t idx = seq[step];
-        if (idx >= 0 && (size_t)idx < scene->frame_index_map_len &&
-            scene->all_frames[scene->frame_index_map[idx]].visual != shown) {
+        int32_t frame = shape[step];
+        if (frame < 0 || (size_t)frame >= scene->all_frames_len) break;
+        if (scene->all_frames[frame].visual != shown) {
             break;
         }
         k++;
@@ -176,14 +175,14 @@ static void apply_pure_ticks(Scene *scene, uint8_t kind, uint32_t n) {
         return;
     }
     while (n) {
-        Frame *f = &scene->all_frames[scene->head];
-        uint64_t rem = (uint64_t)(f->duration - f->ticks_elapsed);
+        const Frame *f = &scene->all_frames[scene->head];
+        uint64_t rem = (uint64_t)(f->duration - scene->ticks_elapsed);
         if (n < rem) {
-            f->ticks_elapsed += n;
+            scene->ticks_elapsed += n;
             return;
         }
         n -= (uint32_t)rem;
-        f->ticks_elapsed = 0;
+        scene->ticks_elapsed = 0;
         scene->head++;
     }
 }

@@ -641,7 +641,7 @@ static void lightning_strike(Effect *self, EngineCtx *ctx) {
         if (scene) {
             scene_wake(scene);
             scene->has_ease = true;
-            scene->ease = flash_ease;
+            scene->cold->ease = flash_ease;
         }
     }
     free(text_chars);

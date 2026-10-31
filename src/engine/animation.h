@@ -73,7 +73,6 @@ static inline size_t iq_len(const IndexDeque *q) {
 typedef struct Frame {
     VisualHandle visual;
     int64_t duration;
-    int64_t ticks_elapsed;
 } Frame;
 
 // Eased scenes pick a frame index from (ease, total_steps, step) alone, and
@@ -87,29 +86,35 @@ const int32_t *eased_frame_seq(const Easing *ease, int64_t total_steps);
 
 typedef struct {
     char *scene_id;  // owned
-    bool is_looping;
+    Easing ease;
+    int64_t easing_total_steps;
+    ColorPair preexisting_colors;
+    // Resolved frame index per eased step (see shape_frames_by_step): memoized
+    // by shape and shared across identical scenes. Valid only when
+    // easing_shape_for_len matches the frame count (appends rebuild it).
+    const int32_t *easing_shape_seq;
+    size_t easing_shape_for_len;
+    int32_t owner;  // arena slot of the character that owns the scene, or -1
     bool no_color;
     bool use_xterm_colors;
-    bool has_sync;
-    SyncMetric sync;
-    bool has_ease;
-    Easing ease;
-    Frame *all_frames;  // into the engine's frame pool (see frame_pool_free)
-    size_t all_frames_len;
-    // The remaining queue is just a head index into all_frames: frames retire
-    // in order, reset restores the original order, and the synced/eased steps
-    // index the remaining queue without reordering it. Reaching all_frames_len
-    // is "no remaining frames"; a looping scene wraps the head to 0.
-    size_t head;
-    size_t *frame_index_map;  // tick index -> frame index
-    size_t frame_index_map_len;
-    size_t frame_index_map_cap;
-    int64_t easing_total_steps;
-    int64_t easing_current_step;
     bool has_preexisting_colors;
-    ColorPair preexisting_colors;
     bool preexisting_bold;
-    int32_t owner;  // arena slot of the character that owns the scene, or -1
+} SceneCold;
+
+// Only playback state lives in the hot pool. Cold records occupy a separate
+// contiguous region, so plain/synced ticks do not stream names, easing or colors.
+typedef struct {
+    const Frame *all_frames;  // shared immutable prefix in the engine's frame pool
+    size_t all_frames_len;
+    // Frames retire in order; reset and looping restore the queue's head.
+    size_t head;
+    int64_t ticks_elapsed;  // only the head frame is playing
+    int64_t easing_current_step;
+    SceneCold *cold;
+    SyncMetric sync;
+    bool is_looping;
+    bool has_sync;
+    bool has_ease;
 } Scene;
 
 struct Easing;
@@ -151,10 +156,10 @@ void scene_free(Scene *scene);
 // Releases the engine-wide frame pool. Called between runs, like visual_free.
 void frame_pool_free(void);
 int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const VisualParams *params);
-// Appends every frame of src to dst, sharing the pooled visuals and copying
-// durations; playback counters start fresh and easing bookkeeping matches
-// scene_add_frame. For templates whose frames are byte-identical to what dst
-// would build for itself.
+// Appends every frame of src to dst. An empty destination shares src's immutable
+// pooled frame list; otherwise frames are bulk-copied into the destination tail.
+// Playback counters remain per scene and easing bookkeeping matches scene_add_frame.
+// Subsequent appends to either scene do not modify their existing frame prefixes.
 int scene_append_frames(Scene *dst, const Scene *src);
 
 // Memo of template scenes keyed by (symbol, color): effects whose frame
@@ -170,6 +175,12 @@ void framemo_free(FrameMemo *m);
 // all_frames index.
 int scene_activate(const Scene *scene, VisualHandle *out, size_t *frame_index);
 void scene_get_next_visual(Scene *scene, VisualHandle *out, size_t *frame_index);
+// Resolve a tick through immutable frame durations, independent of playback
+// state: the caller owns the cursor, look-ahead included.
+bool scene_frame_at_tick(const Scene *scene, int64_t tick, size_t *frame, int64_t *start);
+// Attach the scene's resolved eased sequence (one shared memo per shape).
+// Returns NULL when the shape cannot be memoized; callers keep the walk.
+const int32_t *scene_easing_shape_seq(Scene *scene);
 int scene_apply_gradient_to_symbols(Scene *scene, const char *const *symbols, size_t n_symbols, int64_t duration,
                                     const Gradient *fg, const Gradient *bg);
 void scene_reset(Scene *scene);
