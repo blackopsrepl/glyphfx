@@ -22,6 +22,7 @@
 #include "utils/graphics.h"
 #include "utils/ordmap.h"
 #include "utils/pycompat.h"
+#include "utils/strtab.h"
 
 typedef enum {
     COLUMN_RAIN,
@@ -115,10 +116,7 @@ static void push_symbol_default(StringList *list, const char *symbol) {
         list->items = grown;
         list->cap = cap;
     }
-    size_t n = strlen(symbol);
-    char *copy = malloc(n + 1);
-    memcpy(copy, symbol, n + 1);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 static void size_push(size_t **items, size_t *len, size_t *cap, size_t v) {
@@ -221,9 +219,6 @@ void matrix_config_defaults(void *cfg_ptr) {
 void matrix_free_config(void *cfg_ptr) {
     MatrixConfig *cfg = cfg_ptr;
     free(cfg->rain_color_gradient.items);
-    for (size_t i = 0; i < cfg->rain_symbols.len; i++) {
-        free(cfg->rain_symbols.items[i]);
-    }
     free(cfg->rain_symbols.items);
     free(cfg->final_gradient_stops.items);
     free(cfg->final_gradient_steps.items);

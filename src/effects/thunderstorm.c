@@ -24,6 +24,7 @@
 #include "utils/graphics.h"
 #include "utils/ordmap.h"
 #include "utils/pycompat.h"
+#include "utils/strtab.h"
 
 /// fade_complete: phase -> storm, restart clock.
 #define CB_FADE_COMPLETE 0u
@@ -182,9 +183,7 @@ static void push_symbol_default(StringList *list, const char *symbol) {
         list->items = grown;
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 // --- config ---------------------------------------------------------------
@@ -214,13 +213,7 @@ void thunderstorm_config_defaults(void *cfg_ptr) {
 
 void thunderstorm_free_config(void *cfg_ptr) {
     ThunderstormConfig *cfg = cfg_ptr;
-    for (size_t i = 0; i < cfg->raindrop_symbols.len; i++) {
-        free(cfg->raindrop_symbols.items[i]);
-    }
     free(cfg->raindrop_symbols.items);
-    for (size_t i = 0; i < cfg->spark_symbols.len; i++) {
-        free(cfg->spark_symbols.items[i]);
-    }
     free(cfg->spark_symbols.items);
     free(cfg->final_gradient_stops.items);
     free(cfg->final_gradient_steps.items);

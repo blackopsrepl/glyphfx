@@ -27,6 +27,8 @@ typedef struct {
 } IntList;
 
 // A list of single-codepoint symbols (reference Vec<String> parse_symbol).
+// Items are interned (strtab) and owned by the table: the list frees only
+// its array, and an item passed to a name API resolves without hashing.
 typedef struct {
     char **items;
     size_t len;

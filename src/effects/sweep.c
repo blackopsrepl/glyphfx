@@ -10,6 +10,7 @@
 #include "engine/terminal.h"
 #include "utils/graphics.h"
 #include "utils/sequence_easer.h"
+#include "utils/strtab.h"
 
 typedef struct {
     SweepConfig config;
@@ -61,9 +62,7 @@ static void push_symbol_default(StringList *list, const char *symbol) {
         list->items = grown;
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 void sweep_config_defaults(void *cfg_ptr) {
@@ -84,9 +83,6 @@ void sweep_config_defaults(void *cfg_ptr) {
 
 void sweep_free_config(void *cfg_ptr) {
     SweepConfig *cfg = cfg_ptr;
-    for (size_t i = 0; i < cfg->sweep_symbols.len; i++) {
-        free(cfg->sweep_symbols.items[i]);
-    }
     free(cfg->sweep_symbols.items);
     free(cfg->final_gradient_stops.items);
     free(cfg->final_gradient_steps.items);

@@ -10,6 +10,7 @@
 #include "engine/ctx.h"
 #include "engine/terminal.h"
 #include "utils/graphics.h"
+#include "utils/strtab.h"
 
 typedef enum {
     DIR_ROW,
@@ -90,9 +91,7 @@ static void push_symbol_default(StringList *list, const char *symbol) {
         list->items = grown;
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 void beams_config_defaults(void *cfg_ptr) {
@@ -127,13 +126,7 @@ void beams_config_defaults(void *cfg_ptr) {
 
 void beams_free_config(void *cfg_ptr) {
     BeamsConfig *cfg = cfg_ptr;
-    for (size_t i = 0; i < cfg->beam_row_symbols.len; i++) {
-        free(cfg->beam_row_symbols.items[i]);
-    }
     free(cfg->beam_row_symbols.items);
-    for (size_t i = 0; i < cfg->beam_column_symbols.len; i++) {
-        free(cfg->beam_column_symbols.items[i]);
-    }
     free(cfg->beam_column_symbols.items);
     free(cfg->beam_gradient_stops.items);
     free(cfg->beam_gradient_steps.items);

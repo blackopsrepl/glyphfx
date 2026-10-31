@@ -9,6 +9,7 @@
 #include "engine/ctx.h"
 #include "engine/terminal.h"
 #include "utils/graphics.h"
+#include "utils/strtab.h"
 
 typedef struct {
     int64_t row;
@@ -69,9 +70,7 @@ static void push_symbol_default(BouncyBallsSymbolList *list, const char *symbol)
         list->items = grown;
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 void bouncyballs_config_defaults(void *cfg_ptr) {
@@ -97,9 +96,6 @@ void bouncyballs_config_defaults(void *cfg_ptr) {
 void bouncyballs_free_config(void *cfg_ptr) {
     BouncyBallsConfig *cfg = cfg_ptr;
     free(cfg->ball_colors.items);
-    for (size_t i = 0; i < cfg->ball_symbols.len; i++) {
-        free(cfg->ball_symbols.items[i]);
-    }
     free(cfg->ball_symbols.items);
     free(cfg->final_gradient_stops.items);
     free(cfg->final_gradient_steps.items);

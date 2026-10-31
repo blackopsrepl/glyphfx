@@ -9,6 +9,7 @@
 #include "engine/ctx.h"
 #include "engine/terminal.h"
 #include "utils/graphics.h"
+#include "utils/strtab.h"
 
 typedef struct {
     WavesConfig config;
@@ -62,9 +63,7 @@ static void push_symbol_default(StringList *list, const char *symbol) {
         list->items = grown;
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 static int parse_wave_direction(const char *value, void *dst) {
@@ -113,9 +112,6 @@ void waves_config_defaults(void *cfg_ptr) {
 
 void waves_free_config(void *cfg_ptr) {
     WavesConfig *cfg = cfg_ptr;
-    for (size_t i = 0; i < cfg->wave_symbols.len; i++) {
-        free(cfg->wave_symbols.items[i]);
-    }
     free(cfg->wave_symbols.items);
     free(cfg->wave_gradient_stops.items);
     free(cfg->wave_gradient_steps.items);

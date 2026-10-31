@@ -8,6 +8,7 @@
 
 #include "effects/registry.h"
 #include "utils/hexterm.h"
+#include "utils/strtab.h"
 #include "utils/utf8.h"
 
 #include "glyphfx_version.h"
@@ -167,9 +168,6 @@ static int assign_option(CliConfig *cfg, const OptSpec *spec, const char *value)
         case OPT_STR_LIST: {
             StringList *list = (StringList *)(base + spec->offset);
             if (!list->provided) {
-                for (size_t i = 0; i < list->len; i++) {
-                    free(list->items[i]);
-                }
                 list->len = 0;
                 list->provided = true;
             }
@@ -178,8 +176,7 @@ static int assign_option(CliConfig *cfg, const OptSpec *spec, const char *value)
                 list->items = realloc(list->items, cap * sizeof(char *));
                 list->cap = cap;
             }
-            list->items[list->len] = malloc(strlen(value) + 1);
-            strcpy(list->items[list->len], value);
+            list->items[list->len] = (char *)strtab_intern(value);
             list->len++;
             return 0;
         }
@@ -452,9 +449,6 @@ static int eff_assign(const EffectEntry *entry, void *cfg, const EffOptSpec *spe
                 return 2;
             }
             if (!list->provided) {
-                for (size_t i = 0; i < list->len; i++) {
-                    free(list->items[i]);
-                }
                 list->len = 0;
                 list->provided = true;
             }
@@ -463,8 +457,7 @@ static int eff_assign(const EffectEntry *entry, void *cfg, const EffOptSpec *spe
                 list->items = realloc(list->items, cap * sizeof(char *));
                 list->cap = cap;
             }
-            list->items[list->len] = malloc(strlen(value) + 1);
-            strcpy(list->items[list->len], value);
+            list->items[list->len] = (char *)strtab_intern(value);
             list->len++;
             return 0;
         }

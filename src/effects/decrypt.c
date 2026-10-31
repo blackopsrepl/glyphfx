@@ -73,9 +73,7 @@ static void push_symbol_default(StringList *list, const char *symbol) {
         list->items = grown;
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 static size_t utf8_encode(uint32_t cp, char *out) {
@@ -467,9 +465,6 @@ static void decrypt_destroy(Effect *self) {
     Decrypt *st = self->state;
     if (!st) {
         return;
-    }
-    for (size_t i = 0; i < st->encrypted_symbols.len; i++) {
-        free(st->encrypted_symbols.items[i]);
     }
     free(st->encrypted_symbols.items);
     free(st->encrypted_handles);

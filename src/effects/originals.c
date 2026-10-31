@@ -168,14 +168,9 @@ void orig_push_symbol(StringList *list, const char *symbol) {
         list->items = realloc(list->items, cap * sizeof(char *));
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 void orig_free_symbols(StringList *list) {
-    for (size_t i = 0; i < list->len; i++) {
-        free(list->items[i]);
-    }
     free(list->items);
 }

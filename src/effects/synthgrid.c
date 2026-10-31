@@ -22,6 +22,7 @@
 #include "utils/graphics.h"
 #include "utils/ordmap.h"
 #include "utils/pycompat.h"
+#include "utils/strtab.h"
 
 /// Callback id: update_group_tracker(group_number).
 #define CB_UPDATE_GROUP_TRACKER 0u
@@ -111,9 +112,7 @@ static void push_symbol_default(StringList *list, const char *symbol) {
         list->items = grown;
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 static void idvec_push(CharId **items, size_t *len, size_t *cap, CharId id) {
@@ -209,9 +208,6 @@ void synthgrid_free_config(void *cfg_ptr) {
     free(cfg->text_gradient_steps.items);
     free(cfg->grid_row_symbol);
     free(cfg->grid_column_symbol);
-    for (size_t i = 0; i < cfg->text_generation_symbols.len; i++) {
-        free(cfg->text_generation_symbols.items[i]);
-    }
     free(cfg->text_generation_symbols.items);
 }
 

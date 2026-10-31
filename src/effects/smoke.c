@@ -15,6 +15,7 @@
 #include "utils/graphics.h"
 #include "utils/ordmap.h"
 #include "utils/spanning_tree.h"
+#include "utils/strtab.h"
 
 typedef struct {
     SmokeConfig config;
@@ -65,9 +66,7 @@ static void push_symbol_default(StringList *list, const char *symbol) {
         list->items = grown;
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 static Easing no_ease(void) {
@@ -97,9 +96,6 @@ void smoke_config_defaults(void *cfg_ptr) {
 
 void smoke_free_config(void *cfg_ptr) {
     SmokeConfig *cfg = cfg_ptr;
-    for (size_t i = 0; i < cfg->smoke_symbols.len; i++) {
-        free(cfg->smoke_symbols.items[i]);
-    }
     free(cfg->smoke_symbols.items);
     free(cfg->smoke_gradient_stops.items);
     free(cfg->final_gradient_stops.items);

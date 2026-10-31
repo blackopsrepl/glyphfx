@@ -9,6 +9,7 @@
 #include "engine/ctx.h"
 #include "engine/terminal.h"
 #include "utils/graphics.h"
+#include "utils/strtab.h"
 #include "utils/utf8.h"
 
 typedef struct {
@@ -64,9 +65,7 @@ static void push_symbol_default(RainSymbolList *list, const char *symbol) {
         list->items = grown;
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 void rain_config_defaults(void *cfg_ptr) {
@@ -100,9 +99,6 @@ void rain_free_config(void *cfg_ptr) {
     free(cfg->rain_colors.items);
     free(cfg->final_gradient_stops.items);
     free(cfg->final_gradient_steps.items);
-    for (size_t i = 0; i < cfg->rain_symbols.len; i++) {
-        free(cfg->rain_symbols.items[i]);
-    }
     free(cfg->rain_symbols.items);
 }
 
