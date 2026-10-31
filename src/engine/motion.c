@@ -155,22 +155,30 @@ int path_new_waypoint(Path *p, Coord coord, const Coord *bezier, size_t bezier_l
     if (waypoint_id[0] == '\0') {
         size_t current_id = p->waypoints_len;
         char candidate[32];
-        for (;;) {
-            snprintf(candidate, sizeof(candidate), "%zu", current_id);
-            bool exists = false;
-            for (size_t i = 0; i < p->waypoints_len; i++) {
-                if (p->waypoints[i].waypoint_id && strcmp(p->waypoints[i].waypoint_id, candidate) == 0) {
-                    exists = true;
+        // Generated ids only need the existence scan once an explicitly named
+        // waypoint joined the path: before that every existing id is generated
+        // and below the current length, so id = length is always new.
+        if (p->custom_waypoint_ids) {
+            for (;;) {
+                snprintf(candidate, sizeof(candidate), "%zu", current_id);
+                bool exists = false;
+                for (size_t i = 0; i < p->waypoints_len; i++) {
+                    if (p->waypoints[i].waypoint_id && strcmp(p->waypoints[i].waypoint_id, candidate) == 0) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
                     break;
                 }
+                current_id++;
             }
-            if (!exists) {
-                break;
-            }
-            current_id++;
+        } else {
+            snprintf(candidate, sizeof(candidate), "%zu", current_id);
         }
         wp.waypoint_id = strtab_intern(candidate);
     } else {
+        p->custom_waypoint_ids = true;
         for (size_t i = 0; i < p->waypoints_len; i++) {
             if (p->waypoints[i].waypoint_id && strcmp(p->waypoints[i].waypoint_id, waypoint_id) == 0) {
                 return -1;

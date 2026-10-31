@@ -44,6 +44,7 @@ typedef struct {
     size_t waypoints_cap;
     double total_distance;
     uint64_t identity;           // distinguishes reused allocator addresses
+    bool custom_waypoint_ids;    // an explicitly named waypoint existed
     uint64_t geometry_revision;  // invalidates captured segment arithmetic
     int64_t current_step;
     int64_t max_steps;
