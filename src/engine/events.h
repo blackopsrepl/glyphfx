@@ -34,7 +34,7 @@ typedef enum {
 // themselves are borrowed from the intern table, never owned here.
 typedef struct {
     Coord coord;
-    char *waypoint_id;     // name; borrowed
+    const char *waypoint_id;  // name; borrowed
     uint32_t waypoint_handle;  // its interned identity; 0 until filled
     Coord *bezier;         // owned, may be NULL
     size_t bezier_len;
@@ -42,7 +42,7 @@ typedef struct {
 
 typedef struct {
     CallerKind kind;
-    char *id;          // scene/path name; owned when it came from a registration
+    const char *id;    // scene/path name; borrowed (interned once stored)
     uint32_t id_handle;  // its interned identity; 0 until the engine fills it
     WaypointKey waypoint;
 } CallerKey;
@@ -85,7 +85,7 @@ typedef enum {
 
 typedef struct {
     ActionKind kind;
-    char *id;        // interned; path/scene id for activate/deactivate
+    const char *id;  // interned; path/scene id for activate/deactivate
     bool has_id;     // for deactivate with no target
     int64_t layer;
     Coord coord;

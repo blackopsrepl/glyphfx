@@ -215,7 +215,7 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
         Coord input_coord = ch->input_coord;
         motion_set_coordinate(&ch->motion, jumbled_coord);
 
-        char *explosion_path = NULL;
+        const char *explosion_path = NULL;
         if (motion_new_path(&ch->motion, cfg->explosion_speed, true, cfg->explosion_ease, false, 0, 0, false,
                             "explosion", &explosion_path) != 0) {
             rc = -1;
@@ -226,16 +226,14 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(ep, coord_new(col, row), NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(explosion_path);
             rc = -1;
             break;
         }
         waypoint_free(&wp);
 
-        char *reassembly_path = NULL;
+        const char *reassembly_path = NULL;
         if (motion_new_path(&ch->motion, cfg->reassembly_speed, true, cfg->reassembly_ease, false, 0, 0, false,
                             "reassembly", &reassembly_path) != 0) {
-            free(explosion_path);
             rc = -1;
             break;
         }
@@ -243,14 +241,10 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(rp, input_coord, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(explosion_path);
-            free(reassembly_path);
             rc = -1;
             break;
         }
         waypoint_free(&wp);
-        free(explosion_path);
-        free(reassembly_path);
 
         animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, no_ease, "rumble", uses_pre);
 

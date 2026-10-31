@@ -63,14 +63,6 @@ typedef struct {
     int64_t max_active_binary_groups;
 } BinaryPath;
 
-static char *bp_dup(const char *s) {
-    char *copy = malloc(strlen(s) + 1);
-    if (copy) {
-        strcpy(copy, s);
-    }
-    return copy;
-}
-
 static void push_color_default(ColorList *list, const char *hex) {
     if (list->len == list->cap) {
         size_t cap = list->cap ? list->cap * 2 : 4;
@@ -370,7 +362,7 @@ static int binarypath_build(Effect *self, EngineCtx *ctx) {
 
         for (size_t bi = 0; bi < rep->binary_characters.len && rc == 0; bi++) {
             CharId bin_char = rep->binary_characters.items[bi];
-            char *path_id = NULL;
+            const char *path_id = NULL;
             {
                 Motion *motion = &ctx->terminal.arena.items[bin_char].motion;
                 motion_set_coordinate(motion, path_coords.items[0]);
@@ -391,7 +383,6 @@ static int binarypath_build(Effect *self, EngineCtx *ctx) {
                     waypoint_free(&wp);
                 }
                 if (rc != 0) {
-                    free(path_id);
                     break;
                 }
             }
@@ -402,19 +393,15 @@ static int binarypath_build(Effect *self, EngineCtx *ctx) {
                 &cfg->binary_colors.items[rng_choice_index(&ctx->rng, cfg->binary_colors.len)];
             {
                 EffectCharacter *ch = &ctx->terminal.arena.items[bin_char];
-                char *symbol = bp_dup(visual_symbol(ch->animation.current_visual));
+                // Interned (process lifetime): survives the scene growing.
+                const char *symbol = visual_symbol(ch->animation.current_visual);
                 bool uses_pre = ch->uses_input_preexisting_colors;
                 const char *scene_name = animation_new_scene(
                     &ctx->terminal.arena.items[bin_char].animation, false, false, SYNC_DISTANCE, false,
                     no_ease, "", uses_pre);
-                char scene_buf[64];
-                scene_buf[0] = '\0';
-                if (scene_name) {
-                    strncpy(scene_buf, scene_name, sizeof(scene_buf) - 1);
-                    scene_buf[sizeof(scene_buf) - 1] = '\0';
-                }
+                const char *scene_id = scene_name ? scene_name : "";
                 Scene *scene = (Scene *)om_get(&ctx->terminal.arena.items[bin_char].animation.scenes,
-                                               scene_buf);
+                                               scene_id);
                 VisualParams vp;
                 memset(&vp, 0, sizeof(vp));
                 vp.has_colors = true;
@@ -424,11 +411,9 @@ static int binarypath_build(Effect *self, EngineCtx *ctx) {
                     rc = -1;
                 }
                 if (rc == 0) {
-                    engine_activate_scene(ctx, self, bin_char, scene_buf);
+                    engine_activate_scene(ctx, self, bin_char, scene_id);
                 }
-                free(symbol);
             }
-            free(path_id);
         }
         coordvec_free(&path_coords);
     }

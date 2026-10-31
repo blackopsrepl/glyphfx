@@ -313,7 +313,7 @@ static int crumble_build(Effect *self, EngineCtx *ctx) {
             engine_activate_scene(ctx, self, id, initial_scn);
         }
 
-        char *fall_path = NULL;
+        const char *fall_path = NULL;
         if (rc == 0) {
             if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.65, true, easing_named(EASE_OUT_BOUNCE),
                                 false, 0, 0, false, "", &fall_path) != 0) {
@@ -344,12 +344,11 @@ static int crumble_build(Effect *self, EngineCtx *ctx) {
         }
 
         if (rc == 0) {
-            char *top_path = NULL;
+            const char *top_path = NULL;
             if (motion_new_path(&ctx->terminal.arena.items[id].motion, 1.0, true, easing_named(EASE_OUT_QUINT),
                                 false, 0, 0, false, "top", &top_path) != 0) {
                 rc = -1;
             } else {
-                free(top_path);
                 Path *p = (Path *)om_get(&ctx->terminal.arena.items[id].motion.paths, "top");
                 Coord bez[1] = {coord_new(canvas_center_column, canvas_center_row)};
                 Waypoint wp;
@@ -455,7 +454,7 @@ static int crumble_build(Effect *self, EngineCtx *ctx) {
             memset(&action, 0, sizeof(action));
             action.kind = ACTION_ACTIVATE_SCENE;
             action.has_id = true;
-            action.id = (char *)dust_scn;
+            action.id = dust_scn;
             if (rc == 0 && engine_register_event(ctx, id, EVENT_SCENE_COMPLETE, &caller, &action) != 0) {
                 rc = -1;
             }
@@ -467,7 +466,7 @@ static int crumble_build(Effect *self, EngineCtx *ctx) {
             memset(&action, 0, sizeof(action));
             action.kind = ACTION_ACTIVATE_SCENE;
             action.has_id = true;
-            action.id = (char *)flash_scn;
+            action.id = flash_scn;
             if (rc == 0 && engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &path_caller, &action) != 0) {
                 rc = -1;
             }
@@ -475,11 +474,11 @@ static int crumble_build(Effect *self, EngineCtx *ctx) {
             CallerKey flash_caller;
             memset(&flash_caller, 0, sizeof(flash_caller));
             flash_caller.kind = CALLER_SCENE;
-            flash_caller.id = (char *)flash_scn;
+            flash_caller.id = flash_scn;
             memset(&action, 0, sizeof(action));
             action.kind = ACTION_ACTIVATE_SCENE;
             action.has_id = true;
-            action.id = (char *)str_scn;
+            action.id = str_scn;
             if (rc == 0 && engine_register_event(ctx, id, EVENT_SCENE_COMPLETE, &flash_caller, &action) != 0) {
                 rc = -1;
             }
@@ -489,7 +488,6 @@ static int crumble_build(Effect *self, EngineCtx *ctx) {
             idvec_push(&st->pending, id);
         }
 
-        free(fall_path);
         if (has_weaken_fg) gradient_free(&weaken_fg);
         if (has_weaken_bg) gradient_free(&weaken_bg);
         if (has_flash_fg) gradient_free(&flash_fg);

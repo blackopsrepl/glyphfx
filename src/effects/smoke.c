@@ -304,12 +304,12 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
             CallerKey caller;
             memset(&caller, 0, sizeof(caller));
             caller.kind = CALLER_SCENE;
-            caller.id = (char *)smoke_scn;
+            caller.id = smoke_scn;
             EventAction action;
             memset(&action, 0, sizeof(action));
             action.kind = ACTION_ACTIVATE_SCENE;
             action.has_id = true;
-            action.id = (char *)paint_scn;
+            action.id = paint_scn;
             if (engine_register_event(ctx, id, EVENT_SCENE_COMPLETE, &caller, &action) != 0) {
                 rc = -1;
             }

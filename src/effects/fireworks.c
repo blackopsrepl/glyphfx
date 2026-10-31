@@ -164,7 +164,7 @@ static int prepare_waypoints(Fireworks *st, Effect *self, EngineCtx *ctx) {
         Coord input_coord = ctx->terminal.arena.items[id].input_coord;
 
         motion_set_coordinate(&ctx->terminal.arena.items[id].motion, coord_new(origin_x, canvas_bottom));
-        char *apex_path = NULL;
+        const char *apex_path = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.35, true, easing_named(EASE_OUT_EXPO), true,
                             2, 0, false, "apex_pth", &apex_path) != 0) {
             rc = -1;
@@ -175,7 +175,6 @@ static int prepare_waypoints(Fireworks *st, Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p, origin_coord, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(apex_path);
             rc = -1;
             break;
         }
@@ -183,10 +182,9 @@ static int prepare_waypoints(Fireworks *st, Effect *self, EngineCtx *ctx) {
         Coord apex_wpt_coord = origin_coord;
 
         double explode_speed = rng_uniform(&ctx->rng, 0.2, 0.4);
-        char *explode_path = NULL;
+        const char *explode_path = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, explode_speed, true, easing_named(EASE_OUT_CIRC),
                             true, 2, 0, false, "", &explode_path) != 0) {
-            free(apex_path);
             rc = -1;
             break;
         }
@@ -196,8 +194,6 @@ static int prepare_waypoints(Fireworks *st, Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p, explode_wpt_coord, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(explode_path);
-            free(apex_path);
             rc = -1;
             break;
         }
@@ -214,18 +210,14 @@ static int prepare_waypoints(Fireworks *st, Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p, bloom_wpt_coord, &bloom_control_point, 1, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(explode_path);
-            free(apex_path);
             rc = -1;
             break;
         }
         waypoint_free(&wp);
 
-        char *input_path = NULL;
+        const char *input_path = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.6, true, easing_named(EASE_IN_OUT_QUART), true,
                             2, 0, false, "input_pth", &input_path) != 0) {
-            free(explode_path);
-            free(apex_path);
             rc = -1;
             break;
         }
@@ -234,9 +226,6 @@ static int prepare_waypoints(Fireworks *st, Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p, input_coord, &input_control_point, 1, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(input_path);
-            free(explode_path);
-            free(apex_path);
             rc = -1;
             break;
         }
@@ -279,9 +268,6 @@ static int prepare_waypoints(Fireworks *st, Effect *self, EngineCtx *ctx) {
             idvec_push(&firework_shell, id);
         }
 
-        free(input_path);
-        free(explode_path);
-        free(apex_path);
     }
 
     free(characters);
@@ -485,7 +471,7 @@ static int prepare_scenes(Fireworks *st, Effect *self, EngineCtx *ctx) {
                 memset(&action, 0, sizeof(action));
                 action.kind = ACTION_ACTIVATE_SCENE;
                 action.has_id = true;
-                action.id = (char *)bloom_scn;
+                action.id = bloom_scn;
                 if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &action) != 0) {
                     rc = -1;
                 }
@@ -495,7 +481,7 @@ static int prepare_scenes(Fireworks *st, Effect *self, EngineCtx *ctx) {
                 memset(&action, 0, sizeof(action));
                 action.kind = ACTION_ACTIVATE_SCENE;
                 action.has_id = true;
-                action.id = (char *)fall_scn;
+                action.id = fall_scn;
                 if (rc == 0 && engine_register_event(ctx, id, EVENT_PATH_ACTIVATED, &caller, &action) != 0) {
                     rc = -1;
                 }

@@ -167,7 +167,7 @@ static int ov_build_launcher_paths(OrbittingVolley *st, EngineCtx *ctx, CharId i
     }
     Easing no_ease;
     memset(&no_ease, 0, sizeof(no_ease));
-    char *perimeter_id = NULL;
+    const char *perimeter_id = NULL;
     if (motion_new_path(&ctx->terminal.arena.items[id].motion, st->config.launcher_movement_speed, false, no_ease,
                         true, 2, 0, false, "perimeter", &perimeter_id) != 0) {
         return -1;
@@ -179,12 +179,10 @@ static int ov_build_launcher_paths(OrbittingVolley *st, EngineCtx *ctx, CharId i
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(path, waypoints[index], NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(perimeter_id);
             return -1;
         }
         waypoint_free(&wp);
     }
-    free(perimeter_id);
     return 0;
 }
 
@@ -320,7 +318,7 @@ static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
             st->final_present[id] = true;
         }
         {
-            char *input_path = NULL;
+            const char *input_path = NULL;
             if (motion_new_path(&ctx->terminal.arena.items[id].motion, cfg->character_movement_speed, true,
                                 cfg->character_easing, true, 1, 0, false, "input_path", &input_path) != 0) {
                 rc = -1;
@@ -333,7 +331,6 @@ static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
                     rc = -1;
                 }
                 waypoint_free(&wp);
-                free(input_path);
             }
         }
         if (rc == 0) {

@@ -256,7 +256,7 @@ static int make_bubble(Bubbles *st, EngineCtx *ctx, Effect *self, Coord origin, 
     bubble.landed = false;
 
     int64_t waypoint_column = rng_randint(&ctx->rng, ctx->terminal.canvas.left, ctx->terminal.canvas.right);
-    char *floor_path = NULL;
+    const char *floor_path = NULL;
     if (motion_new_path(&ctx->terminal.arena.items[bubble.anchor_char].motion, st->config.bubble_speed, false,
                         easing_named(EASE_LINEAR), false, 0, 0, false, "", &floor_path) != 0) {
         idvec_free(&bubble.characters);
@@ -267,12 +267,10 @@ static int make_bubble(Bubbles *st, EngineCtx *ctx, Effect *self, Coord origin, 
     memset(&wp, 0, sizeof(wp));
     if (path_new_waypoint(fp, coord_new(waypoint_column, bubble.lowest_row), NULL, 0, "", &wp) != 0) {
         waypoint_free(&wp);
-        free(floor_path);
         idvec_free(&bubble.characters);
         return -1;
     }
     waypoint_free(&wp);
-    free(floor_path);
     engine_activate_path(ctx, self, bubble.anchor_char, "0");
 
     if (st->config.rainbow) {
@@ -359,7 +357,7 @@ static void bubble_pop(Bubbles *st, EngineCtx *ctx, Effect *self, Bubble *bubble
     for (size_t i = 0; i < bubble->characters.len && i < points.len; i++) {
         CharId id = bubble->characters.items[i];
         Coord point = points.items[i];
-        char *pop_out_path = NULL;
+        const char *pop_out_path = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.3, true, easing_named(EASE_OUT_EXPO), false, 0,
                             0, false, "pop_out", &pop_out_path) != 0) {
             continue;
@@ -369,7 +367,6 @@ static void bubble_pop(Bubbles *st, EngineCtx *ctx, Effect *self, Bubble *bubble
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p, point, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(pop_out_path);
             continue;
         }
         waypoint_free(&wp);
@@ -383,10 +380,8 @@ static void bubble_pop(Bubbles *st, EngineCtx *ctx, Effect *self, Bubble *bubble
         action.has_id = true;
         action.id = "final";
         if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &action) != 0) {
-            free(pop_out_path);
             continue;
         }
-        free(pop_out_path);
     }
     coordvec_free(&points);
     for (size_t i = 0; i < bubble->characters.len; i++) {
@@ -550,28 +545,28 @@ static int bubbles_build(Effect *self, EngineCtx *ctx) {
             EventAction action;
             memset(&caller, 0, sizeof(caller));
             caller.kind = CALLER_SCENE;
-            caller.id = (char *)pop_1_scene;
+            caller.id = pop_1_scene;
             memset(&action, 0, sizeof(action));
             action.kind = ACTION_ACTIVATE_SCENE;
             action.has_id = true;
-            action.id = (char *)pop_2_scene;
+            action.id = pop_2_scene;
             if (engine_register_event(ctx, id, EVENT_SCENE_COMPLETE, &caller, &action) != 0) {
                 rc = -1;
             }
             memset(&caller, 0, sizeof(caller));
             caller.kind = CALLER_SCENE;
-            caller.id = (char *)pop_2_scene;
+            caller.id = pop_2_scene;
             memset(&action, 0, sizeof(action));
             action.kind = ACTION_ACTIVATE_SCENE;
             action.has_id = true;
-            action.id = (char *)final_scene;
+            action.id = final_scene;
             if (rc == 0 && engine_register_event(ctx, id, EVENT_SCENE_COMPLETE, &caller, &action) != 0) {
                 rc = -1;
             }
         }
 
         if (rc == 0) {
-            char *final_path = NULL;
+            const char *final_path = NULL;
             if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.3, true, easing_named(EASE_IN_OUT_EXPO),
                                 false, 0, 0, false, "final", &final_path) != 0) {
                 rc = -1;
@@ -596,7 +591,6 @@ static int bubbles_build(Effect *self, EngineCtx *ctx) {
                         rc = -1;
                     }
                 }
-                free(final_path);
             }
         }
     }

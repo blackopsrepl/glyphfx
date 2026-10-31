@@ -206,7 +206,7 @@ static void laseretch_setup_spark(void *user, EngineCtx *ctx, CharId spark) {
     SparkEmit *emit = user;
     motion_set_coordinate(&ctx->terminal.arena.items[spark].motion, emit->position);
     Easing ease = easing_named(EASE_OUT_SINE);
-    char *spark_path = NULL;
+    const char *spark_path = NULL;
     if (motion_new_path(&ctx->terminal.arena.items[spark].motion, 0.3, true, ease, false, 0, 0, false, "",
                         &spark_path) != 0) {
         return;
@@ -222,7 +222,6 @@ static void laseretch_setup_spark(void *user, EngineCtx *ctx, CharId spark) {
     waypoint_free(&wp);
     engine_activate_path(ctx, emit->self, spark, spark_path);
     engine_activate_scene(ctx, emit->self, spark, "spark");
-    free(spark_path);
 }
 
 /// Laser.emit_sparks (+ its setup_spark_path closure).

@@ -259,7 +259,7 @@ static int bouncyballs_build(Effect *self, EngineCtx *ctx) {
         int64_t drop_row = (int64_t)((double)canvas_top * rng_uniform(&ctx->rng, 1.0, 1.5));
         ch = &ctx->terminal.arena.items[id];
         motion_set_coordinate(&ch->motion, coord_new(input_coord.column, drop_row));
-        char *path_id = NULL;
+        const char *path_id = NULL;
         if (motion_new_path(&ch->motion, cfg->movement_speed, true, cfg->movement_easing, false, 0, 0, false, "",
                             &path_id) != 0) {
             rc = -1;
@@ -270,7 +270,6 @@ static int bouncyballs_build(Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p, input_coord, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(path_id);
             rc = -1;
             break;
         }
@@ -286,14 +285,12 @@ static int bouncyballs_build(Effect *self, EngineCtx *ctx) {
         EventAction activate_final;
         memset(&activate_final, 0, sizeof(activate_final));
         activate_final.kind = ACTION_ACTIVATE_SCENE;
-        activate_final.id = (char *)final_scene_id;
+        activate_final.id = final_scene_id;
         if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &activate_final) != 0) {
-            free(path_id);
             rc = -1;
             break;
         }
 
-        free(path_id);
         st->pending[pending_count++] = id;
     }
 

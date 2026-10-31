@@ -183,12 +183,8 @@ static int waves_build(Effect *self, EngineCtx *ctx) {
         bool wave_shareable = scene_shareable(ctx, uses_pre);
         const char *ws = animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, true, cfg->wave_easing,
                                              "", uses_pre);
-        char wave_scn[32];
-        wave_scn[0] = '\0';
-        if (ws) {
-            strncpy(wave_scn, ws, sizeof(wave_scn) - 1);
-            wave_scn[sizeof(wave_scn) - 1] = '\0';
-        }
+        // Interned scene id (process lifetime): looked up by identity.
+        const char *wave_scn = ws ? ws : "";
         Scene *wave_scene = (Scene *)om_get(&ch->animation.scenes, wave_scn);
         const char *const *symbols = (const char *const *)cfg->wave_symbols.items;
         Color wave_key;
@@ -213,14 +209,12 @@ static int waves_build(Effect *self, EngineCtx *ctx) {
             }
         }
 
-        char final_scn[32];
-        final_scn[0] = '\0';
+        const char *final_scn = "";
         if (rc == 0) {
             const char *fs =
                 animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, no_ease, "", uses_pre);
             if (fs) {
-                strncpy(final_scn, fs, sizeof(final_scn) - 1);
-                final_scn[sizeof(final_scn) - 1] = '\0';
+                final_scn = fs;
             }
             Scene *scene = (Scene *)om_get(&ch->animation.scenes, final_scn);
             Color last_wave = wave_gradient.spectrum[wave_gradient.len - 1];

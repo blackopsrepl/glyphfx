@@ -191,7 +191,7 @@ static int blackhole_prepare(Blackhole *st, EngineCtx *ctx, Effect *self) {
     for (int64_t pi = 0; pi < count && rc == 0; pi++) {
         CharId id = st->blackhole_chars.items[pi];
         Coord starting_pos = ring.items[pi];
-        char *blackhole_path = NULL;
+        const char *blackhole_path = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.7, true,
                             easing_named(EASE_IN_OUT_SINE), false, 0, 0, false, "blackhole",
                             &blackhole_path) != 0) {
@@ -203,7 +203,6 @@ static int blackhole_prepare(Blackhole *st, EngineCtx *ctx, Effect *self) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p, starting_pos, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(blackhole_path);
             rc = -1;
             break;
         }
@@ -219,7 +218,6 @@ static int blackhole_prepare(Blackhole *st, EngineCtx *ctx, Effect *self) {
         vp.colors.has_fg = true;
         vp.colors.fg = st->config.blackhole_color;
         if (scene_add_frame(scene, "*", 1, &vp) != 0) {
-            free(blackhole_path);
             rc = -1;
             break;
         }
@@ -233,15 +231,13 @@ static int blackhole_prepare(Blackhole *st, EngineCtx *ctx, Effect *self) {
         action.kind = ACTION_SET_LAYER;
         action.layer = 1;
         if (engine_register_event(ctx, id, EVENT_PATH_ACTIVATED, &caller, &action) != 0) {
-            free(blackhole_path);
             rc = -1;
             break;
         }
 
-        char *rotation_path = NULL;
+        const char *rotation_path = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.45, false, no_ease, false, 0, 0, true,
                             "blackhole_rotation", &rotation_path) != 0) {
-            free(blackhole_path);
             rc = -1;
             break;
         }
@@ -253,15 +249,11 @@ static int blackhole_prepare(Blackhole *st, EngineCtx *ctx, Effect *self) {
             memset(&wp, 0, sizeof(wp));
             if (path_new_waypoint(rp, coord, NULL, 0, waypoint_id, &wp) != 0) {
                 waypoint_free(&wp);
-                free(rotation_path);
-                free(blackhole_path);
                 rc = -1;
                 break;
             }
             waypoint_free(&wp);
         }
-        free(rotation_path);
-        free(blackhole_path);
     }
     coordvec_free(&ring);
     if (rc != 0) {
@@ -302,7 +294,7 @@ static int blackhole_prepare(Blackhole *st, EngineCtx *ctx, Effect *self) {
             Coord starfield_coord = canvas_random_coord(&ctx->terminal.canvas, &ctx->rng, false, false);
             double speed = rng_uniform(&ctx->rng, 0.17, 0.30);
             motion_set_coordinate(&ctx->terminal.arena.items[id].motion, starfield_coord);
-            char *singularity_path = NULL;
+            const char *singularity_path = NULL;
             if (motion_new_path(&ctx->terminal.arena.items[id].motion, speed, true, easing_named(EASE_IN_EXPO),
                                 false, 0, 0, false, "singularity", &singularity_path) != 0) {
                 rc = -1;
@@ -313,7 +305,6 @@ static int blackhole_prepare(Blackhole *st, EngineCtx *ctx, Effect *self) {
             memset(&wp, 0, sizeof(wp));
             if (path_new_waypoint(p, canvas_center, NULL, 0, "", &wp) != 0) {
                 waypoint_free(&wp);
-                free(singularity_path);
                 rc = -1;
                 break;
             }
@@ -325,7 +316,6 @@ static int blackhole_prepare(Blackhole *st, EngineCtx *ctx, Effect *self) {
             Color gm_stops[2] = {star_color, black};
             Gradient gm;
             if (gradient_with_steps(gm_stops, 2, 10, false, &gm) != 0) {
-                free(singularity_path);
                 rc = -1;
                 break;
             }
@@ -342,13 +332,11 @@ static int blackhole_prepare(Blackhole *st, EngineCtx *ctx, Effect *self) {
             }
             gradient_free(&gm);
             if (rc != 0) {
-                free(singularity_path);
                 break;
             }
             VisualParams dvp;
             memset(&dvp, 0, sizeof(dvp));
             if (scene_add_frame(scene, " ", 1, &dvp) != 0) {
-                free(singularity_path);
                 rc = -1;
                 break;
             }
@@ -365,21 +353,18 @@ static int blackhole_prepare(Blackhole *st, EngineCtx *ctx, Effect *self) {
             action.kind = ACTION_SET_LAYER;
             action.layer = 2;
             if (engine_register_event(ctx, id, EVENT_PATH_ACTIVATED, &caller, &action) != 0) {
-                free(singularity_path);
                 rc = -1;
                 break;
             }
             memset(&action, 0, sizeof(action));
             action.kind = ACTION_ACTIVATE_SCENE;
             action.has_id = true;
-            action.id = (char *)consumed_scn;
+            action.id = consumed_scn;
             if (engine_register_event(ctx, id, EVENT_PATH_ACTIVATED, &caller, &action) != 0) {
-                free(singularity_path);
                 rc = -1;
                 break;
             }
             idvec_push(&st->awaiting_consumption, id);
-            free(singularity_path);
         }
     }
     free(characters);
@@ -483,7 +468,7 @@ static int blackhole_collapse(Blackhole *st, EngineCtx *ctx, Effect *self) {
         }
         ring.len -= 1;
 
-        char *expand_path = NULL;
+        const char *expand_path = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.2, true, easing_named(EASE_IN_EXPO), false,
                             0, 0, false, "", &expand_path) != 0) {
             rc = -1;
@@ -494,16 +479,14 @@ static int blackhole_collapse(Blackhole *st, EngineCtx *ctx, Effect *self) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p, next_pos, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(expand_path);
             rc = -1;
             break;
         }
         waypoint_free(&wp);
 
-        char *collapse_path = NULL;
+        const char *collapse_path = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.3, true, easing_named(EASE_IN_EXPO), false,
                             0, 0, false, "", &collapse_path) != 0) {
-            free(expand_path);
             rc = -1;
             break;
         }
@@ -511,8 +494,6 @@ static int blackhole_collapse(Blackhole *st, EngineCtx *ctx, Effect *self) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p, center, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(collapse_path);
-            free(expand_path);
             rc = -1;
             break;
         }
@@ -528,8 +509,6 @@ static int blackhole_collapse(Blackhole *st, EngineCtx *ctx, Effect *self) {
         action.has_id = true;
         action.id = collapse_path;
         if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &action) != 0) {
-            free(collapse_path);
-            free(expand_path);
             rc = -1;
             break;
         }
@@ -562,7 +541,7 @@ static int blackhole_collapse(Blackhole *st, EngineCtx *ctx, Effect *self) {
                 memset(&action, 0, sizeof(action));
                 action.kind = ACTION_ACTIVATE_SCENE;
                 action.has_id = true;
-                action.id = (char *)point_scn;
+                action.id = point_scn;
                 if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &pc, &action) != 0) {
                     rc = -1;
                 }
@@ -580,8 +559,6 @@ static int blackhole_collapse(Blackhole *st, EngineCtx *ctx, Effect *self) {
             engine_activate_path(ctx, self, id, expand_path);
             ac_insert(&ctx->active_characters, id);
         }
-        free(collapse_path);
-        free(expand_path);
     }
     idvec_free(&snapshot);
     coordvec_free(&ring);
@@ -623,7 +600,7 @@ static int blackhole_explode(Blackhole *st, EngineCtx *ctx, Effect *self) {
         coordvec_free(&circle);
 
         double nearby_speed = (double)rng_randint(&ctx->rng, 3, 4) / 10.0;
-        char *nearby_path = NULL;
+        const char *nearby_path = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, nearby_speed, true, easing_named(EASE_OUT_EXPO),
                             false, 0, 0, false, "", &nearby_path) != 0) {
             rc = -1;
@@ -634,17 +611,15 @@ static int blackhole_explode(Blackhole *st, EngineCtx *ctx, Effect *self) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p, nearby_coord, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(nearby_path);
             rc = -1;
             break;
         }
         waypoint_free(&wp);
 
         double input_speed = (double)rng_randint(&ctx->rng, 4, 6) / 100.0;
-        char *input_path = NULL;
+        const char *input_path = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, input_speed, true, easing_named(EASE_IN_CUBIC),
                             false, 0, 0, false, "", &input_path) != 0) {
-            free(nearby_path);
             rc = -1;
             break;
         }
@@ -652,8 +627,6 @@ static int blackhole_explode(Blackhole *st, EngineCtx *ctx, Effect *self) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p, input_coord, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(input_path);
-            free(nearby_path);
             rc = -1;
             break;
         }
@@ -669,8 +642,6 @@ static int blackhole_explode(Blackhole *st, EngineCtx *ctx, Effect *self) {
         vp.colors.has_fg = true;
         vp.colors.fg = explode_star_color;
         if (scene_add_frame(scene, input_symbol, 1, &vp) != 0) {
-            free(input_path);
-            free(nearby_path);
             rc = -1;
             break;
         }
@@ -747,7 +718,7 @@ static int blackhole_explode(Blackhole *st, EngineCtx *ctx, Effect *self) {
             memset(&action, 0, sizeof(action));
             action.kind = ACTION_ACTIVATE_SCENE;
             action.has_id = true;
-            action.id = (char *)cooling_scn;
+            action.id = cooling_scn;
             if (rc == 0 && engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &action) != 0) {
                 rc = -1;
             }
@@ -758,8 +729,6 @@ static int blackhole_explode(Blackhole *st, EngineCtx *ctx, Effect *self) {
             ac_insert(&ctx->active_characters, id);
         }
 
-        free(input_path);
-        free(nearby_path);
     }
     free(characters);
     return rc;

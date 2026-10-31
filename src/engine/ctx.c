@@ -111,7 +111,7 @@ static CallerKey path_caller(const char *id) {
     CallerKey key;
     memset(&key, 0, sizeof(key));
     key.kind = CALLER_PATH;
-    key.id = (char *)id;
+    key.id = id;
     key.id_handle = strtab_handle(id);
     return key;
 }
@@ -163,7 +163,7 @@ int engine_chain_paths(EngineCtx *ctx, CharId id, const char *const *paths, size
         EventAction action;
         memset(&action, 0, sizeof(action));
         action.kind = ACTION_ACTIVATE_PATH;
-        action.id = (char *)paths[i];
+        action.id = paths[i];
         CallerKey caller = path_caller(paths[i - 1]);
         if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &action) != 0) {
             return -1;
@@ -173,7 +173,7 @@ int engine_chain_paths(EngineCtx *ctx, CharId id, const char *const *paths, size
         EventAction action;
         memset(&action, 0, sizeof(action));
         action.kind = ACTION_ACTIVATE_PATH;
-        action.id = (char *)paths[0];
+        action.id = paths[0];
         CallerKey caller = path_caller(paths[n_paths - 1]);
         if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &action) != 0) {
             return -1;
@@ -284,7 +284,7 @@ static CallerKey path_caller_interned(const char *id) {
     CallerKey key;
     memset(&key, 0, sizeof(key));
     key.kind = CALLER_PATH;
-    key.id = (char *)id;
+    key.id = id;
     key.id_handle = strtab_interned_handle(id);
     return key;
 }
@@ -317,7 +317,7 @@ static void activate_path_at(EngineCtx *ctx, Effect *effect, CharId id, long slo
     waypoint_copy(&new_origin.end, first);
     new_origin.distance = distance_to_first;
 
-    ch->motion.active_path = (char *)path_id;
+    ch->motion.active_path = path_id;
     ch->motion.active_path_slot = (size_t)slot;
     ch->motion.active_path_slot_valid = true;
 
@@ -978,7 +978,7 @@ static inline void motion_move_now(EngineCtx *ctx, Effect *effect, CharId id) {
             motion_deactivate_path(&ch->motion, active);
             activate_path_at(ctx, effect, id, slot);
         } else {
-            ch->motion.completed_path = (char *)active;
+            ch->motion.completed_path = active;
             motion_deactivate_path(&ch->motion, active);
             if (observes_event(ctx, id, EVENT_PATH_COMPLETE)) {
                 CallerKey caller = path_caller_interned(active);

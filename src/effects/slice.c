@@ -80,7 +80,7 @@ void slice_free_config(void *cfg_ptr) {
 static int slice_send_to(EngineCtx *ctx, Effect *self, SliceConfig *cfg, CharId id, Coord origin) {
     Coord input_coord = ctx->terminal.arena.items[id].input_coord;
     motion_set_coordinate(&ctx->terminal.arena.items[id].motion, origin);
-    char *path_id = NULL;
+    const char *path_id = NULL;
     if (motion_new_path(&ctx->terminal.arena.items[id].motion, cfg->movement_speed, true, cfg->movement_easing,
                         false, 0, 0, false, "", &path_id) != 0) {
         return -1;
@@ -90,12 +90,10 @@ static int slice_send_to(EngineCtx *ctx, Effect *self, SliceConfig *cfg, CharId 
     memset(&wp, 0, sizeof(wp));
     if (path_new_waypoint(p, input_coord, NULL, 0, "", &wp) != 0) {
         waypoint_free(&wp);
-        free(path_id);
         return -1;
     }
     waypoint_free(&wp);
     engine_activate_path(ctx, self, id, path_id);
-    free(path_id);
     return 0;
 }
 

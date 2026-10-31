@@ -152,7 +152,7 @@ static int middleout_build(Effect *self, EngineCtx *ctx) {
             row = input_coord.row;
         }
 
-        char *center_path_id = NULL;
+        const char *center_path_id = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, cfg->center_movement_speed, true,
                             cfg->center_easing, false, 0, 0, false, "", &center_path_id) != 0) {
             rc = -1;
@@ -163,16 +163,14 @@ static int middleout_build(Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(center_path, coord_new(column, row), NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(center_path_id);
             rc = -1;
             break;
         }
         waypoint_free(&wp);
 
-        char *full_path_id = NULL;
+        const char *full_path_id = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, cfg->full_movement_speed, true,
                             cfg->full_easing, false, 0, 0, false, "full", &full_path_id) != 0) {
-            free(center_path_id);
             rc = -1;
             break;
         }
@@ -180,13 +178,10 @@ static int middleout_build(Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(full_path, input_coord, NULL, 0, "full", &wp) != 0) {
             waypoint_free(&wp);
-            free(full_path_id);
-            free(center_path_id);
             rc = -1;
             break;
         }
         waypoint_free(&wp);
-        free(full_path_id);
 
         ch = &ctx->terminal.arena.items[id];
         const char *scene_id =
@@ -260,7 +255,6 @@ static int middleout_build(Effect *self, EngineCtx *ctx) {
             ac_insert(&ctx->active_characters, id);
         }
 
-        free(center_path_id);
     }
 
     free(characters);

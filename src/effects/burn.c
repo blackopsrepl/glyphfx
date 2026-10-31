@@ -157,7 +157,7 @@ static void burn_on_emit(void *user, EngineCtx *ctx, CharId particle) {
     if (scene) {
         scene_reset(scene);
     }
-    char *smoke_path = NULL;
+    const char *smoke_path = NULL;
     Easing ease = no_ease();
     if (motion_new_path(&ctx->terminal.arena.items[particle].motion, 0.5, false, ease, false, 0, 0, false, "",
                         &smoke_path) != 0) {
@@ -182,7 +182,6 @@ static void burn_on_emit(void *user, EngineCtx *ctx, CharId particle) {
     action.kind = ACTION_CALLBACK;
     action.cb.id = CB_RECLAIM_SMOKE;
     (void)engine_register_event(ctx, particle, EVENT_SCENE_COMPLETE, &caller, &action);
-    free(smoke_path);
 }
 
 static void burn_emit_smoke(Effect *self, EngineCtx *ctx, Coord origin) {
@@ -381,12 +380,12 @@ static int burn_build(Effect *self, EngineCtx *ctx) {
             CallerKey caller;
             memset(&caller, 0, sizeof(caller));
             caller.kind = CALLER_SCENE;
-            caller.id = (char *)burn_scn;
+            caller.id = burn_scn;
             EventAction action;
             memset(&action, 0, sizeof(action));
             action.kind = ACTION_ACTIVATE_SCENE;
             action.has_id = true;
-            action.id = (char *)final_color_scn;
+            action.id = final_color_scn;
             if (engine_register_event(ctx, id, EVENT_SCENE_COMPLETE, &caller, &action) != 0) {
                 rc = -1;
             }

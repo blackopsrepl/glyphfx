@@ -36,7 +36,7 @@ typedef struct {
 
 typedef struct {
     CharId *keys;
-    char **vals;
+    const char **vals;  // interned path ids or literals: never freed
     size_t len;
     size_t cap;
 } RingPathMap;
@@ -130,9 +130,6 @@ static void idvec_clone(RingIdVec *dst, const RingIdVec *src) {
 }
 
 static void ring_map_free(RingPathMap *m) {
-    for (size_t i = 0; i < m->len; i++) {
-        free(m->vals[i]);
-    }
     free(m->keys);
     free(m->vals);
     m->keys = NULL;
@@ -144,9 +141,7 @@ static void ring_map_free(RingPathMap *m) {
 static void ring_map_set(RingPathMap *m, CharId id, const char *value) {
     for (size_t i = 0; i < m->len; i++) {
         if (m->keys[i] == id) {
-            free(m->vals[i]);
-            m->vals[i] = malloc(strlen(value) + 1);
-            strcpy(m->vals[i], value);
+            m->vals[i] = value;
             return;
         }
     }
@@ -157,8 +152,7 @@ static void ring_map_set(RingPathMap *m, CharId id, const char *value) {
         m->cap = cap;
     }
     m->keys[m->len] = id;
-    m->vals[m->len] = malloc(strlen(value) + 1);
-    strcpy(m->vals[m->len], value);
+    m->vals[m->len] = value;
     m->len++;
 }
 
@@ -251,11 +245,10 @@ static const char *ring_make_disperse_waypoints(EngineCtx *ctx, Ring *ring, Char
         }
         om_insert(&motion->paths, "disperse", fresh);
     } else {
-        char *out_id = NULL;
+        const char *out_id = NULL;
         if (motion_new_path(motion, 0.14, false, no_ease, false, 0, 0, false, "disperse", &out_id) != 0) {
             return NULL;
         }
-        free(out_id);
     }
     Path *path = (Path *)om_get(&motion->paths, "disperse");
     for (int i = 0; i < 5; i++) {
@@ -286,15 +279,6 @@ static const char *ring_make_disperse_waypoints(EngineCtx *ctx, Ring *ring, Char
     return "disperse";
 }
 
-static void copy_cstr(char *dst, size_t cap, const char *src) {
-    if (!src) {
-        dst[0] = '\0';
-        return;
-    }
-    strncpy(dst, src, cap - 1);
-    dst[cap - 1] = '\0';
-}
-
 static int ring_add_character(Rings *st, EngineCtx *ctx, Ring *ring, CharId id, bool clockwise) {
     bool dynamic = ctx->terminal.config.existing_color_handling == EXISTING_COLOR_DYNAMIC;
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
@@ -308,9 +292,7 @@ static int ring_add_character(Rings *st, EngineCtx *ctx, Ring *ring, CharId id, 
     const char *gradient_scn =
         animation_new_scene(&ctx->terminal.arena.items[id].animation, false, false, SYNC_DISTANCE, false, no_ease,
                             "gradient", uses_pre);
-    char gradient_name[64];
-    copy_cstr(gradient_name, sizeof(gradient_name), gradient_scn);
-    Scene *scene = (Scene *)om_get(&ctx->terminal.arena.items[id].animation.scenes, gradient_name);
+    Scene *scene = (Scene *)om_get(&ctx->terminal.arena.items[id].animation.scenes, gradient_scn);
     if (dynamic) {
         ColorPair colors;
         memset(&colors, 0, sizeof(colors));
@@ -342,7 +324,7 @@ static int ring_add_character(Rings *st, EngineCtx *ctx, Ring *ring, CharId id, 
         }
     }
 
-    char **ring_paths = NULL;
+    const char **ring_paths = NULL;
     size_t ring_paths_len = 0;
     size_t ring_paths_cap = 0;
     if (rc == 0) {
@@ -356,7 +338,7 @@ static int ring_add_character(Rings *st, EngineCtx *ctx, Ring *ring, CharId id, 
         for (size_t k = 0; k < coords_len && rc == 0; k++) {
             char idbuf[32];
             snprintf(idbuf, sizeof(idbuf), "%zu", ring_paths_len);
-            char *path_id = NULL;
+            const char *path_id = NULL;
             if (motion_new_path(&ctx->terminal.arena.items[id].motion, ring->rotation_speed, false, no_ease, false,
                                 0, 0, false, idbuf, &path_id) != 0) {
                 rc = -1;
@@ -369,7 +351,6 @@ static int ring_add_character(Rings *st, EngineCtx *ctx, Ring *ring, CharId id, 
             memset(&wp, 0, sizeof(wp));
             if (path_new_waypoint(path, rotated[k], NULL, 0, waypoint_id, &wp) != 0) {
                 waypoint_free(&wp);
-                free(path_id);
                 rc = -1;
                 break;
             }
@@ -392,9 +373,8 @@ static int ring_add_character(Rings *st, EngineCtx *ctx, Ring *ring, CharId id, 
         const char *disperse_scn =
             animation_new_scene(&ctx->terminal.arena.items[id].animation, false, false, SYNC_DISTANCE, false,
                                 no_ease, "disperse", uses_pre);
-        char disperse_name[64];
-        copy_cstr(disperse_name, sizeof(disperse_name), disperse_scn);
-        scene = (Scene *)om_get(&ctx->terminal.arena.items[id].animation.scenes, disperse_name);
+        // Scene ids are interned: look the scene up by the id itself.
+        scene = (Scene *)om_get(&ctx->terminal.arena.items[id].animation.scenes, disperse_scn);
         if (dynamic) {
             ColorPair colors;
             memset(&colors, 0, sizeof(colors));
@@ -428,7 +408,7 @@ static int ring_add_character(Rings *st, EngineCtx *ctx, Ring *ring, CharId id, 
     }
 
     if (rc == 0) {
-        if (engine_chain_paths(ctx, id, (const char *const *)ring_paths, ring_paths_len, true) != 0) {
+        if (engine_chain_paths(ctx, id, ring_paths, ring_paths_len, true) != 0) {
             rc = -1;
         }
     }
@@ -437,9 +417,6 @@ static int ring_add_character(Rings *st, EngineCtx *ctx, Ring *ring, CharId id, 
         idvec_push(&ring->characters, id);
     }
 
-    for (size_t i = 0; i < ring_paths_len; i++) {
-        free(ring_paths[i]);
-    }
     free(ring_paths);
     return rc;
 }
@@ -486,7 +463,7 @@ static int ring_spin(Rings *st, EngineCtx *ctx, Effect *self, Ring *ring) {
             break;
         }
         Coord first_waypoint_coord = last_path->waypoints[0].coord;
-        char *condense_path = NULL;
+        const char *condense_path = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.1, false, no_ease, false, 0, 0, false, "",
                             &condense_path) != 0) {
             rc = -1;
@@ -497,7 +474,6 @@ static int ring_spin(Rings *st, EngineCtx *ctx, Effect *self, Ring *ring) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(condense, first_waypoint_coord, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(condense_path);
             rc = -1;
             break;
         }
@@ -506,20 +482,18 @@ static int ring_spin(Rings *st, EngineCtx *ctx, Effect *self, Ring *ring) {
         CallerKey caller;
         memset(&caller, 0, sizeof(caller));
         caller.kind = CALLER_PATH;
-        caller.id = (char *)condense_path;
+        caller.id = condense_path;
         EventAction action;
         memset(&action, 0, sizeof(action));
         action.kind = ACTION_ACTIVATE_PATH;
         action.has_id = true;
-        action.id = (char *)last_ring_path;
+        action.id = last_ring_path;
         if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &action) != 0) {
-            free(condense_path);
             rc = -1;
             break;
         }
         engine_activate_path(ctx, self, id, condense_path);
         engine_activate_scene(ctx, self, id, "gradient");
-        free(condense_path);
     }
     idvec_free(&characters);
     return rc;
@@ -597,9 +571,7 @@ static int rings_build(Effect *self, EngineCtx *ctx) {
 
         const char *start_scn = animation_new_scene(&ctx->terminal.arena.items[id].animation, false, false,
                                                     SYNC_DISTANCE, false, no_ease, "", uses_pre);
-        char start_name[64];
-        copy_cstr(start_name, sizeof(start_name), start_scn);
-        Scene *scene = (Scene *)om_get(&ctx->terminal.arena.items[id].animation.scenes, start_name);
+        Scene *scene = (Scene *)om_get(&ctx->terminal.arena.items[id].animation.scenes, start_scn);
         VisualParams vp;
         memset(&vp, 0, sizeof(vp));
         vp.has_colors = true;
@@ -609,7 +581,7 @@ static int rings_build(Effect *self, EngineCtx *ctx) {
         }
 
         if (rc == 0) {
-            char *home_path = NULL;
+            const char *home_path = NULL;
             if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.8, true, easing_named(EASE_OUT_QUAD),
                                 false, 0, 0, false, "home", &home_path) != 0) {
                 rc = -1;
@@ -623,12 +595,11 @@ static int rings_build(Effect *self, EngineCtx *ctx) {
                 } else {
                     waypoint_free(&wp);
                 }
-                free(home_path);
             }
         }
 
         if (rc == 0) {
-            engine_activate_scene(ctx, self, id, start_name);
+            engine_activate_scene(ctx, self, id, start_scn);
             terminal_set_character_visibility(&ctx->terminal, id, true);
             idvec_push(&pending, id);
         }
@@ -701,7 +672,7 @@ static int rings_build(Effect *self, EngineCtx *ctx) {
                 continue;
             }
             Coord external_coord = canvas_random_coord(&ctx->terminal.canvas, &ctx->rng, true, false);
-            char *external_path = NULL;
+            const char *external_path = NULL;
             if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.8, true, easing_named(EASE_OUT_SINE),
                                 false, 0, 0, false, "external", &external_path) != 0) {
                 rc = -1;
@@ -712,12 +683,10 @@ static int rings_build(Effect *self, EngineCtx *ctx) {
             memset(&wp, 0, sizeof(wp));
             if (path_new_waypoint(path, external_coord, NULL, 0, "", &wp) != 0) {
                 waypoint_free(&wp);
-                free(external_path);
                 rc = -1;
                 break;
             }
             waypoint_free(&wp);
-            free(external_path);
             idvec_push(&st->non_ring_chars, id);
 
             CallerKey caller;
@@ -787,7 +756,7 @@ static const char *rings_next_frame(Effect *self, EngineCtx *ctx) {
                         }
                         Path *disperse = (Path *)om_get(&ctx->terminal.arena.items[id].motion.paths, disperse_path);
                         Coord disperse_first_coord = disperse->waypoints[0].coord;
-                        char *initial_path = NULL;
+                        const char *initial_path = NULL;
                         if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.3, true,
                                             easing_named(EASE_OUT_CUBIC), false, 0, 0, false, "",
                                             &initial_path) != 0) {
@@ -799,7 +768,6 @@ static const char *rings_next_frame(Effect *self, EngineCtx *ctx) {
                         memset(&wp, 0, sizeof(wp));
                         if (path_new_waypoint(initial, disperse_first_coord, NULL, 0, "", &wp) != 0) {
                             waypoint_free(&wp);
-                            free(initial_path);
                             idvec_free(&characters);
                             return NULL;
                         }
@@ -813,16 +781,14 @@ static const char *rings_next_frame(Effect *self, EngineCtx *ctx) {
                         memset(&action, 0, sizeof(action));
                         action.kind = ACTION_ACTIVATE_PATH;
                         action.has_id = true;
-                        action.id = (char *)disperse_path;
+                        action.id = disperse_path;
                         if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &action) != 0) {
-                            free(initial_path);
                             idvec_free(&characters);
                             return NULL;
                         }
                         engine_activate_scene(ctx, self, id, "disperse");
                         engine_activate_path(ctx, self, id, initial_path);
                         ac_insert(&ctx->active_characters, id);
-                        free(initial_path);
                     }
                     idvec_free(&characters);
                 }

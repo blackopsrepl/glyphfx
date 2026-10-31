@@ -219,10 +219,8 @@ static bool beams_get_next_character(EngineCtx *ctx, Effect *self, BeamGroup *gr
     const char *active_scene = ctx->terminal.arena.items[next].animation.active_scene;
     bool return_value;
     if (active_scene) {
-        char name[128];
-        strncpy(name, active_scene, sizeof(name) - 1);
-        name[sizeof(name) - 1] = '\0';
-        Scene *scene = (Scene *)om_get(&ctx->terminal.arena.items[next].animation.scenes, name);
+        // active_scene is interned: look the scene up by identity.
+        Scene *scene = (Scene *)om_get(&ctx->terminal.arena.items[next].animation.scenes, active_scene);
         if (scene) {
             scene_reset(scene);
         }

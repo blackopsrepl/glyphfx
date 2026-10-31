@@ -273,10 +273,10 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
     {
         memset(&caller, 0, sizeof(caller));
         caller.kind = CALLER_SCENE;
-        caller.id = (char *)error_scene;
+        caller.id = error_scene;
         memset(&action, 0, sizeof(action));
         action.kind = ACTION_ACTIVATE_SCENE;
-        action.id = (char *)first_block_wipe;
+        action.id = first_block_wipe;
         if (engine_register_event(ctx, id, EVENT_SCENE_COMPLETE, &caller, &action) != 0) {
             rc = -1;
         }
@@ -284,10 +284,10 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
     if (rc == 0) {
         memset(&caller, 0, sizeof(caller));
         caller.kind = CALLER_SCENE;
-        caller.id = (char *)first_block_wipe;
+        caller.id = first_block_wipe;
         memset(&action, 0, sizeof(action));
         action.kind = ACTION_ACTIVATE_SCENE;
-        action.id = (char *)correcting_scene;
+        action.id = correcting_scene;
         if (engine_register_event(ctx, id, EVENT_SCENE_COMPLETE, &caller, &action) != 0) {
             rc = -1;
         }
@@ -295,7 +295,7 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
     if (rc == 0) {
         memset(&caller, 0, sizeof(caller));
         caller.kind = CALLER_SCENE;
-        caller.id = (char *)first_block_wipe;
+        caller.id = first_block_wipe;
         memset(&action, 0, sizeof(action));
         action.kind = ACTION_ACTIVATE_PATH;
         action.id = "input_coord";
@@ -331,7 +331,7 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
         caller.id = "input_coord";
         memset(&action, 0, sizeof(action));
         action.kind = ACTION_ACTIVATE_SCENE;
-        action.id = (char *)last_block_wipe;
+        action.id = last_block_wipe;
         if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &action) != 0) {
             rc = -1;
         }
@@ -339,10 +339,10 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
     if (rc == 0) {
         memset(&caller, 0, sizeof(caller));
         caller.kind = CALLER_SCENE;
-        caller.id = (char *)last_block_wipe;
+        caller.id = last_block_wipe;
         memset(&action, 0, sizeof(action));
         action.kind = ACTION_ACTIVATE_SCENE;
-        action.id = (char *)final_scene;
+        action.id = final_scene;
         if (engine_register_event(ctx, id, EVENT_SCENE_COMPLETE, &caller, &action) != 0) {
             rc = -1;
         }
@@ -461,7 +461,7 @@ static int errorcorrect_build(Effect *self, EngineCtx *ctx) {
         Coord char2_input = ctx->terminal.arena.items[char2].input_coord;
 
         motion_set_coordinate(&ctx->terminal.arena.items[char1].motion, char2_input);
-        char *path1 = NULL;
+        const char *path1 = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[char1].motion, cfg->movement_speed, false, no_ease, false, 0,
                             0, false, "input_coord", &path1) != 0) {
             rc = -1;
@@ -472,15 +472,13 @@ static int errorcorrect_build(Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p1, char1_input, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(path1);
             rc = -1;
             break;
         }
         waypoint_free(&wp);
-        free(path1);
 
         motion_set_coordinate(&ctx->terminal.arena.items[char2].motion, char1_input);
-        char *path2 = NULL;
+        const char *path2 = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[char2].motion, cfg->movement_speed, false, no_ease, false, 0,
                             0, false, "input_coord", &path2) != 0) {
             rc = -1;
@@ -490,12 +488,10 @@ static int errorcorrect_build(Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p2, char2_input, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(path2);
             rc = -1;
             break;
         }
         waypoint_free(&wp);
-        free(path2);
 
         if (st->swapped_len == 0 || st->swapped_len % 8 == 0) {
             size_t cap = st->swapped_len + 8;

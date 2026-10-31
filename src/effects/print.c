@@ -183,12 +183,8 @@ static int print_make_row(Effect *self, EngineCtx *ctx, const CharId *chars, siz
         motion_set_coordinate(&ch->motion, coord_new(input_column, 1));
         const char *ta = animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, (Easing){0}, "",
                                              uses_pre);
-        char typed_animation[32];
-        typed_animation[0] = '\0';
-        if (ta) {
-            strncpy(typed_animation, ta, sizeof(typed_animation) - 1);
-            typed_animation[sizeof(typed_animation) - 1] = '\0';
-        }
+        // Interned scene id (process lifetime): looked up by identity.
+        const char *typed_animation = ta ? ta : "";
         Scene *scene = (Scene *)om_get(&ch->animation.scenes, typed_animation);
         const char *head_symbols[5] = {"█", "▓", "▒", "░", input_symbol};
 

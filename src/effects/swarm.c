@@ -403,7 +403,7 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
                 CoordVec *area_coords = &area_map.items[k].coords;
                 Coord origin_coord = area_coords->items[rng_choice_index(&ctx->rng, area_coords->len)];
 
-                char *origin_path = NULL;
+                const char *origin_path = NULL;
                 if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.4, true, easing_named(EASE_OUT_SINE),
                                     false, 0, 0, false, area_name, &origin_path) != 0) {
                     rc = -1;
@@ -414,7 +414,6 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
                 memset(&wp, 0, sizeof(wp));
                 if (path_new_waypoint(p, origin_coord, NULL, 0, area_name, &wp) != 0) {
                     waypoint_free(&wp);
-                    free(origin_path);
                     rc = -1;
                     break;
                 }
@@ -428,9 +427,8 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
                 memset(&action, 0, sizeof(action));
                 action.kind = ACTION_ACTIVATE_SCENE;
                 action.has_id = true;
-                action.id = (char *)flash_scn;
+                action.id = flash_scn;
                 if (engine_register_event(ctx, id, EVENT_PATH_ACTIVATED, &caller, &action) != 0) {
-                    free(origin_path);
                     rc = -1;
                     break;
                 }
@@ -438,7 +436,6 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
                 action.kind = ACTION_SET_LAYER;
                 action.layer = 1;
                 if (engine_register_event(ctx, id, EVENT_PATH_ACTIVATED, &caller, &action) != 0) {
-                    free(origin_path);
                     rc = -1;
                     break;
                 }
@@ -446,18 +443,16 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
                 action.kind = ACTION_DEACTIVATE_SCENE;
                 action.has_id = false;
                 if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &action) != 0) {
-                    free(origin_path);
                     rc = -1;
                     break;
                 }
-                free(origin_path);
 
                 for (int inner = 0; inner < 2 && rc == 0; inner++) {
                     Coord next_coord = area_coords->items[rng_choice_index(&ctx->rng, area_coords->len)];
                     char inner_path_id[32];
                     snprintf(inner_path_id, sizeof(inner_path_id), "%zu",
                              om_len(&ctx->terminal.arena.items[id].motion.paths));
-                    char *inner_path = NULL;
+                    const char *inner_path = NULL;
                     if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.18, true,
                                         easing_named(EASE_IN_OUT_SINE), false, 0, 0, false, inner_path_id,
                                         &inner_path) != 0) {
@@ -471,12 +466,10 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
                     memset(&wp, 0, sizeof(wp));
                     if (path_new_waypoint(p, next_coord, NULL, 0, waypoint_id, &wp) != 0) {
                         waypoint_free(&wp);
-                        free(inner_path);
                         rc = -1;
                         break;
                     }
                     waypoint_free(&wp);
-                    free(inner_path);
                 }
                 if (rc != 0) {
                     break;
@@ -486,7 +479,7 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
                 break;
             }
 
-            char *input_path = NULL;
+            const char *input_path = NULL;
             if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.45, true,
                                 easing_named(EASE_IN_OUT_QUAD), false, 0, 0, false, "", &input_path) != 0) {
                 rc = -1;
@@ -497,7 +490,6 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
             memset(&wp, 0, sizeof(wp));
             if (path_new_waypoint(p, input_coord, NULL, 0, "", &wp) != 0) {
                 waypoint_free(&wp);
-                free(input_path);
                 rc = -1;
                 break;
             }
@@ -512,7 +504,6 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
                     Gradient clear_gradient;
                     Color cstops[2] = {cfg->flash_color, dynamic_clear_color};
                     if (gradient_with_steps(cstops, 2, 10, false, &clear_gradient) != 0) {
-                        free(input_path);
                         rc = -1;
                         break;
                     }
@@ -580,7 +571,6 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
                 Gradient landing_gradient;
                 Color lstops[2] = {cfg->flash_color, final_fg};
                 if (gradient_with_steps(lstops, 2, 10, false, &landing_gradient) != 0) {
-                    free(input_path);
                     rc = -1;
                     break;
                 }
@@ -599,7 +589,6 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
                 gradient_free(&landing_gradient);
             }
             if (rc != 0) {
-                free(input_path);
                 break;
             }
 
@@ -611,7 +600,7 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
             memset(&action, 0, sizeof(action));
             action.kind = ACTION_ACTIVATE_SCENE;
             action.has_id = true;
-            action.id = (char *)input_scn;
+            action.id = input_scn;
             if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &action) != 0) {
                 rc = -1;
             }
@@ -624,7 +613,7 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
             memset(&action, 0, sizeof(action));
             action.kind = ACTION_ACTIVATE_SCENE;
             action.has_id = true;
-            action.id = (char *)flash_scn;
+            action.id = flash_scn;
             if (rc == 0 && engine_register_event(ctx, id, EVENT_PATH_ACTIVATED, &caller, &action) != 0) {
                 rc = -1;
             }
@@ -641,7 +630,6 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
                 free(all_paths);
             }
 
-            free(input_path);
         }
 
         gradient_free(&swarm_gradient);

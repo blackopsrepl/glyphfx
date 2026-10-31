@@ -9,16 +9,6 @@
 #include "utils/pycompat.h"
 #include "utils/strtab.h"
 
-static char *dup_cstr(const char *s) {
-    size_t len = strlen(s);
-    char *out = malloc(len + 1);
-    if (!out) {
-        return NULL;
-    }
-    memcpy(out, s, len + 1);
-    return out;
-}
-
 void waypoint_free(Waypoint *w) {
     // waypoint_id is interned and shared; the table owns it.
     free(w->bezier);
@@ -240,7 +230,7 @@ void motion_set_coordinate(Motion *m, Coord coord) {
 }
 
 int motion_new_path(Motion *m, double speed, bool has_ease, Easing ease, bool has_layer, int64_t layer,
-                    int64_t hold_time, bool loop_, const char *path_id, char **out_id) {
+                    int64_t hold_time, bool loop_, const char *path_id, const char **out_id) {
     char auto_id[32];
     if (path_id[0] == '\0') {
         size_t current_id = om_len(&m->paths);
@@ -263,7 +253,7 @@ int motion_new_path(Motion *m, double speed, bool has_ease, Easing ease, bool ha
     }
     om_insert_interned(&m->paths, name, p);
     if (out_id) {
-        *out_id = dup_cstr(name);
+        *out_id = name;
     }
     return 0;
 }

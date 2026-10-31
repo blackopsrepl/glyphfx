@@ -125,7 +125,7 @@ static int scattered_build(Effect *self, EngineCtx *ctx) {
         }
 
         motion_set_coordinate(&ctx->terminal.arena.items[id].motion, start_coord);
-        char *path_id = NULL;
+        const char *path_id = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, cfg->movement_speed, true,
                             cfg->movement_easing, false, 0, 0, false, "", &path_id) != 0) {
             rc = -1;
@@ -136,7 +136,6 @@ static int scattered_build(Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p, input_coord, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(path_id);
             rc = -1;
             break;
         }
@@ -151,19 +150,16 @@ static int scattered_build(Effect *self, EngineCtx *ctx) {
         set_layer.kind = ACTION_SET_LAYER;
         set_layer.layer = 1;
         if (engine_register_event(ctx, id, EVENT_PATH_ACTIVATED, &caller, &set_layer) != 0) {
-            free(path_id);
             rc = -1;
             break;
         }
         set_layer.layer = 0;
         if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &set_layer) != 0) {
-            free(path_id);
             rc = -1;
             break;
         }
 
         engine_activate_path(ctx, self, id, path_id);
-        free(path_id);
         terminal_set_character_visibility(&ctx->terminal, id, true);
 
         ch = &ctx->terminal.arena.items[id];

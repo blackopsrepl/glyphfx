@@ -376,7 +376,7 @@ static void setup_raindrop(void *user, EngineCtx *ctx, CharId id) {
     double speed = rng_uniform(&ctx->rng, 0.5, 1.5);
     int64_t canvas_top = ctx->terminal.canvas.top;
     int64_t canvas_bottom = ctx->terminal.canvas.bottom;
-    char *fall_path = NULL;
+    const char *fall_path = NULL;
     if (motion_new_path(&ctx->terminal.arena.items[id].motion, speed, false, no_ease(), false, 0, 0, false, "",
                         &fall_path) != 0) {
         return;
@@ -399,7 +399,6 @@ static void setup_raindrop(void *user, EngineCtx *ctx, CharId id) {
     // PATH_ACTIVATED has no registered handlers on the raindrop, so passing
     // the effect is observably identical to the reference's NoopHooks.
     engine_activate_path(ctx, self, id, fall_path);
-    free(fall_path);
 }
 
 /// ThunderstormIterator._setup_sparks_for_impact.
@@ -407,7 +406,7 @@ static void setup_sparks_for_impact(void *user, EngineCtx *ctx, CharId id) {
     Effect *self = user;
     Coord impact_coord = ctx->terminal.arena.items[id].motion.current_coord;
     double speed = rng_uniform(&ctx->rng, 0.1, 0.25);
-    char *spark_path = NULL;
+    const char *spark_path = NULL;
     if (motion_new_path(&ctx->terminal.arena.items[id].motion, speed, true, easing_named(EASE_OUT_QUINT), false, 0,
                         30, false, "", &spark_path) != 0) {
         return;
@@ -436,7 +435,6 @@ static void setup_sparks_for_impact(void *user, EngineCtx *ctx, CharId id) {
     (void)engine_register_event(ctx, id, EVENT_SCENE_COMPLETE, &caller, &action);
     engine_activate_scene(ctx, self, id, "glow");
     engine_activate_path(ctx, self, id, spark_path);
-    free(spark_path);
 }
 
 // --- strike pool ----------------------------------------------------------

@@ -612,7 +612,7 @@ static int synthgrid_build(Effect *self, EngineCtx *ctx) {
                     CallerKey caller;
                     memset(&caller, 0, sizeof(caller));
                     caller.kind = CALLER_SCENE;
-                    caller.id = (char *)dissolve_scn;
+                    caller.id = dissolve_scn;
                     EventAction action;
                     memset(&action, 0, sizeof(action));
                     action.kind = ACTION_CALLBACK;

@@ -59,10 +59,10 @@ typedef struct {
     OrdMap paths;  // char* -> Path*
     Coord current_coord;
     Coord previous_coord;
-    char *active_path;  // owned, or NULL
+    const char *active_path;  // interned path id, or NULL
     size_t active_path_slot;  // cached OrdMap slot for the active path
     bool active_path_slot_valid;
-    char *completed_path;  // owned, or NULL
+    const char *completed_path;  // interned path id, or NULL
 } Motion;
 
 void waypoint_free(Waypoint *w);
@@ -81,9 +81,10 @@ const Waypoint *path_query_waypoint(const Path *p, const char *waypoint_id);
 void motion_init(Motion *m, Coord input_coord);
 void motion_free(Motion *m);
 void motion_set_coordinate(Motion *m, Coord coord);
-// Returns 0 and sets *out_id (owned, caller frees) on success; -1 on duplicate.
+// Returns 0 and sets *out_id to the interned path id (process lifetime; never
+// freed) on success; -1 on duplicate.
 int motion_new_path(Motion *m, double speed, bool has_ease, Easing ease, bool has_layer, int64_t layer,
-                    int64_t hold_time, bool loop_, const char *path_id, char **out_id);
+                    int64_t hold_time, bool loop_, const char *path_id, const char **out_id);
 bool motion_movement_is_complete(const Motion *m);
 void motion_deactivate_path(Motion *m, const char *path_id);
 // Removes every path (used by particle reset).

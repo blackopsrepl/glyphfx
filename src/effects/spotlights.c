@@ -183,7 +183,7 @@ static int make_spotlights(Spotlights *st, EngineCtx *ctx, int64_t num) {
             last_coord = find_coord_at_minimum_distance(ctx, last_coord, minimum_distance);
             coordvec_push(&targets, last_coord);
         }
-        char **paths = NULL;
+        const char **paths = NULL;
         size_t paths_len = 0;
         size_t paths_cap = 0;
         for (size_t i = 0; i < targets.len; i++) {
@@ -191,9 +191,10 @@ static int make_spotlights(Spotlights *st, EngineCtx *ctx, int64_t num) {
                                        st->config.search_speed_range.end);
             char path_id[32];
             snprintf(path_id, sizeof(path_id), "%zu", paths_len);
-            char *pid = NULL;
+            const char *pid = NULL;
             if (motion_new_path(&ctx->terminal.arena.items[spotlight].motion, speed, true,
                                 easing_named(EASE_IN_OUT_QUAD), false, 0, 0, false, path_id, &pid) != 0) {
+                free(paths);
                 coordvec_free(&targets);
                 return -1;
             }
@@ -203,10 +204,6 @@ static int make_spotlights(Spotlights *st, EngineCtx *ctx, int64_t num) {
             memset(&wp, 0, sizeof(wp));
             if (path_new_waypoint(p, targets.items[i], &bezier_control, 1, "", &wp) != 0) {
                 waypoint_free(&wp);
-                free(pid);
-                for (size_t j = 0; j < paths_len; j++) {
-                    free(paths[j]);
-                }
                 free(paths);
                 coordvec_free(&targets);
                 return -1;
@@ -214,9 +211,9 @@ static int make_spotlights(Spotlights *st, EngineCtx *ctx, int64_t num) {
             waypoint_free(&wp);
             if (paths_len == paths_cap) {
                 size_t cap = paths_cap ? paths_cap * 2 : 16;
-                char **grown = realloc(paths, cap * sizeof(char *));
+                const char **grown = realloc(paths, cap * sizeof(char *));
                 if (!grown) {
-                    free(pid);
+                    free(paths);
                     coordvec_free(&targets);
                     return -1;
                 }
@@ -225,22 +222,17 @@ static int make_spotlights(Spotlights *st, EngineCtx *ctx, int64_t num) {
             }
             paths[paths_len++] = pid;
         }
-        if (engine_chain_paths(ctx, spotlight, (const char *const *)paths, paths_len, true) != 0) {
-            for (size_t j = 0; j < paths_len; j++) {
-                free(paths[j]);
-            }
-            free(paths);
+        // Path ids are interned: the array is freed, its names are not.
+        int chain_rc = engine_chain_paths(ctx, spotlight, paths, paths_len, true);
+        free(paths);
+        if (chain_rc != 0) {
             coordvec_free(&targets);
             return -1;
         }
-        for (size_t j = 0; j < paths_len; j++) {
-            free(paths[j]);
-        }
-        free(paths);
         coordvec_free(&targets);
 
         Coord canvas_center = ctx->terminal.canvas.center;
-        char *center_path = NULL;
+        const char *center_path = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[spotlight].motion, 0.5, true,
                             easing_named(EASE_IN_OUT_SINE), false, 0, 0, false, "center", &center_path) != 0) {
             return -1;
@@ -250,11 +242,9 @@ static int make_spotlights(Spotlights *st, EngineCtx *ctx, int64_t num) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(cp, canvas_center, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(center_path);
             return -1;
         }
         waypoint_free(&wp);
-        free(center_path);
     }
     return 0;
 }

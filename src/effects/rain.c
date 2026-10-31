@@ -257,7 +257,7 @@ static int rain_build(Effect *self, EngineCtx *ctx) {
 
             double speed = rng_uniform(&ctx->rng, cfg->movement_speed.start, cfg->movement_speed.end);
             motion_set_coordinate(&ctx->terminal.arena.items[id].motion, coord_new(input_coord.column, canvas_top));
-            char *path_id = NULL;
+            const char *path_id = NULL;
             if (motion_new_path(&ctx->terminal.arena.items[id].motion, speed, true, cfg->movement_easing, false, 0,
                                 0, false, "", &path_id) != 0) {
                 rc = -1;
@@ -268,7 +268,6 @@ static int rain_build(Effect *self, EngineCtx *ctx) {
             memset(&wp, 0, sizeof(wp));
             if (path_new_waypoint(p, input_coord, NULL, 0, "", &wp) != 0) {
                 waypoint_free(&wp);
-                free(path_id);
                 rc = -1;
                 break;
             }
@@ -281,15 +280,13 @@ static int rain_build(Effect *self, EngineCtx *ctx) {
             EventAction activate_fade;
             memset(&activate_fade, 0, sizeof(activate_fade));
             activate_fade.kind = ACTION_ACTIVATE_SCENE;
-            activate_fade.id = (char *)fade_scene_id;
+            activate_fade.id = fade_scene_id;
             if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &activate_fade) != 0) {
-                free(path_id);
                 rc = -1;
                 break;
             }
 
             engine_activate_path(ctx, self, id, path_id);
-            free(path_id);
             st->pending[pending_count++] = id;
         }
     }
