@@ -7,6 +7,7 @@
 #include "effects/originals.h"
 #include "effects/registry.h"
 #include "engine/terminal.h"
+#include "utils/strtab.h"
 
 // A character keeps its own symbol for this share of its burn, flashing
 // through the hottest ember colours before it decays through the symbols.
@@ -19,6 +20,9 @@ typedef struct {
     OrigCast cast;
     int64_t *ignite;   // frame each character catches fire
     CharId *spark;     // CHAR_ID_NONE when the character throws no spark
+    SymbolId *burn_symbols;  // config burn symbols, interned once
+    SymbolId spark_hot;      // "*"
+    SymbolId spark_cool;     // "·"
     int64_t frame;
     int64_t last_frame;
 } Burnout;
@@ -66,8 +70,11 @@ static int burnout_build(Effect *self, EngineCtx *ctx) {
     size_t n = st->cast.len;
     st->ignite = calloc(n ? n : 1, sizeof(int64_t));
     st->spark = calloc(n ? n : 1, sizeof(CharId));
+    st->burn_symbols = orig_symbol_handles(&cfg->burn_symbols);
+    st->spark_hot = strtab_handle("*");
+    st->spark_cool = strtab_handle("·");
     size_t *index_of = calloc(ctx->terminal.arena.len + 1, sizeof(size_t));
-    if (!st->ignite || !st->spark || !index_of) {
+    if (!st->ignite || !st->spark || !st->burn_symbols || !index_of) {
         free(index_of);
         return -1;
     }
@@ -94,7 +101,7 @@ static int burnout_build(Effect *self, EngineCtx *ctx) {
         CharId id = st->cast.ids[i];
         const EffectCharacter *ch = &ctx->terminal.arena.items[id];
         terminal_set_character_visibility(&ctx->terminal, id, true);
-        orig_look(ctx, id, ch->input_symbol, st->cast.has_final[i] ? &st->cast.final[i] : NULL, NULL);
+        orig_look(ctx, id, orig_input_symbol(ctx, id), st->cast.has_final[i] ? &st->cast.final[i] : NULL, NULL);
         st->spark[i] = CHAR_ID_NONE;
         int64_t end = st->ignite[i] + cfg->burn_frames;
         if (rng_random(&ctx->rng) < cfg->spark_ratio && cfg->spark_frames > 0) {
@@ -111,17 +118,16 @@ static int burnout_build(Effect *self, EngineCtx *ctx) {
 static void burn_char(EngineCtx *ctx, Burnout *st, size_t i, int64_t age) {
     const BurnoutConfig *cfg = &st->config;
     CharId id = st->cast.ids[i];
-    const EffectCharacter *ch = &ctx->terminal.arena.items[id];
     if (age >= cfg->burn_frames) {
         orig_hide(ctx, id);
         return;
     }
     double p = (double)age / (double)cfg->burn_frames;
-    const char *symbol = ch->input_symbol;
+    SymbolId symbol = orig_input_symbol(ctx, id);
     if (p >= IGNITE_SHARE && cfg->burn_symbols.len) {
         size_t n = cfg->burn_symbols.len;
         size_t s = (size_t)((p - IGNITE_SHARE) / (1.0 - IGNITE_SHARE) * (double)n);
-        symbol = cfg->burn_symbols.items[s < n ? s : n - 1];
+        symbol = st->burn_symbols[s < n ? s : n - 1];
     }
     Color fg = orig_ramp(cfg->ember_colors.items, cfg->ember_colors.len, p);
     Color hot = orig_ramp(cfg->ember_colors.items, cfg->ember_colors.len, 0.66);
@@ -143,7 +149,7 @@ static void move_spark(EngineCtx *ctx, Burnout *st, size_t i, int64_t age) {
     double y = (double)ch->input_coord.row + fs * SPARK_RISE;
     double p = fs / (double)cfg->spark_frames;
     Color c = orig_ramp(cfg->ember_colors.items, cfg->ember_colors.len, 0.3 + 0.7 * p);
-    orig_look(ctx, sid, p < 0.33 ? "*" : "·", &c, NULL);
+    orig_look(ctx, sid, p < 0.33 ? st->spark_hot : st->spark_cool, &c, NULL);
     orig_place(ctx, sid, coord_new((int64_t)floor(x + 0.5), (int64_t)floor(y + 0.5)));
 }
 
@@ -175,6 +181,7 @@ static void burnout_destroy(Effect *self) {
     orig_cast_free(&st->cast);
     free(st->ignite);
     free(st->spark);
+    free(st->burn_symbols);
     free(st);
     free(self);
 }

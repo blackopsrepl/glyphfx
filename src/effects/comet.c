@@ -17,6 +17,7 @@ typedef struct {
     int64_t *launch;   // launch frame per character
     double *lift;      // arc height per character, in rows
     CharId *trail;     // trail_length added characters per input character
+    SymbolId *trail_symbols;  // config trail symbols, interned once
     unsigned char *state;  // 0 waiting, 1 flying, 2 landed and cooling, 3 settled
     Coord origin;
     int64_t top_row;
@@ -67,7 +68,8 @@ static int comet_build(Effect *self, EngineCtx *ctx) {
     st->lift = calloc(n ? n : 1, sizeof(double));
     st->state = calloc(n ? n : 1, 1);
     st->trail = calloc(n * (size_t)cfg->trail_length + 1, sizeof(CharId));
-    if (!st->launch || !st->lift || !st->state || !st->trail) {
+    st->trail_symbols = orig_symbol_handles(&cfg->trail_symbols);
+    if (!st->launch || !st->lift || !st->state || !st->trail || !st->trail_symbols) {
         return -1;
     }
     // Launch frame: the group's slot plus a per-character jitter.
@@ -135,7 +137,7 @@ static void fly(EngineCtx *ctx, Comet *st, size_t i, int64_t f) {
     double p = (double)(f - st->launch[i]) / (double)cfg->flight_frames;
     Color head = orig_mix(fin, &cfg->comet_color, 0.6);
     orig_layer(ctx, id, 2);
-    orig_look(ctx, id, ch->input_symbol, &head, NULL);
+    orig_look(ctx, id, orig_input_symbol(ctx, id), &head, NULL);
     orig_place(ctx, id, arc_point(st, ch, i, easing_ease(&cfg->flight_ease, p)));
     const Color *bg = &ctx->terminal.config.terminal_background_color;
     size_t n_sym = cfg->trail_symbols.len;
@@ -149,7 +151,7 @@ static void fly(EngineCtx *ctx, Comet *st, size_t i, int64_t f) {
         double age = (double)(k + 1) / (double)(cfg->trail_length + 1);
         size_t s = (size_t)(age * (double)n_sym);
         Color c = orig_mix(fin, bg, age);
-        orig_look(ctx, tid, cfg->trail_symbols.items[s < n_sym ? s : n_sym - 1], &c, NULL);
+        orig_look(ctx, tid, st->trail_symbols[s < n_sym ? s : n_sym - 1], &c, NULL);
         orig_place(ctx, tid, arc_point(st, ch, i, easing_ease(&cfg->flight_ease, pk)));
     }
 }
@@ -164,7 +166,7 @@ static void cool(EngineCtx *ctx, Comet *st, size_t i, int64_t f) {
     orig_layer(ctx, id, 1);
     orig_place(ctx, id, ch->input_coord);
     if (p >= 1.0) {
-        orig_look(ctx, id, ch->input_symbol, fin, NULL);
+        orig_look(ctx, id, orig_input_symbol(ctx, id), fin, NULL);
         st->state[i] = 3;
         return;
     }
@@ -172,7 +174,7 @@ static void cool(EngineCtx *ctx, Comet *st, size_t i, int64_t f) {
     // The landing flash: the cell behind the character glows and decays.
     const Color *bg = &ctx->terminal.config.terminal_background_color;
     Color glow = orig_mix(bg, fin ? fin : &cfg->comet_color, 0.45 * (1.0 - p) * (1.0 - p));
-    orig_look(ctx, id, ch->input_symbol, &c, p < 0.75 ? &glow : NULL);
+    orig_look(ctx, id, orig_input_symbol(ctx, id), &c, p < 0.75 ? &glow : NULL);
 }
 
 static const char *comet_next_frame(Effect *self, EngineCtx *ctx) {
@@ -210,6 +212,7 @@ static void comet_destroy(Effect *self) {
     free(st->launch);
     free(st->lift);
     free(st->trail);
+    free(st->trail_symbols);
     free(st->state);
     free(st);
     free(self);

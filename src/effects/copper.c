@@ -7,12 +7,14 @@
 #include "effects/originals.h"
 #include "effects/registry.h"
 #include "engine/terminal.h"
+#include "utils/strtab.h"
 
 typedef struct {
     CopperConfig config;
     OrigCast cast;
     CharId *fills;
     size_t n_fills;
+    SymbolId blank;    // " ", the fill cells' glyph
     Color *row_color;  // per canvas row, indexed from the top
     double *row_light;
     int64_t rows;
@@ -57,6 +59,7 @@ static int copper_build(Effect *self, EngineCtx *ctx) {
     st->fills = terminal_get_characters(&ctx->terminal, &ctx->rng, fills, CS_TOP_TO_BOTTOM_LEFT_TO_RIGHT,
                                         &st->n_fills);
     st->rows = ctx->terminal.canvas.top;
+    st->blank = strtab_handle(" ");
     st->row_color = calloc((size_t)st->rows + 1, sizeof(Color));
     st->row_light = calloc((size_t)st->rows + 1, sizeof(double));
     if (!st->row_color || !st->row_light) {
@@ -70,7 +73,7 @@ static int copper_build(Effect *self, EngineCtx *ctx) {
     for (size_t i = 0; i < st->cast.len; i++) {
         CharId id = st->cast.ids[i];
         terminal_set_character_visibility(&ctx->terminal, id, true);
-        orig_look(ctx, id, ctx->terminal.arena.items[id].input_symbol, &cfg->unlit_color, NULL);
+        orig_look(ctx, id, orig_input_symbol(ctx, id), &cfg->unlit_color, NULL);
     }
     return 0;
 }
@@ -131,14 +134,14 @@ static const char *copper_next_frame(Effect *self, EngineCtx *ctx) {
         const Color *fin = st->cast.has_final[i] ? &st->cast.final[i] : NULL;
         const Color *base = ((double)r < sweep) ? fin : &cfg->unlit_color;
         if (v <= 0.0) {
-            orig_look(ctx, id, ch->input_symbol, base, NULL);
+            orig_look(ctx, id, orig_input_symbol(ctx, id), base, NULL);
             continue;
         }
         Color lit = orig_mix(&st->row_color[r], &white, 0.5);
         Color fg = base ? orig_mix(base, &lit, v * 0.8) : lit;
         Color glow = orig_mix(&st->row_color[r], &white, v * 0.4);
         Color bg = orig_mix(term_bg, &glow, 0.6 * v);
-        orig_look(ctx, id, ch->input_symbol, &fg, &bg);
+        orig_look(ctx, id, orig_input_symbol(ctx, id), &fg, &bg);
     }
     for (size_t i = 0; i < st->n_fills; i++) {
         CharId id = st->fills[i];
@@ -150,7 +153,7 @@ static const char *copper_next_frame(Effect *self, EngineCtx *ctx) {
         }
         Color glow = orig_mix(&st->row_color[r], &white, v * 0.4);
         Color bg = orig_mix(term_bg, &glow, 0.6 * v);
-        orig_look(ctx, id, " ", NULL, &bg);
+        orig_look(ctx, id, st->blank, NULL, &bg);
         terminal_set_character_visibility(&ctx->terminal, id, true);
     }
     st->frame++;

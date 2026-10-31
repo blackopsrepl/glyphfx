@@ -39,8 +39,13 @@ Color orig_mix(const Color *a, const Color *b, double t);
 // Samples a multi-stop ramp at t in [0, 1].
 Color orig_ramp(const Color *stops, size_t n, double t);
 
-// Sets the symbol and colours; NULL fg or bg leaves that channel unset.
-void orig_look(EngineCtx *ctx, CharId id, const char *symbol, const Color *fg, const Color *bg);
+// Sets the symbol and colours; NULL fg or bg leaves that channel unset. The
+// symbol is a string-table handle: the restyle path never hashes text.
+void orig_look(EngineCtx *ctx, CharId id, SymbolId symbol, const Color *fg, const Color *bg);
+// The character's own input symbol, as a handle.
+SymbolId orig_input_symbol(const EngineCtx *ctx, CharId id);
+// Interns every symbol of a list once, for orig_look. Free with free().
+SymbolId *orig_symbol_handles(const StringList *list);
 // Moves the character and shows it when the coordinate is on the canvas,
 // hides it otherwise.
 void orig_place(EngineCtx *ctx, CharId id, Coord coord);

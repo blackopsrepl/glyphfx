@@ -7,6 +7,7 @@
 #include "engine/animation.h"
 #include "engine/render_log.h"
 #include "engine/terminal.h"
+#include "utils/strtab.h"
 
 int orig_cast_build(EngineCtx *ctx, const ColorList *stops, const IntList *steps, GradientDirection direction,
                     OrigCast *out) {
@@ -90,7 +91,7 @@ Color orig_ramp(const Color *stops, size_t n, double t) {
     return orig_mix(&stops[i], &stops[i + 1], s - (double)i);
 }
 
-void orig_look(EngineCtx *ctx, CharId id, const char *symbol, const Color *fg, const Color *bg) {
+void orig_look(EngineCtx *ctx, CharId id, SymbolId symbol, const Color *fg, const Color *bg) {
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
     ColorPair colors;
     memset(&colors, 0, sizeof(colors));
@@ -102,7 +103,24 @@ void orig_look(EngineCtx *ctx, CharId id, const char *symbol, const Color *fg, c
         colors.has_bg = true;
         colors.bg = *bg;
     }
-    animation_set_appearance(&ch->animation, ch->uses_input_preexisting_colors, symbol, &colors);
+    animation_set_appearance_symbol(&ch->animation, ch->uses_input_preexisting_colors, symbol, &colors);
+}
+
+SymbolId orig_input_symbol(const EngineCtx *ctx, CharId id) {
+    // Originals never reassign a character's symbol (no particle pools), so
+    // the animation's creation-time handle is the character's input symbol.
+    return ctx->terminal.arena.items[id].animation.input_symbol;
+}
+
+SymbolId *orig_symbol_handles(const StringList *list) {
+    SymbolId *out = malloc((list->len ? list->len : 1) * sizeof(*out));
+    if (!out) {
+        return NULL;
+    }
+    for (size_t i = 0; i < list->len; i++) {
+        out[i] = strtab_handle(list->items[i]);
+    }
+    return out;
 }
 
 void orig_place(EngineCtx *ctx, CharId id, Coord coord) {

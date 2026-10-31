@@ -95,11 +95,11 @@ static const char *bannerwave_next_frame(Effect *self, EngineCtx *ctx) {
         near = near > 0.0 ? near : 0.0;
         const Color *fin = st->cast.has_final[i] ? &st->cast.final[i] : NULL;
         if (!fin || (crest <= 0.0 && near <= 0.0)) {
-            orig_look(ctx, id, ch->input_symbol, fin, NULL);
+            orig_look(ctx, id, orig_input_symbol(ctx, id), fin, NULL);
         } else {
             Color lit = orig_mix(fin, &cfg->highlight_color, crest * 0.45);
             Color c = orig_mix(&lit, &cfg->highlight_color, near);
-            orig_look(ctx, id, ch->input_symbol, &c, NULL);
+            orig_look(ctx, id, orig_input_symbol(ctx, id), &c, NULL);
         }
         orig_place(ctx, id, coord_new(ch->input_coord.column, ch->input_coord.row + dy));
     }
