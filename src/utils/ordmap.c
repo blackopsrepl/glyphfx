@@ -4,16 +4,7 @@
 #include <string.h>
 
 #include "utils/strhash.h"
-
-static char *dup_cstr(const char *s) {
-    size_t len = strlen(s);
-    char *out = malloc(len + 1);
-    if (!out) {
-        return NULL;
-    }
-    memcpy(out, s, len + 1);
-    return out;
-}
+#include "utils/strtab.h"
 
 static OrdEntry *om_arr(OrdMap *m) {
     return m->heap ? m->heap : m->inline_entries;
@@ -96,10 +87,6 @@ void om_init(OrdMap *m) {
 }
 
 void om_free(OrdMap *m) {
-    OrdEntry *a = om_arr(m);
-    for (size_t i = 0; i < m->len; i++) {
-        free(a[i].key);
-    }
     free(m->heap);
     om_init(m);
 }
@@ -162,7 +149,11 @@ void om_insert(OrdMap *m, const char *key, void *value) {
         m->cap = cap;
     }
     OrdEntry *a = om_arr(m);
-    a[m->len].key = dup_cstr(key);
+    // Keys are interned: a character's scenes and paths repeat the same handful
+    // of names, so the map shares one copy per distinct name instead of
+    // malloc'ing one per entry. The table owns the bytes for the process
+    // lifetime, which is why om_free and om_clear never free a key.
+    a[m->len].key = (char *)strtab_intern(key);
     a[m->len].hash = str_hash64(key);
     a[m->len].value = value;
     m->len++;
@@ -192,10 +183,6 @@ void *om_value_at(const OrdMap *m, size_t slot) {
 }
 
 void om_clear(OrdMap *m) {
-    OrdEntry *a = om_arr(m);
-    for (size_t i = 0; i < m->len; i++) {
-        free(a[i].key);
-    }
     // Slot numbers stay valid for re-used slots; the len >= OM_INDEX_MIN gate
     // turns the index off, and it is rebuilt from scratch on the next crossing.
     m->len = 0;
