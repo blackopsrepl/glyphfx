@@ -884,18 +884,13 @@ static void format_blocks(const Terminal *t, size_t row, size_t width, size_t fi
                           size_t *len) {
     const VisualHandle *handles = &t->cell_visual[row * width];
     const uint32_t *owners = &t->render_cells[row * width];
-    for (size_t b = first; b < last; b++) {
-        size_t col = b * VISUAL_BLOCK;
-        size_t end = col + VISUAL_BLOCK;
-        if (end > width) {
-            end = width;
-        }
-        for (; col < end; col++) {
-            if (owners[col] == RENDER_EMPTY) {
-                dst[(*len)++] = ' ';
-            } else {
-                *len += emit_handle(dst + *len, handles[col]);
-            }
+    size_t end = last * VISUAL_BLOCK;
+    if (end > width) end = width;
+    for (size_t col = first * VISUAL_BLOCK; col < end; col++) {
+        if (owners[col] == RENDER_EMPTY) {
+            dst[(*len)++] = ' ';
+        } else {
+            *len += emit_handle(dst + *len, handles[col]);
         }
     }
 }
