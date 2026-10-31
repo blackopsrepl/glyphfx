@@ -2,6 +2,14 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by csemver; do not edit by hand.
 
+## [0.4.2](https://github.com/blackopsrepl/glyphfx/compare/v0.4.1...v0.4.2) (2026-10-31)
+
+
+### Bug Fixes
+
+* **build:** size the frame and scene pools without MAP_ANONYMOUS off Linux ([d973edc](https://github.com/blackopsrepl/glyphfx/commit/d973edcde7814e2454838b59d7440b8c3bbff402))
+
+
 ## [0.4.1](https://github.com/blackopsrepl/glyphfx/compare/v0.4.0...v0.4.1) (2026-10-31)
 
 
