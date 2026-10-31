@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y build-essential
+        run: sudo apt-get update && sudo apt-get install -y build-essential clang
       - name: Build
         run: make
       - name: Unit tests
@@ -21,6 +21,12 @@ jobs:
         run: make parity
       - name: Byte-exact effect parity
         run: GLYPHFX_MAX_FRAMES=600 make effects
+      # clang fuses a*b+c into FMA wherever the target has it; the output must
+      # still match ttfx bit for bit.
+      - name: Byte-exact effect parity, clang with FMA (x86-64-v3)
+        run: |
+          make build BUILD=build-v3 CC=clang "CFLAGS=-std=c17 -O3 -march=x86-64-v3"
+          GLYPHFX_BIN=build-v3/glyphfx GLYPHFX_MAX_FRAMES=600 make effects
       - name: Original effects (determinism, goldens, final frame)
         run: make originals
       - name: CLI corpus

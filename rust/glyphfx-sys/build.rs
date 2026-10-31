@@ -35,6 +35,9 @@ fn main() {
     let mut build = cc::Build::new();
     build
         .std("c17")
+        // Bit-exact with ttfx only if a*b+c is never fused into FMA; see FPFLAGS
+        // in the Makefile.
+        .flag_if_supported("-ffp-contract=off")
         .define("_POSIX_C_SOURCE", "200809L")
         .define("_DEFAULT_SOURCE", None)
         .include(root.join("src"))

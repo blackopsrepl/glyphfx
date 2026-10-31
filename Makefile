@@ -25,6 +25,11 @@ AR      ?= ar
 PREFIX  ?= /usr/local
 CFLAGS  ?= -std=c17 -O3 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
 CPPFLAGS += -Isrc -Ibuild -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE
+# Output is bit-exact with ttfx only if every a*b+c rounds twice, as in Rust.
+# clang (and GCC outside ISO C mode) fuse them into FMA wherever the target has
+# it: x86-64-v3, -march=native, every arm64. Kept out of CFLAGS so overriding
+# CFLAGS cannot drop it.
+FPFLAGS := -ffp-contract=off
 LDFLAGS ?=
 LDLIBS  += -lm
 
@@ -96,7 +101,7 @@ $(BUILD)/glyphfx_version.h: VERSION
 $(BUILD)/%.o: src/%.c $(BUILD)/glyphfx_version.h
 	@mkdir -p $(dir $@)
 	@printf "$(GRAY)  $(PROGRESS) %s$(RESET)\n" "$<"
-	@$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
+	@$(CC) $(CPPFLAGS) $(FPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILD)/libglyphfx.a: $(LIB_OBJS)
 	@mkdir -p $(dir $@)
@@ -121,7 +126,7 @@ check: banner $(TEST_BINS)
 
 $(BUILD)/test_%: tests/test_%.c $(BUILD)/libglyphfx.a
 	@mkdir -p $(dir $@)
-	@$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< $(BUILD)/libglyphfx.a $(LDFLAGS) $(LDLIBS)
+	@$(CC) $(CPPFLAGS) $(FPFLAGS) $(CFLAGS) -o $@ $< $(BUILD)/libglyphfx.a $(LDFLAGS) $(LDLIBS)
 
 # ============== Parity ==============
 parity: banner $(BUILD)/glyphfx
@@ -177,13 +182,13 @@ release: banner $(BUILD)/glyphfx
 
 static: banner $(OBJS)
 	$(call section,Static Build)
-	@$(CC) $(CPPFLAGS) $(CFLAGS) -static -o $(BUILD)/glyphfx-static $(OBJS) $(LDFLAGS) $(LDLIBS)
+	@$(CC) $(CPPFLAGS) $(FPFLAGS) $(CFLAGS) -static -o $(BUILD)/glyphfx-static $(OBJS) $(LDFLAGS) $(LDLIBS)
 	@printf "$(GREEN)$(CHECK) $(BOLD)$(BUILD)/glyphfx-static$(RESET)\n"
 
 debug: banner
 	$(call section,Sanitizer Build)
 	@mkdir -p $(BUILD)
-	@$(CC) $(CPPFLAGS) -std=c17 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+	@$(CC) $(CPPFLAGS) $(FPFLAGS) -std=c17 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer \
 		-Wall -Wextra -Wpedantic -Wconversion -Wshadow $(SRCS) -o $(BUILD)/glyphfx-debug $(LDLIBS)
 	@printf "$(GREEN)$(CHECK) $(BOLD)$(BUILD)/glyphfx-debug$(RESET)\n"
 
