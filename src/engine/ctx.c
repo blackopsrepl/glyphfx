@@ -1288,12 +1288,8 @@ void engine_update(EngineCtx *ctx, Effect *effect) {
     }
     for (size_t w = lo; d->live && w < words; w++) {
         uint64_t dozing = d->bits[w];
-        while (dozing) {
-            unsigned b = (unsigned)__builtin_ctzll(dozing);
-            dozing &= dozing - 1;
-            if (d->until[(w << 6) | b] >= now) {
-                d->snapshot[w] &= ~(1ULL << b);
-            }
+        if (dozing) {
+            d->snapshot[w] &= ~doze_pending_word(d->until + (w << 6), now, dozing);
         }
     }
     d->snapshot_words = words;

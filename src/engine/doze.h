@@ -67,6 +67,8 @@ void doze_init(Doze *d, struct EngineCtx *ctx);
 void doze_free(Doze *d);
 // Room for `slots` characters; false on allocation failure.
 bool doze_grow(Doze *d, size_t slots);
+// Sleeping lanes whose inclusive deadline covers now. `until` has 64 entries.
+uint64_t doze_pending_word(const uint32_t *until, uint32_t now, uint64_t dozing);
 // After engine_update ticked `id`: park it through its pure ticks, if any.
 void doze_try(Doze *d, CharId id);
 // Settle a doze: apply the owed pure ticks. engine_update calls this for a

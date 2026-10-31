@@ -3,6 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__x86_64__) || defined(_M_X64)
+#include <emmintrin.h>
+#endif
+
 #include "engine/animation.h"
 #include "engine/ctx.h"
 
@@ -70,6 +74,39 @@ bool doze_grow(Doze *d, size_t slots) {
     d->nwords = words;
     d->nslots = cap;
     return true;
+}
+
+uint64_t doze_pending_word(const uint32_t *until, uint32_t now, uint64_t dozing) {
+#if defined(__x86_64__) || defined(_M_X64)
+    // Sparse words are cheaper to visit directly than to load 64 deadlines.
+    uint64_t dense = dozing & (dozing - 1);
+    dense &= dense - 1;
+    dense &= dense - 1;
+    if (dense) {
+        // SSE2 is baseline on x86-64. Flipping the sign bit makes its signed
+        // comparison exactly the scalar uint32 comparison, including count wrap.
+        const __m128i sign = _mm_set1_epi32(INT32_MIN);
+        __m128i current = _mm_loadu_si32(&now);
+        current = _mm_shuffle_epi32(current, 0);
+        current = _mm_xor_si128(current, sign);
+        uint64_t expired = 0;
+        for (unsigned lane = 0; lane < 64; lane += 4) {
+            __m128i ends = _mm_loadu_si128((const __m128i *)(until + lane));
+            ends = _mm_xor_si128(ends, sign);
+            __m128i past = _mm_cmpgt_epi32(current, ends);
+            unsigned mask = (unsigned)_mm_movemask_ps(_mm_castsi128_ps(past));
+            expired |= (uint64_t)mask << lane;
+        }
+        return dozing & ~expired;
+    }
+#endif
+    uint64_t pending = 0;
+    while (dozing) {
+        unsigned lane = (unsigned)__builtin_ctzll(dozing);
+        dozing &= dozing - 1;
+        if (until[lane] >= now) pending |= UINT64_C(1) << lane;
+    }
+    return pending;
 }
 
 static Scene *dozing_scene(EngineCtx *ctx, CharId id) {
