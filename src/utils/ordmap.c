@@ -96,6 +96,12 @@ size_t om_len(const OrdMap *m) {
 }
 
 long om_slot(const OrdMap *m, const char *key) {
+    // An interned key (every map key is one), or a literal naming one, is
+    // found by identity.
+    const char *interned = strtab_resolve(key);
+    if (interned) {
+        return om_slot_interned(m, interned);
+    }
     const OrdEntry *a = om_carr(m);
     uint64_t h = str_hash64(key);
     // len alone gates the index: the inline buffer holds OM_INLINE entries, so
