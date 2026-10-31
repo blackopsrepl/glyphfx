@@ -149,6 +149,7 @@ Reproduce with `python3 tools/tests/matrix.py` (`GLYPHFX_TTFX_FX` names a ttfx >
 <producer> | glyphfx [terminal options] <effect> [effect options]
 
 glyphfx --help                 # the 37 effects, the 4 originals, and the terminal options
+glyphfx                        # the same, when nothing is piped in
 glyphfx <effect> --help        # options for one effect
 glyphfx --random-effect        # surprise me (--include-effects / --exclude-effects to filter)
 glyphfx --print-completion bash|zsh
@@ -158,6 +159,11 @@ Terminal options (canvas size and anchoring, color handling, frame rate, text
 wrapping) go before the effect name; effect options after it. Option names,
 defaults, metavars, choices, negative-value handling, and nargs match ttfx, so
 existing invocations work with the binary name swapped.
+
+On a colour terminal the help opens with the glyphfx wordmark, drawn by the
+`highlight` effect. Piped, or under `NO_COLOR`, `TERM=dumb` or `--no-color`, it
+is plain text, one option per line. A pipe with nothing in it still prints
+`NO INPUT.`, as ttfx does.
 
 ## Building
 
