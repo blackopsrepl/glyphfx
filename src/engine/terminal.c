@@ -18,6 +18,8 @@
 
 #define NOT_VISIBLE SIZE_MAX
 
+static void mirror_fill(Terminal *t, CharId id);
+
 void terminal_config_default(TerminalConfig *config) {
     memset(config, 0, sizeof(*config));
     config->tab_width = 4;
@@ -476,6 +478,11 @@ CharId terminal_add_character(Terminal *t, const char *symbol, Coord coord) {
     ch->animation.use_xterm_colors = t->config.xterm_colors;
     ch->animation.existing_color_handling = t->config.existing_color_handling;
     ch->uses_input_preexisting_colors = false;
+    // Spare capacity is not initialized storage: a character added below the
+    // current capacity will not be visited by grid_grow_chars again.
+    if ((size_t)id < t->render_mirror_len) {
+        mirror_fill(t, id);
+    }
     t->added_characters = realloc(t->added_characters, (t->added_characters_len + 1) * sizeof(CharId));
     t->added_characters[t->added_characters_len++] = id;
     return id;
