@@ -10,6 +10,7 @@
 #include "engine/ctx.h"
 #include "engine/terminal.h"
 #include "utils/graphics.h"
+#include "utils/strtab.h"
 
 typedef enum {
     DECRYPT_TYPING,
@@ -19,6 +20,8 @@ typedef enum {
 typedef struct {
     DecryptConfig config;
     StringList encrypted_symbols;
+    SymbolId *encrypted_handles;  // encrypted_symbols, interned once
+    SymbolId block_handles[4];    // the typing blocks
     CharId *typing_pending;
     size_t typing_len;
     size_t typing_cap;
@@ -148,14 +151,13 @@ static int decrypt_make_decrypting_scenes(Effect *self, EngineCtx *ctx, CharId i
     Color color = cfg->ciphertext_colors.items[rng_choice_index(&ctx->rng, cfg->ciphertext_colors.len)];
     int rc = 0;
     for (int i = 0; i < 80; i++) {
-        const char *symbol =
-            st->encrypted_symbols.items[rng_choice_index(&ctx->rng, st->encrypted_symbols.len)];
+        SymbolId symbol = st->encrypted_handles[rng_choice_index(&ctx->rng, st->encrypted_symbols.len)];
         VisualParams vp;
         memset(&vp, 0, sizeof(vp));
         vp.has_colors = true;
         vp.colors.has_fg = true;
         vp.colors.fg = color;
-        if (scene_add_frame(fast, symbol, 2, &vp) != 0) {
+        if (scene_add_frame_symbol(fast, symbol, 2, &vp) != 0) {
             rc = -1;
             break;
         }
@@ -168,8 +170,7 @@ static int decrypt_make_decrypting_scenes(Effect *self, EngineCtx *ctx, CharId i
         Scene *slow = (Scene *)om_get(&ch->animation.scenes, "slow_decrypt");
         int64_t count = rng_randint(&ctx->rng, 1, 15);
         for (int64_t i = 0; i < count; i++) {
-            const char *symbol =
-                st->encrypted_symbols.items[rng_choice_index(&ctx->rng, st->encrypted_symbols.len)];
+            SymbolId symbol = st->encrypted_handles[rng_choice_index(&ctx->rng, st->encrypted_symbols.len)];
             int64_t duration;
             if (rng_randint(&ctx->rng, 0, 100) <= 30) {
                 duration = rng_randrange(&ctx->rng, 35, 60);
@@ -181,7 +182,7 @@ static int decrypt_make_decrypting_scenes(Effect *self, EngineCtx *ctx, CharId i
             vp.has_colors = true;
             vp.colors.has_fg = true;
             vp.colors.fg = color;
-            if (scene_add_frame(slow, symbol, duration, &vp) != 0) {
+            if (scene_add_frame_symbol(slow, symbol, duration, &vp) != 0) {
                 rc = -1;
                 break;
             }
@@ -274,7 +275,6 @@ static int decrypt_prepare_type(Effect *self, EngineCtx *ctx) {
         bool uses_pre = ch->uses_input_preexisting_colors;
         animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, (Easing){0}, "typing", uses_pre);
         Scene *scene = (Scene *)om_get(&ch->animation.scenes, "typing");
-        const char *blocks[4] = {"▉", "▓", "▒", "░"};
         for (size_t b = 0; b < 4; b++) {
             Color color = st->config.ciphertext_colors.items[rng_choice_index(
                 &ctx->rng, st->config.ciphertext_colors.len)];
@@ -283,14 +283,13 @@ static int decrypt_prepare_type(Effect *self, EngineCtx *ctx) {
             vp.has_colors = true;
             vp.colors.has_fg = true;
             vp.colors.fg = color;
-            if (scene_add_frame(scene, blocks[b], 2, &vp) != 0) {
+            if (scene_add_frame_symbol(scene, st->block_handles[b], 2, &vp) != 0) {
                 rc = -1;
                 break;
             }
         }
         if (rc == 0) {
-            const char *symbol =
-                st->encrypted_symbols.items[rng_choice_index(&ctx->rng, st->encrypted_symbols.len)];
+            SymbolId symbol = st->encrypted_handles[rng_choice_index(&ctx->rng, st->encrypted_symbols.len)];
             Color color =
                 st->config.ciphertext_colors.items[rng_choice_index(&ctx->rng, st->config.ciphertext_colors.len)];
             VisualParams vp;
@@ -298,7 +297,7 @@ static int decrypt_prepare_type(Effect *self, EngineCtx *ctx) {
             vp.has_colors = true;
             vp.colors.has_fg = true;
             vp.colors.fg = color;
-            if (scene_add_frame(scene, symbol, 1, &vp) != 0) {
+            if (scene_add_frame_symbol(scene, symbol, 1, &vp) != 0) {
                 rc = -1;
             }
         }
@@ -473,6 +472,7 @@ static void decrypt_destroy(Effect *self) {
         free(st->encrypted_symbols.items[i]);
     }
     free(st->encrypted_symbols.items);
+    free(st->encrypted_handles);
     free(st->typing_pending);
     free(st->decrypting_pending);
     free(st->final_colors);
@@ -494,6 +494,17 @@ Effect *decrypt_make(const void *cfg) {
     st->config = *(const DecryptConfig *)cfg;
     st->phase = DECRYPT_TYPING;
     decrypt_make_encrypted_symbols(st);
+    st->encrypted_handles = strtab_handles(st->encrypted_symbols.items, st->encrypted_symbols.len);
+    static const char *const blocks[4] = {"▉", "▓", "▒", "░"};
+    for (size_t b = 0; b < 4; b++) {
+        st->block_handles[b] = strtab_handle(blocks[b]);
+    }
+    if (!st->encrypted_handles) {
+        effect->state = st;
+        effect->ops = &DECRYPT_OPS;
+        decrypt_destroy(effect);
+        return NULL;
+    }
     effect->ops = &DECRYPT_OPS;
     effect->state = st;
     return effect;
