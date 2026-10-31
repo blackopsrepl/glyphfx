@@ -468,10 +468,15 @@ static bool mirror_next(const MotionMirror *m, Coord *out, double *distance) {
 }
 
 #ifdef GLYPHFX_MOTION_AVX2
+// No "no-fma" here: a build whose -march already has FMA (x86-64-v3, native)
+// would then give this function a smaller ISA than the intrinsics it calls,
+// and GCC refuses to inline every one of them. Bit-exactness does not need
+// it either: with contraction off the multiplies and adds stay separate
+// whether or not the target has FMA.
 #if defined(__GNUC__) && !defined(__clang__)
-__attribute__((target("avx2,no-fma"), optimize("fp-contract=off")))
+__attribute__((target("avx2"), optimize("fp-contract=off")))
 #else
-__attribute__((target("avx2,no-fma")))
+__attribute__((target("avx2")))
 #endif
 static void motion_four(EngineCtx *ctx, size_t word, const unsigned lanes[4]) {
 #if defined(__clang__)
