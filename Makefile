@@ -185,7 +185,7 @@ static: banner $(OBJS)
 	@$(CC) $(CPPFLAGS) $(FPFLAGS) $(CFLAGS) -static -o $(BUILD)/glyphfx-static $(OBJS) $(LDFLAGS) $(LDLIBS)
 	@printf "$(GREEN)$(CHECK) $(BOLD)$(BUILD)/glyphfx-static$(RESET)\n"
 
-debug: banner
+debug: banner $(BUILD)/glyphfx_version.h
 	$(call section,Sanitizer Build)
 	@mkdir -p $(BUILD)
 	@$(CC) $(CPPFLAGS) $(FPFLAGS) -std=c17 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer \
