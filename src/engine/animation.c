@@ -200,7 +200,15 @@ int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const Vi
     if (scene->cold->preexisting_bold) {
         params.bold = true;
     }
-    if (params.has_colors) {
+    bool cached_appearance = params.has_colors && !params.dim && !params.italic &&
+                             !params.underline && !params.blink && !params.reverse &&
+                             !params.hidden && !params.strike;
+    if (cached_appearance) {
+        // The appearance cache interns this look and resolves its terminal
+        // codes; keep the params key-equivalent and let it build the visual.
+        params.has_fg_code = false;
+        params.has_bg_code = false;
+    } else if (params.has_colors) {
         params.has_fg_code =
             resolve_color_code(params.colors.has_fg, &params.colors.fg, scene->cold->no_color, scene->cold->use_xterm_colors,
                                &params.fg_code);
@@ -221,7 +229,10 @@ int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const Vi
     // frame_pool_grow reserved this new slot; existing shared frames stay const.
     Frame *frame = (Frame *)&scene->all_frames[frame_index];
     memset(frame, 0, sizeof(*frame));
-    frame->visual = visual_make(symbol, &params);
+    frame->visual = cached_appearance
+        ? visual_make_appearance(symbol, &params.colors, params.bold, scene->cold->no_color,
+                                 scene->cold->use_xterm_colors)
+        : visual_make(symbol, &params);
     frame->duration = duration;
     scene->cold->easing_shape_for_len = 0;  // a later eased lookup re-resolves
     scene->cold->easing_total_steps += duration;
