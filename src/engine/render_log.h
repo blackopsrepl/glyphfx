@@ -77,6 +77,10 @@ void render_log_grow(void);
 // geometry to turn a coordinate into a cell.
 struct Terminal;
 void render_log_bind(struct Terminal *t);
+// Unbinds t if it is the bound terminal; terminal_free calls it, so the hooks
+// never write into a freed mirror (a resize frees the old terminal before
+// building the new one, whose setup already moves characters).
+void render_log_release(struct Terminal *t);
 
 static inline void rlog_push(CharId slot, uint32_t kind, uint32_t value) {
     if (!g_rlog.on) {

@@ -436,6 +436,7 @@ int terminal_new(Terminal *t, const char *input_data, const TerminalConfig *conf
 }
 
 void terminal_free(Terminal *t) {
+    render_log_release(t);
     arena_free(&t->arena);
     colorfreq_free(&t->input_colors_frequency);
     free(t->input_line_lengths);

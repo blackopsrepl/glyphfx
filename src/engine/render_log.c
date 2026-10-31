@@ -17,6 +17,17 @@ void render_log_bind(Terminal *t) {
     g_rlog_mirror_len = t ? t->render_mirror_len : 0;
 }
 
+void render_log_release(Terminal *t) {
+    if (g_target != t) {
+        return;
+    }
+    render_log_bind(NULL);
+    // The pending records name t's characters; nothing may replay them.
+    g_rlog.on = false;
+    g_rlog.len = 0;
+    g_rlog.overflow = false;
+}
+
 void render_log_grow(void) {
     uint32_t cap = g_rlog.cap ? g_rlog.cap * 2 : 4096;
     uint64_t *grown = realloc(g_rlog.buf, (size_t)cap * sizeof(uint64_t));
