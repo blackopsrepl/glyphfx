@@ -173,8 +173,19 @@ static int play(const EffectEntry *entry, const void *effect_config, TerminalCon
 
 // --- help ----------------------------------------------------------------
 
-// Colour only for a person at a terminal that wants it: pipes, NO_COLOR,
-// TERM=dumb and --no-color get plain text.
+// The wordmark the Makefile's banner draws.
+static const char LOGO[] =
+    " ██████╗ ██╗  ██╗   ██╗██████╗ ██╗  ██╗███████╗██╗  ██╗\n"
+    "██╔════╝ ██║  ╚██╗ ██╔╝██╔══██╗██║  ██║██╔════╝╚██╗██╔╝\n"
+    "██║  ███╗██║   ╚████╔╝ ██████╔╝███████║█████╗   ╚███╔╝ \n"
+    "██║   ██║██║    ╚██╔╝  ██╔═══╝ ██╔══██║██╔══╝   ██╔██╗ \n"
+    "╚██████╔╝███████╗██║   ██║     ██║  ██║██║     ██╔╝ ██╗\n"
+    " ╚═════╝ ╚══════╝╚═╝   ╚═╝     ╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝\n";
+#define LOGO_COLS 55
+#define LOGO_ROWS 6
+
+// Colour and animation only for a person at a terminal that wants them:
+// pipes, NO_COLOR, TERM=dumb and --no-color get plain text.
 static CliStyle help_style(const CliConfig *cfg, int *cols, int *rows) {
     CliStyle style = {false, 0};
     *cols = 0;
@@ -194,6 +205,39 @@ static CliStyle help_style(const CliConfig *cfg, int *cols, int *rows) {
     return style;
 }
 
+// Draws the wordmark with glyphfx itself: the highlight effect, parsed by
+// the same CLI from an argument list, sweeps it into the Makefile's emerald.
+// Returns false when it was interrupted and the help should not follow.
+static bool play_logo(const CliConfig *user) {
+    char *argv[] = {"glyphfx", "--frame-rate", "120", "--xterm-colors", "highlight", "--highlight-width", "6",
+                    "--final-gradient-stops", "10b981", "34d399", "2dd4bf", "--final-gradient-direction",
+                    "horizontal"};
+    int argc = (int)(sizeof(argv) / sizeof(argv[0]));
+    if (!user->tc.xterm_colors) {
+        // Keep --xterm-colors only when the user asked for it.
+        memmove(&argv[3], &argv[4], sizeof(argv[0]) * (size_t)(argc - 4));
+        argc--;
+    }
+    CliConfig cfg;
+    if (cli_parse(argc, argv, &cfg) != 0 || !cfg.effect_entry) {
+        return true;
+    }
+    const EffectEntry *entry = cfg.effect_entry;
+    install_sigint_handler();
+    install_sigterm_handler();
+    install_sigwinch_handler();
+    fflush(stdout);
+    PlayOptions opts = {.tty_output = true};
+    int rc = play(entry, cfg.effect_config, cfg.tc, LOGO, rng_seeded(1), &opts);
+    fflush(stdout);
+    entry->free_config(cfg.effect_config);
+    free(cfg.effect_config);
+    if (terminated()) {
+        die_from_sigterm();
+    }
+    return rc == 0 && !interrupted();
+}
+
 // glyphfx --help, or `glyphfx <effect> --help` when an effect is named.
 static int print_help(const CliConfig *cfg, bool effect_help) {
     int cols = 0;
@@ -203,7 +247,11 @@ static int print_help(const CliConfig *cfg, bool effect_help) {
         cli_print_effect_help(cfg->effect_entry, &style);
         return 0;
     }
-    cli_print_help(&style, false);
+    bool logo = style.color && cols >= LOGO_COLS + 1 && rows > LOGO_ROWS + 1;
+    if (logo && !play_logo(cfg)) {
+        return 1;
+    }
+    cli_print_help(&style, logo);
     return 0;
 }
 
