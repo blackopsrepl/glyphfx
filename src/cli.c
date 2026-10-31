@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cli_help.h"
 #include "effects/registry.h"
 #include "utils/hexterm.h"
 #include "utils/strtab.h"
@@ -786,60 +787,278 @@ const char *cli_effect_name(const void *effect_entry) {
     return entry ? entry->name : "";
 }
 
-static void print_effect_names(size_t from, size_t to) {
-    printf("  ");
-    int col = 0;
+// --- help -------------------------------------------------------------------
+// The palette is the Makefile's: emerald for the name and effects, cyan for
+// headings and options, yellow for value placeholders, grey for defaults.
+
+#define HELP_RESET "\033[0m"
+#define HELP_BOLD "\033[1m"
+#define HELP_CYAN "\033[96m"
+#define HELP_YELLOW "\033[93m"
+#define HELP_GRAY "\033[90m"
+#define HELP_EMERALD "\033[38;2;16;185;129m"
+
+// Widest option column before descriptions drop to their own line.
+#define HELP_LEFT_MAX 40
+#define HELP_EFFECT_COL 18
+
+static const char *sty(const CliStyle *s, const char *code) {
+    return s->color ? code : "";
+}
+
+// Terminal columns of UTF-8 text (every glyph in the help is one column).
+static int text_cols(const char *s, size_t n) {
+    int cols = 0;
+    for (size_t i = 0; i < n && s[i]; i++) {
+        if (((unsigned char)s[i] & 0xC0) != 0x80) {
+            cols++;
+        }
+    }
+    return cols;
+}
+
+static void pad(int n) {
+    for (int i = 0; i < n; i++) {
+        putchar(' ');
+    }
+}
+
+// Prints text word by word in one colour, starting at column *col, wrapping
+// to `indent` whenever a word would pass the style's width.
+static void wrap_words(const CliStyle *s, const char *text, const char *color, int indent, int *col) {
+    const char *p = text;
+    while (*p) {
+        while (*p == ' ') {
+            p++;
+        }
+        if (!*p) {
+            break;
+        }
+        const char *end = p;
+        while (*end && *end != ' ') {
+            end++;
+        }
+        size_t len = (size_t)(end - p);
+        int w = text_cols(p, len);
+        if (s->width > 0 && *col > indent && *col + 1 + w > s->width) {
+            putchar('\n');
+            pad(indent);
+            *col = indent;
+        } else if (*col > indent) {
+            putchar(' ');
+            (*col)++;
+        }
+        printf("%s%.*s%s", sty(s, color), (int)len, p, color[0] ? sty(s, HELP_RESET) : "");
+        *col += w;
+        p = end;
+    }
+}
+
+// The description column after a left part that ended at column `left`:
+// on the same line when it fits, else on the next line, indented.
+static void describe(const CliStyle *s, int left, int col_at, const char *help, const char *def) {
+    int indent = col_at;
+    if (s->width > 0 && s->width - col_at < 24) {
+        indent = 8;
+    }
+    int col;
+    if (left + 2 <= indent) {
+        pad(indent - left);
+        col = indent;
+    } else if (s->width == 0) {
+        // Unwrapped (a pipe): keep the entry on its one line for grep.
+        pad(2);
+        col = left + 2;
+    } else {
+        putchar('\n');
+        pad(indent);
+        col = indent;
+    }
+    if (help && help[0]) {
+        wrap_words(s, help, "", indent, &col);
+    }
+    if (def) {
+        char buf[256];
+        snprintf(buf, sizeof(buf), "[default: %s]", def);
+        wrap_words(s, buf, HELP_GRAY, indent, &col);
+    }
+    putchar('\n');
+}
+
+// "  -x, --name <VALUE>..." and "      --name": the short slot is always six
+// columns wide, filled or not.
+static int option_left_cols(const char *name, const char *value, bool multi) {
+    int w = 2 + 4 + 2 + text_cols(name, strlen(name));
+    if (value) {
+        w += 3 + text_cols(value, strlen(value)) + (multi ? 3 : 0);
+    }
+    return w;
+}
+
+static void print_option(const CliStyle *s, int col_at, char short_name, const char *name, const char *value,
+                         bool multi, const char *help, const char *def) {
+    if (short_name) {
+        printf("  %s-%c%s, ", sty(s, HELP_CYAN), short_name, sty(s, HELP_RESET));
+    } else {
+        printf("      ");
+    }
+    printf("%s--%s%s", sty(s, HELP_CYAN), name, sty(s, HELP_RESET));
+    if (value) {
+        printf(" %s<%s>%s%s", sty(s, HELP_YELLOW), value, multi ? "..." : "", sty(s, HELP_RESET));
+    }
+    describe(s, option_left_cols(name, value, multi), col_at, help, def);
+}
+
+static void heading(const CliStyle *s, const char *text) {
+    printf("%s%s%s%s\n", sty(s, HELP_CYAN), sty(s, HELP_BOLD), text, sty(s, HELP_RESET));
+}
+
+static int options_column(const CliOptHelp *opts, size_t n) {
+    int widest = 0;
+    for (size_t i = 0; i < n; i++) {
+        int w = option_left_cols(opts[i].name, opts[i].value, opts[i].multi);
+        if (w > widest && w <= HELP_LEFT_MAX) {
+            widest = w;
+        }
+    }
+    return widest + 2;
+}
+
+static void print_effect_rows(const CliStyle *s, size_t from, size_t to) {
     for (size_t i = from; i < to; i++) {
         const EffectEntry *entry = effect_entry_at(i);
         if (!entry) {
             continue;
         }
-        printf("%s", entry->name);
-        col++;
-        if (col % 5 == 0) {
-            printf("\n  ");
-        } else {
-            printf(" ");
-        }
+        const CliEffectHelp *h = cli_help_effect(entry->name);
+        printf("  %s%s%s%s", sty(s, HELP_EMERALD), sty(s, HELP_BOLD), entry->name, sty(s, HELP_RESET));
+        describe(s, 2 + text_cols(entry->name, strlen(entry->name)), HELP_EFFECT_COL, h ? h->about : "",
+                 NULL);
     }
 }
 
-void cli_print_help(void) {
-    printf("glyphfx %s\n", GLYPHFX_VERSION);
-    printf("Terminal text effects.\n\n");
-    printf("Usage: <producer> | glyphfx [OPTIONS] <effect> [effect options]\n\n");
-    printf("Options:\n");
+void cli_print_help(const CliStyle *s, bool after_logo) {
+    if (after_logo) {
+        printf("  %sv%s%s %sterminal text effects, in C17%s\n\n", sty(s, HELP_GRAY), GLYPHFX_VERSION,
+               sty(s, HELP_RESET), sty(s, HELP_EMERALD), sty(s, HELP_RESET));
+    } else {
+        printf("%s%sglyphfx%s %s%s%s - terminal text effects, in C17\n\n", sty(s, HELP_EMERALD),
+               sty(s, HELP_BOLD), sty(s, HELP_RESET), sty(s, HELP_GRAY), GLYPHFX_VERSION, sty(s, HELP_RESET));
+    }
+    // Usage lines wrap like everything else, under the text after "Usage: ".
+    int col = 7;
+    printf("%sUsage:%s ", sty(s, HELP_BOLD), sty(s, HELP_RESET));
+    wrap_words(s, "<producer> | glyphfx [OPTIONS]", "", 7, &col);
+    wrap_words(s, "<EFFECT>", HELP_YELLOW, 7, &col);
+    wrap_words(s, "[EFFECT OPTIONS]", "", 7, &col);
+    printf("\n       ");
+    col = 7;
+    wrap_words(s, "glyphfx -i <FILE> [OPTIONS]", "", 7, &col);
+    wrap_words(s, "<EFFECT>", HELP_YELLOW, 7, &col);
+    wrap_words(s, "[EFFECT OPTIONS]", "", 7, &col);
+    printf("\n\n");
+
+    heading(s, "Options:");
+    col = options_column(CLI_ROOT_HELP, CLI_ROOT_HELP_COUNT);
     for (size_t i = 0; i < ROOT_OPTS_COUNT; i++) {
         if (ROOT_OPTS[i].hidden) {
             continue;
         }
-        char shortbuf[8] = "";
-        if (ROOT_OPTS[i].short_name) {
-            snprintf(shortbuf, sizeof(shortbuf), "-%c, ", ROOT_OPTS[i].short_name);
-        }
-        printf("  %s--%s\n", shortbuf, ROOT_OPTS[i].name);
+        const CliOptHelp *h = cli_help_option(CLI_ROOT_HELP, CLI_ROOT_HELP_COUNT, ROOT_OPTS[i].name);
+        print_option(s, col, ROOT_OPTS[i].short_name, ROOT_OPTS[i].name, h ? h->value : NULL,
+                     h ? h->multi : false, h ? h->help : "", h ? h->def : NULL);
     }
-    printf("\nEffects:\n");
-    print_effect_names(0, effect_parity_count());
-    printf("\n\nglyphfx originals (no ttfx counterpart; --random-effect draws them only via --include-effects):\n");
-    print_effect_names(effect_parity_count(), effect_entry_count());
-    printf("\n\nUse 'glyphfx <effect> --help' for options of a specific effect.\n");
+
+    printf("\n");
+    heading(s, "Effects:");
+    print_effect_rows(s, 0, effect_parity_count());
+    printf("\n");
+    heading(s, "glyphfx originals:");
+    col = 2;
+    printf("  ");
+    wrap_words(s, "no ttfx counterpart; --random-effect draws them only when named in --include-effects", HELP_GRAY,
+               2, &col);
+    printf("\n");
+    print_effect_rows(s, effect_parity_count(), effect_entry_count());
+    printf("\n");
+    col = 0;
+    wrap_words(s, "Run", "", 0, &col);
+    wrap_words(s, "glyphfx <EFFECT> --help", HELP_CYAN, 0, &col);
+    wrap_words(s, "for the options of one effect.", "", 0, &col);
+    printf("\n");
 }
 
-void cli_print_effect_help(const void *effect_entry) {
+void cli_print_effect_help(const void *effect_entry, const CliStyle *s) {
     const EffectEntry *entry = effect_entry;
     if (!entry) {
         return;
     }
-    printf("Usage: glyphfx %s [OPTIONS]\n\nOptions:\n", entry->name);
+    const CliEffectHelp *h = cli_help_effect(entry->name);
+    printf("%s%s%s%s", sty(s, HELP_EMERALD), sty(s, HELP_BOLD), entry->name, sty(s, HELP_RESET));
+    if (h && h->about[0]) {
+        int c = text_cols(entry->name, strlen(entry->name)) + 2;
+        printf("  ");
+        wrap_words(s, h->about, "", c, &c);
+    }
+    printf("\n\n%sUsage:%s glyphfx %s [OPTIONS]\n\n", sty(s, HELP_BOLD), sty(s, HELP_RESET), entry->name);
+    heading(s, "Options:");
+    int col = h ? options_column(h->opts, h->n_opts) : 0;
     for (size_t i = 0; i < entry->n_specs; i++) {
         const EffOptSpec *spec = &entry->specs[i];
-        char shortbuf[8] = "";
-        if (spec->short_name) {
-            snprintf(shortbuf, sizeof(shortbuf), "-%c, ", spec->short_name);
-        }
-        printf("  %s--%s\n", shortbuf, spec->name);
+        const CliOptHelp *o = h ? cli_help_option(h->opts, h->n_opts, spec->name) : NULL;
+        print_option(s, col, spec->short_name, spec->name, o ? o->value : NULL, o ? o->multi : false,
+                     o ? o->help : "", o ? o->def : NULL);
     }
+    print_option(s, col, 'h', "help", NULL, false, "Print this help", NULL);
+}
+
+bool cli_help_audit(void) {
+    bool ok = true;
+    for (size_t i = 0; i < ROOT_OPTS_COUNT; i++) {
+        if (!ROOT_OPTS[i].hidden && !cli_help_option(CLI_ROOT_HELP, CLI_ROOT_HELP_COUNT, ROOT_OPTS[i].name)) {
+            fprintf(stderr, "help: root option --%s is undescribed\n", ROOT_OPTS[i].name);
+            ok = false;
+        }
+    }
+    for (size_t i = 0; i < CLI_ROOT_HELP_COUNT; i++) {
+        const OptSpec *spec = find_long(CLI_ROOT_HELP[i].name);
+        if (!spec || spec->hidden) {
+            fprintf(stderr, "help: --%s is described but not a root option\n", CLI_ROOT_HELP[i].name);
+            ok = false;
+        }
+    }
+    for (size_t i = 0; i < effect_entry_count(); i++) {
+        const EffectEntry *entry = effect_entry_at(i);
+        if (!entry) {
+            fprintf(stderr, "help: registry slot %zu is not linked\n", i);
+            ok = false;
+            continue;
+        }
+        const CliEffectHelp *h = cli_help_effect(entry->name);
+        if (!h) {
+            fprintf(stderr, "help: effect %s is undescribed\n", entry->name);
+            ok = false;
+            continue;
+        }
+        for (size_t k = 0; k < entry->n_specs; k++) {
+            if (!cli_help_option(h->opts, h->n_opts, entry->specs[k].name)) {
+                fprintf(stderr, "help: %s --%s is undescribed\n", entry->name, entry->specs[k].name);
+                ok = false;
+            }
+        }
+        for (size_t k = 0; k < h->n_opts; k++) {
+            if (!eff_find(entry, h->opts[k].name)) {
+                fprintf(stderr, "help: %s --%s is described but not accepted\n", entry->name, h->opts[k].name);
+                ok = false;
+            }
+        }
+    }
+    if (CLI_EFFECT_HELP_COUNT != effect_entry_count()) {
+        fprintf(stderr, "help: %zu effects described, %zu registered\n", CLI_EFFECT_HELP_COUNT,
+                effect_entry_count());
+        ok = false;
+    }
+    return ok;
 }
 
 void cli_print_completion(const char *shell) {

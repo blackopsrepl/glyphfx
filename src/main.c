@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 #include "cli.h"
@@ -170,6 +171,42 @@ static int play(const EffectEntry *entry, const void *effect_config, TerminalCon
     }
 }
 
+// --- help ----------------------------------------------------------------
+
+// Colour only for a person at a terminal that wants it: pipes, NO_COLOR,
+// TERM=dumb and --no-color get plain text.
+static CliStyle help_style(const CliConfig *cfg, int *cols, int *rows) {
+    CliStyle style = {false, 0};
+    *cols = 0;
+    *rows = 0;
+    if (!isatty(STDOUT_FILENO)) {
+        return style;
+    }
+    struct winsize ws;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0) {
+        *cols = ws.ws_col;
+        *rows = ws.ws_row;
+    }
+    style.width = *cols > 0 ? (*cols < 100 ? *cols : 100) : 80;
+    const char *no_color = getenv("NO_COLOR");
+    const char *term = getenv("TERM");
+    style.color = !(no_color && no_color[0]) && !(term && strcmp(term, "dumb") == 0) && !cfg->tc.no_color;
+    return style;
+}
+
+// glyphfx --help, or `glyphfx <effect> --help` when an effect is named.
+static int print_help(const CliConfig *cfg, bool effect_help) {
+    int cols = 0;
+    int rows = 0;
+    CliStyle style = help_style(cfg, &cols, &rows);
+    if (effect_help) {
+        cli_print_effect_help(cfg->effect_entry, &style);
+        return 0;
+    }
+    cli_print_help(&style, false);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     restore_sigpipe();
 
@@ -183,12 +220,10 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (cfg.help) {
-        cli_print_help();
-        return 0;
+        return print_help(&cfg, false);
     }
     if (cfg.help_effect) {
-        cli_print_effect_help(cfg.effect_entry);
-        return 0;
+        return print_help(&cfg, true);
     }
     if (cfg.print_completion) {
         cli_print_completion(cfg.print_completion);

@@ -108,14 +108,27 @@ typedef struct {
 #define EF_SPEC(n, sc, k, o) \
     { .name = (n), .short_name = (sc), .kind = (k), .offset = (o), .custom = NULL }
 
+// How help text is drawn: colour (a terminal that wants it) and the wrap
+// width (0 keeps every entry on one line, for pipes and grep).
+typedef struct {
+    bool color;
+    int width;
+} CliStyle;
+
 // Returns 0 on success, 2 on usage error (message already written to stderr),
 // or 1 for a runtime error that terminates before any input handling.
 int cli_parse(int argc, char **argv, CliConfig *cfg);
 
 void cli_print_version(void);
-void cli_print_help(void);
-void cli_print_effect_help(const void *effect_entry);
+// after_logo: the wordmark was just drawn, so the header is only the version
+// line beneath it.
+void cli_print_help(const CliStyle *style, bool after_logo);
+void cli_print_effect_help(const void *effect_entry, const CliStyle *style);
 void cli_print_completion(const char *shell);
 const char *cli_effect_name(const void *effect_entry);
+// Writes every option the parser accepts but the help does not describe (and
+// every described option the parser does not accept) to stderr; true when
+// there are none.
+bool cli_help_audit(void);
 
 #endif
