@@ -42,9 +42,38 @@ static bool resolve_color_code(bool has_color, const Color *color, bool no_color
 
 // --- Scene ----------------------------------------------------------------
 
+// Scene records are pooled too, in a region that never moves: a tick dereferences
+// the scene of every character it ticks, so keeping the records adjacent is worth
+// more than freeing each one.
+static Scene *g_scenes;
+static size_t g_scenes_len;
+static size_t g_scenes_cap;
+
+#define SCENE_POOL_RESERVE ((size_t)1 << 28)  // 256 MiB of address space
+
+static Scene *scene_pool_alloc(void) {
+    if (!g_scenes) {
+#if defined(__linux__) || defined(__APPLE__)
+        void *p = mmap(NULL, SCENE_POOL_RESERVE, PROT_READ | PROT_WRITE,
+                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (p == MAP_FAILED) {
+            return NULL;
+        }
+        g_scenes = (Scene *)p;
+        g_scenes_cap = SCENE_POOL_RESERVE / sizeof(Scene);
+#else
+        return NULL;
+#endif
+    }
+    if (g_scenes_len == g_scenes_cap) {
+        return NULL;
+    }
+    return &g_scenes[g_scenes_len++];
+}
+
 static Scene *scene_new(const char *scene_id, bool is_looping, bool has_sync, SyncMetric sync, bool has_ease,
                         Easing ease, bool no_color, bool use_xterm_colors) {
-    Scene *scene = calloc(1, sizeof(Scene));
+    Scene *scene = scene_pool_alloc();
     if (!scene) {
         return NULL;
     }
@@ -71,10 +100,10 @@ void scene_free(Scene *scene) {
     if (!scene) {
         return;
     }
-    // The frames belong to the engine's pool, not to the scene.
+    // Frames and the record itself belong to the engine's pools; only the
+    // owned strings are released here.
     free(scene->scene_id);
     free(scene->frame_index_map);
-    free(scene);
 }
 
 // --- frame pool -----------------------------------------------------------

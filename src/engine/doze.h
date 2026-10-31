@@ -52,6 +52,7 @@ typedef struct {
     uint32_t *from;      // the update whose tick started the doze
     uint32_t *until;     // the last update the doze covers
     uint8_t *kind;       // DOZE_PLAIN or DOZE_EASED
+    struct Scene **scene;  // the scene the doze counts down in (pooled, stable)
     size_t nslots;
     size_t live;         // dozing characters, so the wake check is one load when none
     uint32_t count;      // updates started

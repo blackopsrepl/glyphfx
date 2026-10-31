@@ -35,6 +35,7 @@ void doze_free(Doze *d) {
     free(d->from);
     free(d->until);
     free(d->kind);
+    free(d->scene);
     memset(d, 0, sizeof(*d));
     d->cursor = CHAR_ID_NONE;
 }
@@ -61,6 +62,7 @@ bool doze_grow(Doze *d, size_t slots) {
     if (!grow_array((void **)&d->from, sizeof(uint32_t), d->nslots, cap) ||
         !grow_array((void **)&d->until, sizeof(uint32_t), d->nslots, cap) ||
         !grow_array((void **)&d->kind, sizeof(uint8_t), d->nslots, cap) ||
+        !grow_array((void **)&d->scene, sizeof(Scene *), d->nslots, cap) ||
         !grow_array((void **)&d->bits, sizeof(uint64_t), d->nwords, words) ||
         !grow_array((void **)&d->snapshot, sizeof(uint64_t), d->nwords, words)) {
         return false;
@@ -140,10 +142,14 @@ void doze_try(Doze *d, CharId id) {
     if (ch->motion.active_path) {
         return;
     }
-    Scene *scene = dozing_scene(ctx, id);
+    Scene *scene = dozing_scene(d->ctx, id);
     if (!scene || scene->is_looping || scene->has_sync || scene->head >= scene->all_frames_len) {
         return;
     }
+    // Kept per character so settling never has to walk the arena back to the
+    // scene: that random access into a 552-byte record is a cache miss on every
+    // wake, and scenes are pooled so the pointer stays valid.
+    d->scene[id] = (struct Scene *)scene;
     VisualHandle shown = ch->animation.current_visual;
     uint32_t k;
     uint8_t kind;
@@ -191,7 +197,12 @@ static void settle_through(Doze *d, CharId id, uint32_t last) {
     if (owed == 0) {
         return;
     }
-    Scene *scene = dozing_scene(d->ctx, id);
+    // The scene recorded when the doze began; the arena walk is the fallback
+    // for a character whose record predates it.
+    Scene *scene = (Scene *)d->scene[id];
+    if (!scene) {
+        scene = dozing_scene(d->ctx, id);
+    }
     if (scene) {
         apply_pure_ticks(scene, d->kind[id], owed);
     }
