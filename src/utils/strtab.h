@@ -15,6 +15,9 @@ const char *strtab_intern(const char *s);
 // process lifetime; 0 means "no name". Event keys compare handles instead of
 // strings (plan 7.2), so a lookup is an integer compare.
 uint32_t strtab_handle(const char *s);
+// Handles for n names, resolved once (heap array, caller frees; NULL on
+// allocation failure). Effects keep these instead of re-interning per frame.
+uint32_t *strtab_handles(char *const *names, size_t n);
 
 typedef struct {
     const char *text;
@@ -30,6 +33,24 @@ static inline const char *strtab_name(uint32_t handle) {
 // Byte length recorded when the name was interned, without hashing or scanning.
 static inline size_t strtab_length(uint32_t handle) {
     return handle && handle <= g_strtab_used ? g_strtab_names[handle - 1].len : 0;
+}
+
+// Every interned name is preceded by a header: its str_hash64, then its handle.
+#define STRTAB_HEADER 16
+// The handle of a pointer strtab_intern returned (and only such a pointer;
+// NULL gives 0): one load, no hashing.
+static inline uint32_t strtab_interned_handle(const char *interned) {
+    uint32_t handle = 0;
+    if (interned) {
+        __builtin_memcpy(&handle, interned - STRTAB_HEADER + 8, sizeof(handle));
+    }
+    return handle;
+}
+// The str_hash64 of an interned name, recorded when it was interned.
+static inline uint64_t strtab_interned_hash(const char *interned) {
+    uint64_t hash;
+    __builtin_memcpy(&hash, interned - STRTAB_HEADER, sizeof(hash));
+    return hash;
 }
 
 #endif

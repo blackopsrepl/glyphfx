@@ -116,13 +116,55 @@ bool om_contains(const OrdMap *m, const char *key) {
     return om_slot(m, key) >= 0;
 }
 
+long om_slot_interned(const OrdMap *m, const char *key) {
+    const OrdEntry *a = om_carr(m);
+    if (__builtin_expect(m->len >= OM_INDEX_MIN, 0)) {
+        size_t mask = om_idx_cap(m->len) - 1;
+        size_t i = (size_t)om_probe_hash(strtab_interned_hash(key)) & mask;
+        const uint32_t *idx = om_index(m);
+        for (;;) {
+            uint32_t s = idx[i];
+            if (s == 0) {
+                return -1;
+            }
+            if (a[s - 1].key == key) {
+                return (long)(s - 1);
+            }
+            i = (i + 1) & mask;
+        }
+    }
+    for (size_t i = 0; i < m->len; i++) {
+        if (a[i].key == key) {
+            return (long)i;
+        }
+    }
+    return -1;
+}
+
+void *om_get_interned(const OrdMap *m, const char *key) {
+    long slot = om_slot_interned(m, key);
+    return slot < 0 ? NULL : om_carr(m)[slot].value;
+}
+
 void *om_get(const OrdMap *m, const char *key) {
     long slot = om_slot(m, key);
     return slot < 0 ? NULL : om_carr(m)[slot].value;
 }
 
 void om_insert(OrdMap *m, const char *key, void *value) {
-    long slot = om_slot(m, key);
+    // Keys are interned: a character's scenes and paths repeat the same handful
+    // of names, so the map shares one copy per distinct name instead of
+    // malloc'ing one per entry. The table owns the bytes for the process
+    // lifetime, which is why om_free and om_clear never free a key. Interning
+    // first makes the duplicate check a pointer compare.
+    const char *interned = strtab_intern(key);
+    if (interned) {
+        om_insert_interned(m, interned, value);
+    }
+}
+
+void om_insert_interned(OrdMap *m, const char *interned, void *value) {
+    long slot = om_slot_interned(m, interned);
     if (slot >= 0) {
         om_arr(m)[slot].value = value;
         return;
@@ -149,12 +191,8 @@ void om_insert(OrdMap *m, const char *key, void *value) {
         m->cap = cap;
     }
     OrdEntry *a = om_arr(m);
-    // Keys are interned: a character's scenes and paths repeat the same handful
-    // of names, so the map shares one copy per distinct name instead of
-    // malloc'ing one per entry. The table owns the bytes for the process
-    // lifetime, which is why om_free and om_clear never free a key.
-    a[m->len].key = (char *)strtab_intern(key);
-    a[m->len].hash = str_hash64(key);
+    a[m->len].key = (char *)interned;
+    a[m->len].hash = strtab_interned_hash(interned);
     a[m->len].value = value;
     m->len++;
     if (m->len >= OM_INDEX_MIN) {

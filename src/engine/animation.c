@@ -16,16 +16,6 @@
 #include "utils/pycompat.h"
 #include "utils/strtab.h"
 
-static char *dup_cstr(const char *s) {
-    size_t len = strlen(s);
-    char *out = malloc(len + 1);
-    if (!out) {
-        return NULL;
-    }
-    memcpy(out, s, len + 1);
-    return out;
-}
-
 static bool resolve_color_code(bool has_color, const Color *color, bool no_color, bool use_xterm_colors,
                                ColorCode *out) {
     if (!has_color || no_color) {
@@ -88,7 +78,7 @@ static Scene *scene_new(const char *scene_id, bool is_looping, bool has_sync, Sy
     if (!scene) {
         return NULL;
     }
-    scene->cold->scene_id = dup_cstr(scene_id);
+    scene->cold->scene_id = (char *)scene_id;  // interned by the caller
     scene->is_looping = is_looping;
     scene->cold->no_color = no_color;
     scene->cold->use_xterm_colors = use_xterm_colors;
@@ -108,12 +98,9 @@ void scene_wake(const Scene *scene) {
 }
 
 void scene_free(Scene *scene) {
-    if (!scene) {
-        return;
-    }
-    // Frames and the record itself belong to the engine's pools; the owned
-    // strings are released here.
-    free(scene->cold->scene_id);
+    // Frames and the record itself belong to the engine's pools, and the id
+    // is interned: nothing is owned here.
+    (void)scene;
 }
 
 // --- frame pool -----------------------------------------------------------
@@ -191,6 +178,10 @@ static bool frame_pool_grow(Scene *scene, size_t add) {
 }
 
 int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const VisualParams *params_in) {
+    return scene_add_frame_symbol(scene, strtab_handle(symbol), duration, params_in);
+}
+
+int scene_add_frame_symbol(Scene *scene, SymbolId symbol, int64_t duration, const VisualParams *params_in) {
     scene_wake(scene);
     VisualParams params = *params_in;
     if (scene->cold->has_preexisting_colors) {
@@ -230,9 +221,9 @@ int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const Vi
     Frame *frame = (Frame *)&scene->all_frames[frame_index];
     memset(frame, 0, sizeof(*frame));
     frame->visual = cached_appearance
-        ? visual_make_appearance(symbol, &params.colors, params.bold, scene->cold->no_color,
-                                 scene->cold->use_xterm_colors)
-        : visual_make(symbol, &params);
+        ? visual_make_appearance_symbol(symbol, &params.colors, params.bold, scene->cold->no_color,
+                                        scene->cold->use_xterm_colors)
+        : visual_make_symbol(symbol, &params);
     frame->duration = duration;
     scene->cold->easing_shape_for_len = 0;  // a later eased lookup re-resolves
     scene->cold->easing_total_steps += duration;
@@ -561,6 +552,10 @@ int scene_apply_gradient_to_symbols(Scene *scene, const char *const *symbols, si
         bool overflow_used2 = false;
         size_t smaller_index2 = 0;
         size_t current_repeat_factor2 = 0;
+        // The symbol index never decreases: resolve each symbol once, not
+        // once per colour step.
+        size_t resolved = SIZE_MAX;
+        SymbolId handle = 0;
         for (size_t i = 0; i < pairs_len; i++) {
             if (current_repeat_factor2 >= repeat_factor2) {
                 if (overflow_count2 > 0) {
@@ -585,7 +580,11 @@ int scene_apply_gradient_to_symbols(Scene *scene, const char *const *symbols, si
             memset(&vp, 0, sizeof(vp));
             vp.has_colors = true;
             vp.colors = pairs[i];
-            if (scene_add_frame(scene, symbols[smaller_index2], duration, &vp) != 0) {
+            if (smaller_index2 != resolved) {
+                handle = strtab_handle(symbols[smaller_index2]);
+                resolved = smaller_index2;
+            }
+            if (scene_add_frame_symbol(scene, handle, duration, &vp) != 0) {
                 rc = -1;
                 break;
             }
@@ -897,6 +896,10 @@ const char *animation_new_scene(Animation *anim, bool is_looping, bool has_sync,
         }
         scene_id = auto_id;
     }
+    scene_id = strtab_intern(scene_id);
+    if (!scene_id) {
+        return NULL;
+    }
     Scene *scene = scene_new(scene_id, is_looping, has_sync, sync, has_ease, ease, anim->no_color,
                              anim->use_xterm_colors);
     if (!scene) {
@@ -911,8 +914,8 @@ const char *animation_new_scene(Animation *anim, bool is_looping, bool has_sync,
         scene->cold->preexisting_colors.bg = anim->input_bg_color;
         scene->cold->preexisting_bold = anim->input_bold;
     }
-    om_insert(&anim->scenes, scene_id, scene);
-    return om_key_at(&anim->scenes, (size_t)om_slot(&anim->scenes, scene_id));
+    om_insert_interned(&anim->scenes, scene_id, scene);
+    return scene_id;
 }
 
 bool animation_active_scene_is_complete(const Animation *anim) {

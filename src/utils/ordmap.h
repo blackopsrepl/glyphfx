@@ -38,9 +38,15 @@ size_t om_len(const OrdMap *m);
 bool om_contains(const OrdMap *m, const char *key);
 // Index of key, or -1.
 long om_slot(const OrdMap *m, const char *key);
+// Lookups by a name strtab_intern returned: every key is interned, so equal
+// names are equal pointers and no hashing or strcmp runs.
+long om_slot_interned(const OrdMap *m, const char *key);
+void *om_get_interned(const OrdMap *m, const char *key);
 void *om_get(const OrdMap *m, const char *key);
 // Inserts or replaces, preserving position. Takes ownership of value.
 void om_insert(OrdMap *m, const char *key, void *value);
+// om_insert for a name strtab_intern returned.
+void om_insert_interned(OrdMap *m, const char *key, void *value);
 void om_set_at(OrdMap *m, size_t slot, void *value);
 const char *om_key_at(const OrdMap *m, size_t slot);
 void *om_value_at(const OrdMap *m, size_t slot);

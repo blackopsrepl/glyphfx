@@ -57,9 +57,9 @@ void segment_copy(Segment *dst, const Segment *src) {
 // delete a path and allocate a different one at the same address.
 static uint64_t next_path_identity;
 
-Path *path_new(const char *path_id, double speed, bool has_ease, Easing ease, bool has_layer, int64_t layer,
-               int64_t hold_time, bool loop_) {
-    if (speed <= 0.0) {
+static Path *path_new_interned(const char *path_id, double speed, bool has_ease, Easing ease, bool has_layer,
+                               int64_t layer, int64_t hold_time, bool loop_) {
+    if (speed <= 0.0 || !path_id) {
         return NULL;
     }
     Path *p = calloc(1, sizeof(Path));
@@ -67,7 +67,7 @@ Path *path_new(const char *path_id, double speed, bool has_ease, Easing ease, bo
         return NULL;
     }
     p->identity = ++next_path_identity;
-    p->path_id = dup_cstr(path_id);
+    p->path_id = (char *)path_id;
     p->speed = speed;
     p->has_ease = has_ease;
     p->ease = ease;
@@ -77,6 +77,11 @@ Path *path_new(const char *path_id, double speed, bool has_ease, Easing ease, bo
     p->hold_time_remaining = hold_time;
     p->loop_ = loop_;
     return p;
+}
+
+Path *path_new(const char *path_id, double speed, bool has_ease, Easing ease, bool has_layer, int64_t layer,
+               int64_t hold_time, bool loop_) {
+    return path_new_interned(strtab_intern(path_id), speed, has_ease, ease, has_layer, layer, hold_time, loop_);
 }
 
 void path_free(Path *p) {
@@ -94,7 +99,6 @@ void path_free(Path *p) {
     if (p->has_origin_segment) {
         segment_free(&p->origin_segment);
     }
-    free(p->path_id);
     free(p);
 }
 
@@ -225,8 +229,6 @@ void motion_free(Motion *m) {
         path_free((Path *)om_value_at(&m->paths, i));
     }
     om_free(&m->paths);
-    free(m->active_path);
-    free(m->completed_path);
     memset(m, 0, sizeof(*m));
 }
 
@@ -250,16 +252,18 @@ int motion_new_path(Motion *m, double speed, bool has_ease, Easing ease, bool ha
             current_id++;
         }
         path_id = auto_id;
-    } else if (om_contains(&m->paths, path_id)) {
+    }
+    const char *name = strtab_intern(path_id);
+    if (!name || (path_id != auto_id && om_slot_interned(&m->paths, name) >= 0)) {
         return -1;
     }
-    Path *p = path_new(path_id, speed, has_ease, ease, has_layer, layer, hold_time, loop_);
+    Path *p = path_new_interned(name, speed, has_ease, ease, has_layer, layer, hold_time, loop_);
     if (!p) {
         return -1;
     }
-    om_insert(&m->paths, path_id, p);
+    om_insert_interned(&m->paths, name, p);
     if (out_id) {
-        *out_id = dup_cstr(path_id);
+        *out_id = dup_cstr(name);
     }
     return 0;
 }
@@ -269,14 +273,8 @@ bool motion_movement_is_complete(const Motion *m) {
 }
 
 void motion_deactivate_path(Motion *m, const char *path_id) {
-    if (!path_id) {
-        free(m->active_path);
-        m->active_path = NULL;
-        m->active_path_slot_valid = false;
-        return;
-    }
-    if (m->active_path && strcmp(m->active_path, path_id) == 0) {
-        free(m->active_path);
+    // Active and completed ids are interned: nothing to free.
+    if (!path_id || (m->active_path && (m->active_path == path_id || strcmp(m->active_path, path_id) == 0))) {
         m->active_path = NULL;
         m->active_path_slot_valid = false;
     }
@@ -287,7 +285,6 @@ void motion_clear_paths(Motion *m) {
         path_free((Path *)om_value_at(&m->paths, i));
     }
     om_clear(&m->paths);
-    free(m->active_path);
     m->active_path = NULL;
     m->active_path_slot_valid = false;
 }

@@ -85,7 +85,7 @@ int64_t eased_frame_index(const Easing *ease, int64_t total_steps, int64_t step)
 const int32_t *eased_frame_seq(const Easing *ease, int64_t total_steps);
 
 typedef struct {
-    char *scene_id;  // owned
+    char *scene_id;  // interned (strtab), process lifetime
     Easing ease;
     int64_t easing_total_steps;
     ColorPair preexisting_colors;
@@ -161,6 +161,8 @@ void scene_free(Scene *scene);
 // Releases the engine-wide frame pool. Called between runs, like visual_free.
 void frame_pool_free(void);
 int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const VisualParams *params);
+// Handle-native: effects intern their glyphs once at build time.
+int scene_add_frame_symbol(Scene *scene, SymbolId symbol, int64_t duration, const VisualParams *params);
 // Appends every frame of src to dst. An empty destination shares src's immutable
 // pooled frame list; otherwise frames are bulk-copied into the destination tail.
 // Playback counters remain per scene and easing bookkeeping matches scene_add_frame.

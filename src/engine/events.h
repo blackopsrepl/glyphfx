@@ -85,7 +85,7 @@ typedef enum {
 
 typedef struct {
     ActionKind kind;
-    char *id;        // owned; path/scene id for activate/deactivate
+    char *id;        // interned; path/scene id for activate/deactivate
     bool has_id;     // for deactivate with no target
     int64_t layer;
     Coord coord;

@@ -103,7 +103,7 @@ static CallerKey scene_caller(const Scene *scene) {
     memset(&key, 0, sizeof(key));
     key.kind = CALLER_SCENE;
     key.id = scene->cold->scene_id;
-    key.id_handle = strtab_handle(scene->cold->scene_id);
+    key.id_handle = strtab_interned_handle(scene->cold->scene_id);
     return key;
 }
 
@@ -132,6 +132,9 @@ void engine_caller_from_waypoint(const Waypoint *wp, CallerKey *out) {
 }
 
 // --- events ---------------------------------------------------------------
+
+static void activate_path_at(EngineCtx *ctx, Effect *effect, CharId id, long slot);
+static void activate_scene_at(EngineCtx *ctx, Effect *effect, CharId id, long scene_slot);
 
 int engine_register_event(EngineCtx *ctx, CharId id, Event event, const CallerKey *caller, const EventAction *action) {
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
@@ -202,32 +205,27 @@ void engine_handle_event(EngineCtx *ctx, Effect *effect, CharId id, Event event,
         }
         const EventAction *action = event_handler_action(handler, (size_t)entry, action_index);
         // A dispatched action can append to the entry and reallocate its action
-        // list, so the action cannot be read across the dispatch. Non-callbacks
-        // only need the id to survive; keep it on the stack instead of a heap
-        // deep copy. Callbacks own argument strings, so those are deep-copied.
-        char id_buf[256];
+        // list, so the action cannot be read across the dispatch. Its id is
+        // interned and outlives that, so a shallow copy serves; callbacks own
+        // argument strings, so those are deep-copied.
         EventAction local;
-        bool deep = false;
-        size_t id_len = action->id ? strlen(action->id) : 0;
-        if (action->kind == ACTION_CALLBACK || id_len >= sizeof(id_buf)) {
+        bool deep = action->kind == ACTION_CALLBACK;
+        if (deep) {
             event_action_copy(&local, action);
-            deep = true;
         } else {
             local = *action;
-            if (action->id) {
-                memcpy(id_buf, action->id, id_len + 1);
-                local.id = id_buf;
-            }
         }
         switch (local.kind) {
             case ACTION_ACTIVATE_SCENE:
-                engine_activate_scene(ctx, effect, id, local.id);
+                activate_scene_at(ctx, effect, id,
+                                  om_slot_interned(&ctx->terminal.arena.items[id].animation.scenes, local.id));
                 break;
             case ACTION_DEACTIVATE_SCENE:
                 engine_deactivate_scene(ctx, id, local.has_id ? local.id : NULL);
                 break;
             case ACTION_ACTIVATE_PATH:
-                engine_activate_path(ctx, effect, id, local.id);
+                activate_path_at(ctx, effect, id,
+                                 om_slot_interned(&ctx->terminal.arena.items[id].motion.paths, local.id));
                 break;
             case ACTION_DEACTIVATE_PATH:
                 motion_deactivate_path(&ctx->terminal.arena.items[id].motion, local.has_id ? local.id : NULL);
@@ -282,14 +280,29 @@ static void path_insert_segment_front(Path *p, const Segment *seg) {
     segment_copy(&p->segments[0], seg);
 }
 
+static CallerKey path_caller_interned(const char *id) {
+    CallerKey key;
+    memset(&key, 0, sizeof(key));
+    key.kind = CALLER_PATH;
+    key.id = (char *)id;
+    key.id_handle = strtab_interned_handle(id);
+    return key;
+}
+
 void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char *path_id) {
+    activate_path_at(ctx, effect, id, om_slot(&ctx->terminal.arena.items[id].motion.paths, path_id));
+}
+
+// Activation by map slot: the slot's key is the interned id, so the active
+// path, its caller key and its handle all come without copying or hashing.
+static void activate_path_at(EngineCtx *ctx, Effect *effect, CharId id, long slot) {
     doze_wake(id);
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
-    long slot = om_slot(&ch->motion.paths, path_id);
     Path *p = slot < 0 ? NULL : (Path *)om_value_at(&ch->motion.paths, (size_t)slot);
     if (!p || p->waypoints_len == 0) {
         return;
     }
+    const char *path_id = om_key_at(&ch->motion.paths, (size_t)slot);
     Coord current = ch->motion.current_coord;
     const Waypoint *first = &p->waypoints[0];
     double distance_to_first = first->has_bezier
@@ -304,9 +317,7 @@ void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char 
     waypoint_copy(&new_origin.end, first);
     new_origin.distance = distance_to_first;
 
-    free(ch->motion.active_path);
-    ch->motion.active_path = malloc(strlen(path_id) + 1);
-    strcpy(ch->motion.active_path, path_id);
+    ch->motion.active_path = (char *)path_id;
     ch->motion.active_path_slot = (size_t)slot;
     ch->motion.active_path_slot_valid = true;
 
@@ -344,7 +355,7 @@ void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char 
     }
     segment_free(&new_origin);
     if (observes_event(ctx, id, EVENT_PATH_ACTIVATED)) {
-        CallerKey caller = path_caller(path_id);
+        CallerKey caller = path_caller_interned(path_id);
         engine_handle_event(ctx, effect, id, EVENT_PATH_ACTIVATED, &caller);
     }
 }
@@ -950,7 +961,7 @@ static inline void motion_move_now(EngineCtx *ctx, Effect *effect, CharId id) {
     if (p->current_step == p->max_steps) {
         if (p->hold_time != 0 && p->hold_time_remaining == p->hold_time) {
             if (observes_event(ctx, id, EVENT_PATH_HOLDING)) {
-                CallerKey caller = path_caller(active);
+                CallerKey caller = path_caller_interned(active);
                 engine_handle_event(ctx, effect, id, EVENT_PATH_HOLDING, &caller);
             }
             p->hold_time_remaining -= 1;
@@ -960,22 +971,17 @@ static inline void motion_move_now(EngineCtx *ctx, Effect *effect, CharId id) {
             p->hold_time_remaining -= 1;
             return;
         }
+        // Path ids are interned and outlive deactivation: no copies.
         if (p->loop_ && p->segments_len > 1) {
-            // Copy the id before deactivating: deactivate frees active_path.
-            char *loop_id = malloc(strlen(active) + 1);
-            strcpy(loop_id, active);
+            long slot = ch->motion.active_path_slot_valid ? (long)ch->motion.active_path_slot
+                                                          : om_slot_interned(&ch->motion.paths, active);
             motion_deactivate_path(&ch->motion, active);
-            engine_activate_path(ctx, effect, id, loop_id);
-            free(loop_id);
+            activate_path_at(ctx, effect, id, slot);
         } else {
-            char *completed = malloc(strlen(active) + 1);
-            strcpy(completed, active);
-            free(ch->motion.completed_path);
-            ch->motion.completed_path = completed;
+            ch->motion.completed_path = (char *)active;
             motion_deactivate_path(&ch->motion, active);
-            // `active` points into the freed active_path; use the owned copy.
             if (observes_event(ctx, id, EVENT_PATH_COMPLETE)) {
-                CallerKey caller = path_caller(completed);
+                CallerKey caller = path_caller_interned(active);
                 engine_handle_event(ctx, effect, id, EVENT_PATH_COMPLETE, &caller);
             }
         }
@@ -996,9 +1002,13 @@ static void set_current_visual(EngineCtx *ctx, CharId id, VisualHandle src) {
 }
 
 void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char *scene_id) {
+    activate_scene_at(ctx, effect, id, om_slot(&ctx->terminal.arena.items[id].animation.scenes, scene_id));
+}
+
+// Activation by map slot; the scene carries its interned id.
+static void activate_scene_at(EngineCtx *ctx, Effect *effect, CharId id, long scene_slot) {
     doze_wake(id);
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
-    long scene_slot = om_slot(&ch->animation.scenes, scene_id);
     Scene *scene = scene_slot < 0 ? NULL : (Scene *)om_value_at(&ch->animation.scenes, (size_t)scene_slot);
     if (!scene) {
         return;
@@ -1008,7 +1018,7 @@ void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char
     if (scene_activate(scene, &src, &fidx) != 0) {
         return;
     }
-    ch->animation.active_scene = strtab_intern(scene_id);
+    ch->animation.active_scene = scene->cold->scene_id;
     ch->animation.active_scene_ref = scene;
     set_current_visual(ctx, id, src);
     if (observes_event(ctx, id, EVENT_SCENE_ACTIVATED)) {
@@ -1025,7 +1035,7 @@ void engine_deactivate_scene(EngineCtx *ctx, CharId id, const char *scene_id) {
         anim->active_scene_ref = NULL;
         return;
     }
-    if (anim->active_scene && strcmp(anim->active_scene, scene_id) == 0) {
+    if (anim->active_scene && (anim->active_scene == scene_id || strcmp(anim->active_scene, scene_id) == 0)) {
         anim->active_scene = NULL;
         anim->active_scene_ref = NULL;
     }

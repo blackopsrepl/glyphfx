@@ -122,7 +122,7 @@ void effect_callback_copy(EffectCallback *dst, const EffectCallback *src) {
 }
 
 void event_action_free(EventAction *action) {
-    free(action->id);
+    // The id is interned: the table owns it.
     effect_callback_free(&action->cb);
     memset(action, 0, sizeof(*action));
 }
@@ -130,7 +130,7 @@ void event_action_free(EventAction *action) {
 void event_action_copy(EventAction *dst, const EventAction *src) {
     memset(dst, 0, sizeof(*dst));
     dst->kind = src->kind;
-    dst->id = dup_cstr(src->id);
+    dst->id = (char *)strtab_intern(src->id);
     dst->has_id = src->has_id;
     dst->layer = src->layer;
     dst->coord = src->coord;
