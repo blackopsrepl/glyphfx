@@ -103,6 +103,73 @@ static int run_m0_dump(const char *input, const CliConfig *cfg) {
     return 0;
 }
 
+typedef struct {
+    bool tty_output;
+    bool parity_dump;
+    bool virtual_clock;
+    bool has_max_frames;
+    uint64_t max_frames;
+} PlayOptions;
+
+// Runs one effect over the input to completion, rebuilding it when the
+// terminal is resized, and returns the process exit code. The final engine is
+// left to the process teardown.
+static int play(const EffectEntry *entry, const void *effect_config, TerminalConfig config, const char *input,
+                Rng rng, const PlayOptions *opts) {
+    for (;;) {
+        Effect *effect = entry->make(effect_config);
+        if (!effect) {
+            fputs("Error: failed to build effect.\n", stderr);
+            return 1;
+        }
+        Clock clock = (opts->parity_dump || opts->virtual_clock) ? clock_virtual_with_frame_rate(config.frame_rate)
+                                                                 : clock_real();
+        EngineCtx ctx;
+        PreprocessError pp_err;
+        memset(&pp_err, 0, sizeof(pp_err));
+        if (engine_ctx_init(&ctx, input, &config, rng, clock, &pp_err) != 0) {
+            if (pp_err.status == PREPROCESS_UNSUPPORTED_ANSI) {
+                fprintf(stderr, "Error: Unsupported ANSI sequence in input data: \"%s\"\n", pp_err.sequence);
+            } else {
+                fprintf(stderr, "Error: %s\n", pp_err.message[0] ? pp_err.message : "failed to build canvas");
+            }
+            effect->ops->destroy(effect);
+            return 1;
+        }
+        if (opts->parity_dump) {
+            int run_rc = effect_dump(effect, &ctx, opts->has_max_frames, opts->max_frames);
+            if (run_rc != 0) {
+                effect->ops->destroy(effect);
+                engine_ctx_free(&ctx);
+                fputs("Error: effect execution failed.\n", stderr);
+                return 1;
+            }
+            // On success the process is exiting: skip the arena teardown, as
+            // ttfx does; freeing tens of thousands of visuals is pure exit
+            // latency.
+            return 0;
+        }
+        RunOutcome outcome = RUN_COMPLETE;
+        int run_rc = effect_run(effect, &ctx, opts->tty_output, &outcome);
+        rng = ctx.rng;
+        if (run_rc != 0) {
+            effect->ops->destroy(effect);
+            engine_ctx_free(&ctx);
+            fputs("Error: effect execution failed.\n", stderr);
+            return 1;
+        }
+        if (outcome == RUN_RESIZED) {
+            // Rebuild in place: this engine is dropped normally.
+            effect->ops->destroy(effect);
+            engine_ctx_free(&ctx);
+            config.reuse_canvas = false;
+            continue;
+        }
+        // Final exit: leave the engine to the process teardown.
+        return outcome == RUN_INTERRUPTED ? 1 : 0;
+    }
+}
+
 int main(int argc, char **argv) {
     restore_sigpipe();
 
@@ -256,66 +323,14 @@ int main(int argc, char **argv) {
         install_sigwinch_handler();
     }
 
-    TerminalConfig config = cfg.tc;
-    int exit_code = 0;
-    for (;;) {
-        Effect *effect = entry->make(cfg.effect_config);
-        if (!effect) {
-            fputs("Error: failed to build effect.\n", stderr);
-            exit_code = 1;
-            break;
-        }
-        Clock clock = (cfg.parity_dump || cfg.virtual_clock) ? clock_virtual_with_frame_rate(config.frame_rate)
-                                                             : clock_real();
-        EngineCtx ctx;
-        PreprocessError pp_err;
-        memset(&pp_err, 0, sizeof(pp_err));
-        if (engine_ctx_init(&ctx, input, &config, rng, clock, &pp_err) != 0) {
-            if (pp_err.status == PREPROCESS_UNSUPPORTED_ANSI) {
-                fprintf(stderr, "Error: Unsupported ANSI sequence in input data: \"%s\"\n", pp_err.sequence);
-            } else {
-                fprintf(stderr, "Error: %s\n", pp_err.message[0] ? pp_err.message : "failed to build canvas");
-            }
-            effect->ops->destroy(effect);
-            exit_code = 1;
-            break;
-        }
-        if (cfg.parity_dump) {
-            int run_rc = effect_dump(effect, &ctx, cfg.has_max_frames, cfg.max_frames);
-            if (run_rc != 0) {
-                effect->ops->destroy(effect);
-                engine_ctx_free(&ctx);
-                fputs("Error: effect execution failed.\n", stderr);
-                exit_code = 1;
-            }
-            // On success the process is exiting: skip the arena teardown, as
-            // ttfx does; freeing tens of thousands of visuals is pure exit
-            // latency.
-            break;
-        }
-        RunOutcome outcome = RUN_COMPLETE;
-        int run_rc = effect_run(effect, &ctx, tty_output, &outcome);
-        rng = ctx.rng;
-        if (run_rc != 0) {
-            effect->ops->destroy(effect);
-            engine_ctx_free(&ctx);
-            fputs("Error: effect execution failed.\n", stderr);
-            exit_code = 1;
-            break;
-        }
-        if (outcome == RUN_RESIZED) {
-            // Rebuild in place: this engine is dropped normally.
-            effect->ops->destroy(effect);
-            engine_ctx_free(&ctx);
-            config.reuse_canvas = false;
-            continue;
-        }
-        // Final exit: leave the engine to the process teardown.
-        if (outcome == RUN_INTERRUPTED) {
-            exit_code = 1;
-        }
-        break;
-    }
+    PlayOptions play_opts = {
+        .tty_output = tty_output,
+        .parity_dump = cfg.parity_dump,
+        .virtual_clock = cfg.virtual_clock,
+        .has_max_frames = cfg.has_max_frames,
+        .max_frames = cfg.max_frames,
+    };
+    int exit_code = play(entry, cfg.effect_config, cfg.tc, input, rng, &play_opts);
 
     entry->free_config(cfg.effect_config);
     free(cfg.effect_config);
