@@ -435,7 +435,7 @@ static int binarypath_build(Effect *self, EngineCtx *ctx) {
 
     for (size_t i = 0; i < characters_len && rc == 0; i++) {
         CharId id = characters[i];
-        char *input_symbol = bp_dup(ctx->terminal.arena.items[id].input_symbol);
+        const char *input_symbol = ctx->terminal.arena.items[id].input_symbol;
         bool uses_pre = ctx->terminal.arena.items[id].uses_input_preexisting_colors;
         ColorPair final_colors;
         memset(&final_colors, 0, sizeof(final_colors));
@@ -569,7 +569,6 @@ static int binarypath_build(Effect *self, EngineCtx *ctx) {
         if (has_brighten_bg_gradient) {
             gradient_free(&brighten_bg);
         }
-        free(input_symbol);
     }
 
     st->max_active_binary_groups =

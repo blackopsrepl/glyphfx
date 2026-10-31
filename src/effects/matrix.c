@@ -512,7 +512,7 @@ static int matrix_build(Effect *self, EngineCtx *ctx) {
     for (size_t i = 0; i < chars_len && rc == 0; i++) {
         CharId id = characters[i];
         EffectCharacter *ch = &ctx->terminal.arena.items[id];
-        char *input_symbol = dup_cstr(ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
         Coord input_coord = ch->input_coord;
         bool has_input_fg = ch->animation.has_input_fg;
         Color input_fg = ch->animation.input_fg_color;
@@ -620,7 +620,6 @@ static int matrix_build(Effect *self, EngineCtx *ctx) {
                 }
             }
         }
-        free(input_symbol);
     }
     free(characters);
     coordcolormap_free(&final_gradient_mapping);

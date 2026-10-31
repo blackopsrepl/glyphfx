@@ -357,8 +357,7 @@ static int beams_build(Effect *self, EngineCtx *ctx) {
         for (size_t ci = 0; ci < group->characters.len && rc == 0; ci++) {
             CharId id = group->characters.items[ci];
             EffectCharacter *ch = &ctx->terminal.arena.items[id];
-            char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-            strcpy(input_symbol, ch->input_symbol);
+            const char *input_symbol = ch->input_symbol;
             bool uses_pre = ch->uses_input_preexisting_colors;
 
             animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, no_ease, "beam_row",
@@ -495,7 +494,6 @@ static int beams_build(Effect *self, EngineCtx *ctx) {
             if (has_bg_bright) {
                 gradient_free(&bg_bright);
             }
-            free(input_symbol);
         }
     }
 

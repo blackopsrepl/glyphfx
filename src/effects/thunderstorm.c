@@ -336,14 +336,13 @@ static void initialize_raindrop(void *user, EngineCtx *ctx, CharId id) {
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
     ch->layer = 1;
     renderer_layer(id, 1);
-    char *input_symbol = dup_cstr(ch->input_symbol);
+    const char *input_symbol = ch->input_symbol;
     bool uses_pre = ch->uses_input_preexisting_colors;
     ColorPair colors;
     memset(&colors, 0, sizeof(colors));
     colors.has_fg = true;
     color_from_hex("aaaaff", &colors.fg);
     animation_set_appearance(&ctx->terminal.arena.items[id].animation, uses_pre, input_symbol, &colors);
-    free(input_symbol);
 }
 
 /// build_spark_pool's _build_spark_characters.
@@ -352,7 +351,7 @@ static void initialize_spark(void *user, EngineCtx *ctx, CharId id) {
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
     ch->layer = 2;
     renderer_layer(id, 2);
-    char *input_symbol = dup_cstr(ch->input_symbol);
+    const char *input_symbol = ch->input_symbol;
     bool uses_pre = ch->uses_input_preexisting_colors;
     Easing ease = easing_named(EASE_IN_CIRC);
     const char *spark_scn = animation_new_scene(&ctx->terminal.arena.items[id].animation, false, false,
@@ -368,7 +367,6 @@ static void initialize_spark(void *user, EngineCtx *ctx, CharId id) {
             scene_add_frame(scene, input_symbol, init->cooling_frames, &vp);
         }
     }
-    free(input_symbol);
 }
 
 /// ThunderstormIterator._setup_raindrop.
@@ -514,14 +512,12 @@ static void setup_lightning_strike(Effect *self, EngineCtx *ctx, CharId branch_n
         {
             EffectCharacter *ch = &ctx->terminal.arena.items[strike_char];
             motion_set_coordinate(&ch->motion, coord_new(column, row));
-            char *input_symbol = dup_cstr(ch->input_symbol);
             bool uses_pre = ch->uses_input_preexisting_colors;
             ColorPair colors;
             memset(&colors, 0, sizeof(colors));
             colors.has_fg = true;
             colors.fg = st->config.lightning_color;
             animation_set_appearance(&ctx->terminal.arena.items[strike_char].animation, uses_pre, symbol, &colors);
-            free(input_symbol);
         }
         row -= 1;
         if (strcmp(symbol, "\\") == 0) {
@@ -797,7 +793,7 @@ static int thunderstorm_build(Effect *self, EngineCtx *ctx) {
     for (size_t i = 0; i < all_len && rc == 0; i++) {
         CharId id = all_chars[i];
         EffectCharacter *ch = &ctx->terminal.arena.items[id];
-        char *input_symbol = dup_cstr(ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
         Coord input_coord = ch->input_coord;
         bool uses_pre = ch->uses_input_preexisting_colors;
         bool has_input_fg = ch->animation.has_input_fg;
@@ -832,7 +828,6 @@ static int thunderstorm_build(Effect *self, EngineCtx *ctx) {
         Color glow_stops[2] = {cfg->glowing_text_color, storm_colors.fg};
         Gradient glow_fg_gradient;
         if (gradient_with_steps(glow_stops, 2, 7, false, &glow_fg_gradient) != 0) {
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -988,7 +983,6 @@ static int thunderstorm_build(Effect *self, EngineCtx *ctx) {
         if (rc == 0) {
             terminal_set_character_visibility(&ctx->terminal, id, true);
         }
-        free(input_symbol);
     }
 
     // reference character callback: signals the pre-storm fade completed

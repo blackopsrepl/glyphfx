@@ -141,8 +141,7 @@ static int decrypt_make_decrypting_scenes(Effect *self, EngineCtx *ctx, CharId i
     bool has_input_bg = ch->animation.has_input_bg;
     Color input_bg = ch->animation.input_bg_color;
     bool uses_pre = ch->uses_input_preexisting_colors;
-    char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-    strcpy(input_symbol, ch->input_symbol);
+    const char *input_symbol = ch->input_symbol;
 
     animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, (Easing){0}, "fast_decrypt", uses_pre);
     Scene *fast = (Scene *)om_get(&ch->animation.scenes, "fast_decrypt");
@@ -257,7 +256,6 @@ static int decrypt_make_decrypting_scenes(Effect *self, EngineCtx *ctx, CharId i
         }
     }
 
-    free(input_symbol);
     return rc;
 }
 

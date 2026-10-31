@@ -298,8 +298,7 @@ static void copy_cstr(char *dst, size_t cap, const char *src) {
 static int ring_add_character(Rings *st, EngineCtx *ctx, Ring *ring, CharId id, bool clockwise) {
     bool dynamic = ctx->terminal.config.existing_color_handling == EXISTING_COLOR_DYNAMIC;
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
-    char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-    strcpy(input_symbol, ch->input_symbol);
+    const char *input_symbol = ch->input_symbol;
     bool uses_pre = ch->uses_input_preexisting_colors;
 
     Easing no_ease;
@@ -442,7 +441,6 @@ static int ring_add_character(Rings *st, EngineCtx *ctx, Ring *ring, CharId id, 
         free(ring_paths[i]);
     }
     free(ring_paths);
-    free(input_symbol);
     return rc;
 }
 
@@ -576,8 +574,7 @@ static int rings_build(Effect *self, EngineCtx *ctx) {
         CharId id = characters[i];
         EffectCharacter *ch = &ctx->terminal.arena.items[id];
         Coord input_coord = ch->input_coord;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
         bool uses_pre = ch->uses_input_preexisting_colors;
         ColorPair final_colors;
         memset(&final_colors, 0, sizeof(final_colors));
@@ -635,7 +632,6 @@ static int rings_build(Effect *self, EngineCtx *ctx) {
             terminal_set_character_visibility(&ctx->terminal, id, true);
             idvec_push(&pending, id);
         }
-        free(input_symbol);
     }
     free(characters);
 

@@ -571,8 +571,7 @@ static int synthgrid_build(Effect *self, EngineCtx *ctx) {
             for (size_t k = 0; k < group->len && rc == 0; k++) {
                 CharId character = group->items[k];
                 EffectCharacter *ch = &ctx->terminal.arena.items[character];
-                char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-                strcpy(input_symbol, ch->input_symbol);
+                const char *input_symbol = ch->input_symbol;
                 bool uses_pre = ch->uses_input_preexisting_colors;
                 const char *dissolve_scn = animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false,
                                                                ease, "", uses_pre);
@@ -627,7 +626,6 @@ static int synthgrid_build(Effect *self, EngineCtx *ctx) {
                     }
                     free(action.cb.args);
                 }
-                free(input_symbol);
             }
         }
     }

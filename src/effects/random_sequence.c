@@ -144,8 +144,7 @@ static int rs_build(Effect *self, EngineCtx *ctx) {
             }
         }
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
 
         terminal_set_character_visibility(&ctx->terminal, id, false);
         Easing no_ease;
@@ -217,7 +216,6 @@ static int rs_build(Effect *self, EngineCtx *ctx) {
 
         engine_activate_scene(ctx, self, id, scene_id);
         pending_push(st, id);
-        free(input_symbol);
         if (rc != 0) {
             break;
         }

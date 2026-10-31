@@ -176,8 +176,7 @@ static int print_make_row(Effect *self, EngineCtx *ctx, const CharId *chars, siz
         if (!all_spaces && ch->input_coord.column > right_extent) {
             continue;
         }
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
         int64_t input_column = ch->input_coord.column;
         bool uses_pre = ch->uses_input_preexisting_colors;
 
@@ -287,7 +286,6 @@ static int print_make_row(Effect *self, EngineCtx *ctx, const CharId *chars, siz
             engine_activate_scene(ctx, self, id, typed_animation);
             row_push_untyped(out, id);
         }
-        free(input_symbol);
     }
     return rc;
 }

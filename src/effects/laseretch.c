@@ -163,9 +163,7 @@ static void laseretch_initialize_spark(void *user, EngineCtx *ctx, CharId spark)
     EffectCharacter *ch = &ctx->terminal.arena.items[spark];
     ch->layer = 2;
     renderer_layer(spark, 2);
-    size_t sym_len = strlen(ch->input_symbol);
-    char *input_symbol = malloc(sym_len + 1);
-    strcpy(input_symbol, ch->input_symbol);
+    const char *input_symbol = ch->input_symbol;
     bool uses_pre = ch->uses_input_preexisting_colors;
     Easing ease;
     memset(&ease, 0, sizeof(ease));
@@ -180,7 +178,6 @@ static void laseretch_initialize_spark(void *user, EngineCtx *ctx, CharId spark)
     Scene *run = shareable ? framemo_get(init->runs, input_symbol, init->colors[0]) : NULL;
     if (run) {
         if (scene_append_frames(scene, run) != 0) {
-            free(input_symbol);
             return;
         }
     } else if (scene) {
@@ -196,7 +193,6 @@ static void laseretch_initialize_spark(void *user, EngineCtx *ctx, CharId spark)
             (void)framemo_put(init->runs, input_symbol, init->colors[0], scene);
         }
     }
-    free(input_symbol);
 }
 
 /// LaserEtchIterator._has_input_colors.
@@ -344,9 +340,7 @@ static Laser *laseretch_make_laser(Effect *self, EngineCtx *ctx) {
         col += 1;
         idvec_push(&laser->beam_chars, &laser->beam_chars_len, &laser->beam_chars_cap, char_id);
         EffectCharacter *ch = &ctx->terminal.arena.items[char_id];
-        size_t sym_len = strlen(ch->input_symbol);
-        char *input_symbol = malloc(sym_len + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
         bool uses_pre = ch->uses_input_preexisting_colors;
         Easing ease;
         memset(&ease, 0, sizeof(ease));
@@ -364,7 +358,6 @@ static Laser *laseretch_make_laser(Effect *self, EngineCtx *ctx) {
                 scene_add_frame(scene, input_symbol, 3, &vp);
             }
         }
-        free(input_symbol);
         if (lg_len > 0) {
             rot = (rot + 1) % lg_len;
         }
@@ -415,8 +408,7 @@ static int laseretch_build(Effect *self, EngineCtx *ctx) {
         CharId id = characters[i];
         EffectCharacter *ch = &ctx->terminal.arena.items[id];
         Coord input_coord = ch->input_coord;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
         bool has_input_fg = ch->animation.has_input_fg;
         Color input_fg = ch->animation.input_fg_color;
         bool has_input_bg = ch->animation.has_input_bg;
@@ -440,7 +432,6 @@ static int laseretch_build(Effect *self, EngineCtx *ctx) {
             if (gradient_with_steps(cfg->cool_gradient_stops.items, cfg->cool_gradient_stops.len, 8, false,
                                     &cool_gradient) != 0) {
                 rc = -1;
-                free(input_symbol);
                 break;
             }
             has_final_fg = pair.has_fg;
@@ -462,7 +453,6 @@ static int laseretch_build(Effect *self, EngineCtx *ctx) {
             free(stops);
             if (g_rc != 0) {
                 rc = -1;
-                free(input_symbol);
                 break;
             }
             has_final_fg = pair.has_fg;
@@ -568,7 +558,6 @@ static int laseretch_build(Effect *self, EngineCtx *ctx) {
         if (rc == 0) {
             engine_activate_scene(ctx, self, id, "spawn");
         }
-        free(input_symbol);
     }
     free(characters);
     coordcolormap_free(&final_gradient_mapping);

@@ -117,8 +117,7 @@ static int highlight_build(Effect *self, EngineCtx *ctx) {
         Color input_bg = ch->animation.input_bg_color;
         Coord input_coord = ch->input_coord;
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
 
         bool base_present;
         Color base_color;
@@ -199,7 +198,6 @@ static int highlight_build(Effect *self, EngineCtx *ctx) {
         if (rc == 0) {
             terminal_set_character_visibility(&ctx->terminal, id, true);
         }
-        free(input_symbol);
     }
 
     free(characters);

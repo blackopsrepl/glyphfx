@@ -176,8 +176,7 @@ static int crumble_build(Effect *self, EngineCtx *ctx) {
         bool has_input_bg = ch->animation.has_input_bg;
         Color input_bg = ch->animation.input_bg_color;
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
 
         const Color *mapped = coordcolormap_get(&final_gradient_mapping, input_coord);
         Color final_color;
@@ -291,7 +290,6 @@ static int crumble_build(Effect *self, EngineCtx *ctx) {
         }
 
         if (rc != 0) {
-            free(input_symbol);
             break;
         }
 
@@ -492,7 +490,6 @@ static int crumble_build(Effect *self, EngineCtx *ctx) {
         }
 
         free(fall_path);
-        free(input_symbol);
         if (has_weaken_fg) gradient_free(&weaken_fg);
         if (has_weaken_bg) gradient_free(&weaken_bg);
         if (has_flash_fg) gradient_free(&flash_fg);

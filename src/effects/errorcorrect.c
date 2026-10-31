@@ -81,8 +81,7 @@ void errorcorrect_free_config(void *cfg_ptr) {
 // ErrorCorrectIterator._get_dynamic_final_scene.
 static const char *errorcorrect_dynamic_final_scene(EngineCtx *ctx, ErrorCorrectConfig *cfg, CharId id) {
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
-    char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-    strcpy(input_symbol, ch->input_symbol);
+    const char *input_symbol = ch->input_symbol;
     bool has_input_fg = ch->animation.has_input_fg;
     Color input_fg = ch->animation.input_fg_color;
     bool has_input_bg = ch->animation.has_input_bg;
@@ -128,7 +127,6 @@ static const char *errorcorrect_dynamic_final_scene(EngineCtx *ctx, ErrorCorrect
     if (has_bg_grad) {
         gradient_free(&bg_grad);
     }
-    free(input_symbol);
     return final_scene;
 }
 
@@ -139,8 +137,7 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
     bool dynamic = ctx->terminal.config.existing_color_handling == EXISTING_COLOR_DYNAMIC;
 
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
-    char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-    strcpy(input_symbol, ch->input_symbol);
+    const char *input_symbol = ch->input_symbol;
     bool uses_pre = ch->uses_input_preexisting_colors;
 
     Easing no_ease;
@@ -160,7 +157,6 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
         vp.colors.has_fg = true;
         vp.colors.fg = cfg->error_color;
         if (scene_add_frame(first_scene, BLOCK_WIPE_START[i], 3, &vp) != 0) {
-            free(input_symbol);
             return -1;
         }
     }
@@ -176,7 +172,6 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
             vp.colors.has_fg = true;
             vp.colors.fg = cfg->correct_color;
             if (scene_add_frame(last_scene, BLOCK_WIPE_END[i], 3, &vp) != 0) {
-                free(input_symbol);
                 return -1;
             }
         }
@@ -185,7 +180,6 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
         vp.has_colors = true;
         vp.colors = final_colors;
         if (scene_add_frame(last_scene, BLOCK_WIPE_END[6], 3, &vp) != 0) {
-            free(input_symbol);
             return -1;
         }
     } else {
@@ -196,7 +190,6 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
             vp.colors.has_fg = true;
             vp.colors.fg = cfg->correct_color;
             if (scene_add_frame(last_scene, BLOCK_WIPE_END[i], 3, &vp) != 0) {
-                free(input_symbol);
                 return -1;
             }
         }
@@ -213,7 +206,6 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
         vp.colors.has_fg = true;
         vp.colors.fg = cfg->error_color;
         if (scene_add_frame(initial, input_symbol, 1, &vp) != 0) {
-            free(input_symbol);
             return -1;
         }
     }
@@ -232,7 +224,6 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
         vp.colors.has_fg = true;
         vp.colors.fg = cfg->error_color;
         if (scene_add_frame(err, "▓", 3, &vp) != 0) {
-            free(input_symbol);
             return -1;
         }
         memset(&vp, 0, sizeof(vp));
@@ -240,7 +231,6 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
         vp.colors.has_fg = true;
         vp.colors.fg = white;
         if (scene_add_frame(err, input_symbol, 3, &vp) != 0) {
-            free(input_symbol);
             return -1;
         }
     }
@@ -252,7 +242,6 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
     {
         const char *symbols[1] = {"█"};
         if (scene_apply_gradient_to_symbols(corr, symbols, 1, 3, correcting_gradient, NULL) != 0) {
-            free(input_symbol);
             return -1;
         }
     }
@@ -265,7 +254,6 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
         Color stops[2] = {cfg->correct_color, final_fg};
         Gradient char_final_gradient;
         if (gradient_with_steps(stops, 2, 10, false, &char_final_gradient) != 0) {
-            free(input_symbol);
             return -1;
         }
         ch = &ctx->terminal.arena.items[id];
@@ -275,7 +263,6 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
         int add_rc = scene_apply_gradient_to_symbols(scene, symbols, 1, 3, &char_final_gradient, NULL);
         gradient_free(&char_final_gradient);
         if (add_rc != 0) {
-            free(input_symbol);
             return -1;
         }
     }
@@ -361,7 +348,6 @@ static int errorcorrect_configure_swapped(Effect *self, EngineCtx *ctx, CharId i
         }
     }
 
-    free(input_symbol);
     return rc;
 }
 
@@ -426,8 +412,7 @@ static int errorcorrect_build(Effect *self, EngineCtx *ctx) {
         EffectCharacter *ch = &ctx->terminal.arena.items[id];
         ColorPair spawn_colors = st->final_colors[id];
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
 
         const char *spawn_scene =
             animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, no_ease, "", uses_pre);
@@ -442,7 +427,6 @@ static int errorcorrect_build(Effect *self, EngineCtx *ctx) {
             engine_activate_scene(ctx, self, id, spawn_scene);
             terminal_set_character_visibility(&ctx->terminal, id, true);
         }
-        free(input_symbol);
     }
 
     size_t all_len = ctx->terminal.input_characters_len;

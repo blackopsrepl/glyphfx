@@ -377,8 +377,7 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
             EffectCharacter *ch = &ctx->terminal.arena.items[id];
             Coord input_coord = ch->input_coord;
             bool uses_pre = ch->uses_input_preexisting_colors;
-            char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-            strcpy(input_symbol, ch->input_symbol);
+            const char *input_symbol = ch->input_symbol;
 
             motion_set_coordinate(&ctx->terminal.arena.items[id].motion, swarm_spawn);
             const char *flash_scn = animation_new_scene(&ctx->terminal.arena.items[id].animation, false, true,
@@ -395,7 +394,6 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
                 }
             }
             if (rc != 0) {
-                free(input_symbol);
                 break;
             }
 
@@ -485,14 +483,12 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
                 }
             }
             if (rc != 0) {
-                free(input_symbol);
                 break;
             }
 
             char *input_path = NULL;
             if (motion_new_path(&ctx->terminal.arena.items[id].motion, 0.45, true,
                                 easing_named(EASE_IN_OUT_QUAD), false, 0, 0, false, "", &input_path) != 0) {
-                free(input_symbol);
                 rc = -1;
                 break;
             }
@@ -502,7 +498,6 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
             if (path_new_waypoint(p, input_coord, NULL, 0, "", &wp) != 0) {
                 waypoint_free(&wp);
                 free(input_path);
-                free(input_symbol);
                 rc = -1;
                 break;
             }
@@ -518,7 +513,6 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
                     Color cstops[2] = {cfg->flash_color, dynamic_clear_color};
                     if (gradient_with_steps(cstops, 2, 10, false, &clear_gradient) != 0) {
                         free(input_path);
-                        free(input_symbol);
                         rc = -1;
                         break;
                     }
@@ -587,7 +581,6 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
                 Color lstops[2] = {cfg->flash_color, final_fg};
                 if (gradient_with_steps(lstops, 2, 10, false, &landing_gradient) != 0) {
                     free(input_path);
-                    free(input_symbol);
                     rc = -1;
                     break;
                 }
@@ -607,7 +600,6 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
             }
             if (rc != 0) {
                 free(input_path);
-                free(input_symbol);
                 break;
             }
 
@@ -650,7 +642,6 @@ static int swarm_build(Effect *self, EngineCtx *ctx) {
             }
 
             free(input_path);
-            free(input_symbol);
         }
 
         gradient_free(&swarm_gradient);

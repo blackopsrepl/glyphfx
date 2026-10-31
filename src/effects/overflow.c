@@ -237,8 +237,8 @@ static int overflow_build(Effect *self, EngineCtx *ctx) {
                 for (size_t k = 0; k < row->len && rc == 0; k++) {
                     CharId id = row->items[k];
                     EffectCharacter *ch = &ctx->terminal.arena.items[id];
-                    char *symbol = malloc(strlen(ch->input_symbol) + 1);
-                    strcpy(symbol, ch->input_symbol);
+                    // Interned: survives the arena growing under ch.
+                    const char *symbol = ch->input_symbol;
                     Coord coord = ch->input_coord;
                     char *fg_seq = ch->input_ansi_fg_sequence ? strdup(ch->input_ansi_fg_sequence) : NULL;
                     bool has_fg_seq = ch->has_input_fg_seq;
@@ -252,7 +252,6 @@ static int overflow_build(Effect *self, EngineCtx *ctx) {
                     Color input_bg = ch->animation.input_bg_color;
 
                     CharId copy_id = terminal_add_character(&ctx->terminal, symbol, coord);
-                    free(symbol);
                     EffectCharacter *copy = &ctx->terminal.arena.items[copy_id];
                     copy->animation.existing_color_handling = ctx->terminal.config.existing_color_handling;
                     copy->uses_input_preexisting_colors = true;

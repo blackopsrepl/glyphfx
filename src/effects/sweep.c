@@ -162,8 +162,7 @@ static int sweep_build(Effect *self, EngineCtx *ctx) {
         Color input_bg = ch->animation.input_bg_color;
         Coord input_coord = ch->input_coord;
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
 
         ColorPair char_final;
         memset(&char_final, 0, sizeof(char_final));
@@ -252,7 +251,6 @@ static int sweep_build(Effect *self, EngineCtx *ctx) {
                 }
             }
         }
-        free(input_symbol);
     }
     free(characters);
 

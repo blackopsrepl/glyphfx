@@ -181,8 +181,7 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
         terminal_set_character_visibility(&ctx->terminal, id, true);
         EffectCharacter *ch = &ctx->terminal.arena.items[id];
         Coord input_coord = ch->input_coord;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
         bool has_input_fg = ch->animation.has_input_fg;
         Color input_fg = ch->animation.input_fg_color;
         bool has_input_bg = ch->animation.has_input_bg;
@@ -260,7 +259,6 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
             }
         }
         if (rc != 0) {
-            free(input_symbol);
             break;
         }
 
@@ -320,7 +318,6 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
             animation_set_appearance(&ctx->terminal.arena.items[id].animation, uses_pre, input_symbol,
                                      &base_colors);
         }
-        free(input_symbol);
     }
     free(characters);
 

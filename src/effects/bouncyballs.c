@@ -159,8 +159,7 @@ static int bouncyballs_build(Effect *self, EngineCtx *ctx) {
         bool has_input_bg = ch->animation.has_input_bg;
         Color input_bg = ch->animation.input_bg_color;
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
 
         const Color *mapped = coordcolormap_get(&mapping, input_coord);
         Color mapped_color;
@@ -186,7 +185,6 @@ static int bouncyballs_build(Effect *self, EngineCtx *ctx) {
         ball_vp.colors.has_fg = true;
         ball_vp.colors.fg = color;
         if (scene_add_frame(ball_scene, symbol, 1, &ball_vp) != 0) {
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -255,7 +253,6 @@ static int bouncyballs_build(Effect *self, EngineCtx *ctx) {
             }
         }
         if (rc != 0) {
-            free(input_symbol);
             break;
         }
 
@@ -265,7 +262,6 @@ static int bouncyballs_build(Effect *self, EngineCtx *ctx) {
         char *path_id = NULL;
         if (motion_new_path(&ch->motion, cfg->movement_speed, true, cfg->movement_easing, false, 0, 0, false, "",
                             &path_id) != 0) {
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -275,7 +271,6 @@ static int bouncyballs_build(Effect *self, EngineCtx *ctx) {
         if (path_new_waypoint(p, input_coord, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
             free(path_id);
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -294,13 +289,11 @@ static int bouncyballs_build(Effect *self, EngineCtx *ctx) {
         activate_final.id = (char *)final_scene_id;
         if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &activate_final) != 0) {
             free(path_id);
-            free(input_symbol);
             rc = -1;
             break;
         }
 
         free(path_id);
-        free(input_symbol);
         st->pending[pending_count++] = id;
     }
 

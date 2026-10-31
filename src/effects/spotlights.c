@@ -386,8 +386,7 @@ static int spotlights_build(Effect *self, EngineCtx *ctx) {
         bool has_input_bg = ch->animation.has_input_bg;
         Color input_bg = ch->animation.input_bg_color;
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
 
         ColorPair bright_pair;
         ColorPair dark_pair;
@@ -440,7 +439,6 @@ static int spotlights_build(Effect *self, EngineCtx *ctx) {
         }
         ch = &ctx->terminal.arena.items[id];
         animation_set_appearance(&ch->animation, uses_pre, input_symbol, &dark_pair);
-        free(input_symbol);
     }
     free(characters);
 

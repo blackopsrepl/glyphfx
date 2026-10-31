@@ -181,8 +181,7 @@ static int spray_build(Effect *self, EngineCtx *ctx) {
         EffectCharacter *ch = &ctx->terminal.arena.items[id];
         Coord input_coord = ch->input_coord;
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
 
         double speed = rng_uniform(&ctx->rng, cfg->movement_speed_range.start, cfg->movement_speed_range.end);
 
@@ -190,7 +189,6 @@ static int spray_build(Effect *self, EngineCtx *ctx) {
         char *path_id = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, speed, true, cfg->movement_easing, false, 0, 0,
                             false, "", &path_id) != 0) {
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -200,7 +198,6 @@ static int spray_build(Effect *self, EngineCtx *ctx) {
         if (path_new_waypoint(p, input_coord, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
             free(path_id);
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -216,14 +213,12 @@ static int spray_build(Effect *self, EngineCtx *ctx) {
         set_layer.layer = 1;
         if (engine_register_event(ctx, id, EVENT_PATH_ACTIVATED, &caller, &set_layer) != 0) {
             free(path_id);
-            free(input_symbol);
             rc = -1;
             break;
         }
         set_layer.layer = 0;
         if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &set_layer) != 0) {
             free(path_id);
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -265,7 +260,6 @@ static int spray_build(Effect *self, EngineCtx *ctx) {
             st->pending[pending_count++] = id;
         }
         free(path_id);
-        free(input_symbol);
     }
 
     st->pending_len = pending_count;

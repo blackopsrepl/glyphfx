@@ -180,8 +180,7 @@ static int pour_build(Effect *self, EngineCtx *ctx) {
             terminal_set_character_visibility(&ctx->terminal, id, false);
             EffectCharacter *ch = &ctx->terminal.arena.items[id];
             Coord input_coord = ch->input_coord;
-            char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-            strcpy(input_symbol, ch->input_symbol);
+            const char *input_symbol = ch->input_symbol;
             bool uses_pre = ch->uses_input_preexisting_colors;
 
             Coord start_coord;
@@ -206,7 +205,6 @@ static int pour_build(Effect *self, EngineCtx *ctx) {
             char *path_id = NULL;
             if (motion_new_path(&ctx->terminal.arena.items[id].motion, speed, true, cfg->movement_easing, false, 0,
                                 0, false, "", &path_id) != 0) {
-                free(input_symbol);
                 rc = -1;
                 break;
             }
@@ -216,7 +214,6 @@ static int pour_build(Effect *self, EngineCtx *ctx) {
             if (path_new_waypoint(p, input_coord, NULL, 0, "", &wp) != 0) {
                 waypoint_free(&wp);
                 free(path_id);
-                free(input_symbol);
                 rc = -1;
                 break;
             }
@@ -304,7 +301,6 @@ static int pour_build(Effect *self, EngineCtx *ctx) {
             if (rc == 0) {
                 engine_activate_scene(ctx, self, id, scene_id);
             }
-            free(input_symbol);
         }
         if (rc != 0) {
             break;

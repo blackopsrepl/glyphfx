@@ -615,8 +615,7 @@ static int blackhole_explode(Blackhole *st, EngineCtx *ctx, Effect *self) {
         bool has_input_bg = ch->animation.has_input_bg;
         Color input_bg = ch->animation.input_bg_color;
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
 
         CoordVec circle = find_coords_on_circle(input_coord, 3, 5, true);
         int64_t nearby_index = rng_randrange(&ctx->rng, 0, 5);
@@ -627,7 +626,6 @@ static int blackhole_explode(Blackhole *st, EngineCtx *ctx, Effect *self) {
         char *nearby_path = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, nearby_speed, true, easing_named(EASE_OUT_EXPO),
                             false, 0, 0, false, "", &nearby_path) != 0) {
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -637,7 +635,6 @@ static int blackhole_explode(Blackhole *st, EngineCtx *ctx, Effect *self) {
         if (path_new_waypoint(p, nearby_coord, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
             free(nearby_path);
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -648,7 +645,6 @@ static int blackhole_explode(Blackhole *st, EngineCtx *ctx, Effect *self) {
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, input_speed, true, easing_named(EASE_IN_CUBIC),
                             false, 0, 0, false, "", &input_path) != 0) {
             free(nearby_path);
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -658,7 +654,6 @@ static int blackhole_explode(Blackhole *st, EngineCtx *ctx, Effect *self) {
             waypoint_free(&wp);
             free(input_path);
             free(nearby_path);
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -676,7 +671,6 @@ static int blackhole_explode(Blackhole *st, EngineCtx *ctx, Effect *self) {
         if (scene_add_frame(scene, input_symbol, 1, &vp) != 0) {
             free(input_path);
             free(nearby_path);
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -766,7 +760,6 @@ static int blackhole_explode(Blackhole *st, EngineCtx *ctx, Effect *self) {
 
         free(input_path);
         free(nearby_path);
-        free(input_symbol);
     }
     free(characters);
     return rc;

@@ -364,8 +364,7 @@ static int prepare_scenes(Fireworks *st, Effect *self, EngineCtx *ctx) {
         for (size_t ii = 0; ii < shell->len && rc == 0; ii++) {
             CharId id = shell->items[ii];
             EffectCharacter *ch = &ctx->terminal.arena.items[id];
-            char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-            strcpy(input_symbol, ch->input_symbol);
+            const char *input_symbol = ch->input_symbol;
             bool has_input_fg = ch->animation.has_input_fg;
             Color input_fg = ch->animation.input_fg_color;
             bool has_input_bg = ch->animation.has_input_bg;
@@ -501,7 +500,6 @@ static int prepare_scenes(Fireworks *st, Effect *self, EngineCtx *ctx) {
                     rc = -1;
                 }
             }
-            free(input_symbol);
         }
         gradient_free(&shell_gradient);
     }

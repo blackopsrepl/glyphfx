@@ -286,8 +286,7 @@ static int slide_build(Effect *self, EngineCtx *ctx) {
         for (size_t k = 0; k < bucket->len && rc == 0; k++) {
             CharId id = original[k];
             EffectCharacter *ch = &ctx->terminal.arena.items[id];
-            char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-            strcpy(input_symbol, ch->input_symbol);
+            const char *input_symbol = ch->input_symbol;
             bool uses_pre = ch->uses_input_preexisting_colors;
             ColorPair final_colors = slide_final_colors(ctx, &mapping, dynamic, id);
 
@@ -319,7 +318,6 @@ static int slide_build(Effect *self, EngineCtx *ctx) {
             if (rc == 0) {
                 engine_activate_scene(ctx, self, id, scene_id);
             }
-            free(input_symbol);
         }
 
         free(original);

@@ -107,8 +107,7 @@ static int wipe_build(Effect *self, EngineCtx *ctx) {
             }
         }
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
 
         Easing no_ease;
         memset(&no_ease, 0, sizeof(no_ease));
@@ -141,7 +140,6 @@ static int wipe_build(Effect *self, EngineCtx *ctx) {
                 gradient_free(&wipe_gradient);
             }
         }
-        free(input_symbol);
     }
     free(characters);
     coordcolormap_free(&mapping);

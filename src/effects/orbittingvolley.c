@@ -235,14 +235,13 @@ static void ov_set_launcher_coordinates(OrbittingVolley *st, EngineCtx *ctx, siz
         color = *mapped;
     }
     EffectCharacter *ch = &ctx->terminal.arena.items[child_char];
-    char *input_symbol = ov_dup(ch->input_symbol);
+    const char *input_symbol = ch->input_symbol;
     bool uses_pre = ch->uses_input_preexisting_colors;
     ColorPair colors;
     memset(&colors, 0, sizeof(colors));
     colors.has_fg = true;
     colors.fg = color;
     animation_set_appearance(&ctx->terminal.arena.items[child_char].animation, uses_pre, input_symbol, &colors);
-    free(input_symbol);
 }
 
 static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
@@ -296,7 +295,7 @@ static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
         CharId id = characters[i];
         EffectCharacter *ch = &ctx->terminal.arena.items[id];
         Coord input_coord = ch->input_coord;
-        char *input_symbol = ov_dup(ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
         bool uses_pre = ch->uses_input_preexisting_colors;
         bool has_input_fg = ch->animation.has_input_fg;
         Color input_fg = ch->animation.input_fg_color;
@@ -354,7 +353,6 @@ static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
             animation_set_appearance(&ctx->terminal.arena.items[id].animation, uses_pre, input_symbol,
                                      &final_colors);
         }
-        free(input_symbol);
     }
     free(characters);
 
@@ -382,7 +380,7 @@ static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
     if (rc == 0) {
         CharId main_character = st->launchers[0].character;
         EffectCharacter *ch = &ctx->terminal.arena.items[main_character];
-        char *input_symbol = ov_dup(ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
         bool uses_pre = ch->uses_input_preexisting_colors;
         ColorPair colors;
         memset(&colors, 0, sizeof(colors));
@@ -392,7 +390,6 @@ static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
         }
         animation_set_appearance(&ctx->terminal.arena.items[main_character].animation, uses_pre, input_symbol,
                                  &colors);
-        free(input_symbol);
         if (ov_build_launcher_paths(st, ctx, main_character) != 0) {
             rc = -1;
         } else {

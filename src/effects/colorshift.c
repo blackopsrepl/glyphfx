@@ -174,8 +174,7 @@ static int colorshift_build(Effect *self, EngineCtx *ctx) {
         Color input_bg = ch->animation.input_bg_color;
         Coord input_coord = ch->input_coord;
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
 
         size_t shift = 0;
         size_t colors_len = gradient.len;
@@ -198,7 +197,6 @@ static int colorshift_build(Effect *self, EngineCtx *ctx) {
                 }
             }
             if (!direction_ok) {
-                free(input_symbol);
                 rc = -1;
                 break;
             }
@@ -224,7 +222,6 @@ static int colorshift_build(Effect *self, EngineCtx *ctx) {
         animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, no_ease, "gradient", uses_pre);
         Scene *gradient_scene = (Scene *)om_get(&ch->animation.scenes, "gradient");
         if (!gradient_scene) {
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -265,7 +262,6 @@ static int colorshift_build(Effect *self, EngineCtx *ctx) {
                 scene_set_frame_run(gradient_scene, rotated) != 0) rc = -1;
         }
         if (rc != 0) {
-            free(input_symbol);
             break;
         }
 
@@ -343,7 +339,6 @@ static int colorshift_build(Effect *self, EngineCtx *ctx) {
             }
         }
         if (rc != 0) {
-            free(input_symbol);
             break;
         }
 
@@ -359,11 +354,9 @@ static int colorshift_build(Effect *self, EngineCtx *ctx) {
         callback_action.kind = ACTION_CALLBACK;
         callback_action.cb.id = 0;
         if (engine_register_event(ctx, id, EVENT_SCENE_COMPLETE, &caller, &callback_action) != 0) {
-            free(input_symbol);
             rc = -1;
             break;
         }
-        free(input_symbol);
     }
 
     framemo_free(gradient_runs);
