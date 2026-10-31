@@ -94,9 +94,8 @@ typedef struct {
     SyncMetric sync;
     bool has_ease;
     Easing ease;
-    Frame *all_frames;
+    Frame *all_frames;  // into the engine's frame pool (see frame_pool_free)
     size_t all_frames_len;
-    size_t all_frames_cap;
     // The remaining queue is just a head index into all_frames: frames retire
     // in order, reset restores the original order, and the synced/eased steps
     // index the remaining queue without reordering it. Reaching all_frames_len
@@ -149,6 +148,8 @@ void animation_clear_scenes(Animation *anim);
 
 // Scene operations.
 void scene_free(Scene *scene);
+// Releases the engine-wide frame pool. Called between runs, like visual_free.
+void frame_pool_free(void);
 int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const VisualParams *params);
 // Appends every frame of src to dst, sharing the pooled visuals and copying
 // durations; playback counters start fresh and easing bookkeeping matches

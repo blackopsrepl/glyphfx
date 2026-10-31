@@ -4,6 +4,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__linux__) || defined(__APPLE__)
+#include <sys/mman.h>
+#endif
+
 #include "utils/hexterm.h"
 #include "engine/doze.h"
 #include "engine/render_log.h"
@@ -67,12 +71,76 @@ void scene_free(Scene *scene) {
     if (!scene) {
         return;
     }
-    for (size_t i = 0; i < scene->all_frames_len; i++) {
-    }
-    free(scene->all_frames);
+    // The frames belong to the engine's pool, not to the scene.
     free(scene->scene_id);
     free(scene->frame_index_map);
     free(scene);
+}
+
+// --- frame pool -----------------------------------------------------------
+// Frames live in one reserved region instead of one malloc'd array per scene:
+// the reservation never moves, so a scene's all_frames pointer stays valid, and
+// the frames of neighbouring characters end up next to each other. A scene that
+// needs to grow is copied to the tail of the region first (as the reference
+// engine does), which keeps every region contiguous.
+static Frame *g_frames;
+static size_t g_frames_len;
+static size_t g_frames_cap;
+
+#define FRAME_POOL_RESERVE ((size_t)1 << 28)  // 256 MiB of address space
+
+static bool frame_pool_init(void) {
+    if (g_frames) {
+        return true;
+    }
+#if defined(__linux__) || defined(__APPLE__)
+    void *p = mmap(NULL, FRAME_POOL_RESERVE, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p == MAP_FAILED) {
+        return false;
+    }
+    g_frames = (Frame *)p;
+    g_frames_cap = FRAME_POOL_RESERVE / sizeof(Frame);
+    return true;
+#else
+    return false;
+#endif
+}
+
+void frame_pool_free(void) {
+#if defined(__linux__) || defined(__APPLE__)
+    if (g_frames) {
+        munmap(g_frames, FRAME_POOL_RESERVE);
+    }
+#endif
+    g_frames = NULL;
+    g_frames_len = 0;
+    g_frames_cap = 0;
+}
+
+// Room for `add` more frames at the scene's tail, which must be contiguous.
+static bool frame_pool_grow(Scene *scene, size_t add) {
+    if (!frame_pool_init()) {
+        return false;
+    }
+    bool at_tail = scene->all_frames != NULL &&
+                   (size_t)(scene->all_frames - g_frames) + scene->all_frames_len == g_frames_len;
+    if (!at_tail) {
+        size_t start = g_frames_len;
+        if (start + scene->all_frames_len + add > g_frames_cap) {
+            return false;
+        }
+        if (scene->all_frames_len) {
+            memcpy(g_frames + start, scene->all_frames, scene->all_frames_len * sizeof(Frame));
+        }
+        scene->all_frames = g_frames + start;
+        g_frames_len = start + scene->all_frames_len;
+    }
+    if (g_frames_len + add > g_frames_cap) {
+        return false;
+    }
+    g_frames_len += add;
+    return true;
 }
 
 int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const VisualParams *params_in) {
@@ -99,14 +167,8 @@ int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const Vi
     if (duration < 1) {
         return -1;
     }
-    if (scene->all_frames_len == scene->all_frames_cap) {
-        size_t cap = scene->all_frames_cap ? scene->all_frames_cap * 2 : 8;
-        Frame *grown = realloc(scene->all_frames, cap * sizeof(Frame));
-        if (!grown) {
-            return -1;
-        }
-        scene->all_frames = grown;
-        scene->all_frames_cap = cap;
+    if (!frame_pool_grow(scene, 1)) {
+        return -1;
     }
     size_t frame_index = scene->all_frames_len++;
     Frame *frame = &scene->all_frames[frame_index];
@@ -137,14 +199,8 @@ int scene_append_frames(Scene *dst, const Scene *src) {
         if (from->duration < 1) {
             return -1;
         }
-        if (dst->all_frames_len == dst->all_frames_cap) {
-            size_t cap = dst->all_frames_cap ? dst->all_frames_cap * 2 : 8;
-            Frame *grown = realloc(dst->all_frames, cap * sizeof(Frame));
-            if (!grown) {
-                return -1;
-            }
-            dst->all_frames = grown;
-            dst->all_frames_cap = cap;
+        if (!frame_pool_grow(dst, 1)) {
+            return -1;
         }
         size_t frame_index = dst->all_frames_len++;
         Frame *frame = &dst->all_frames[frame_index];
