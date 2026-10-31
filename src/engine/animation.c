@@ -831,23 +831,8 @@ void animation_set_appearance(Animation *anim, bool uses_input_preexisting_color
         bold = anim->input_bold;
     }
 
-    VisualParams params;
-    memset(&params, 0, sizeof(params));
-    params.bold = bold;
-    params.has_colors = true;
-    params.colors = effective;
-    if (effective.has_fg) {
-        params.has_fg_code =
-            resolve_color_code(true, &effective.fg, anim->no_color, anim->use_xterm_colors, &params.fg_code);
-    }
-    if (effective.has_bg) {
-        params.has_bg_code =
-            resolve_color_code(true, &effective.bg, anim->no_color, anim->use_xterm_colors, &params.bg_code);
-    }
-
-    // The pool keys on the appearance, so a restyle to the same look returns
-    // the same handle and costs nothing; a real change interns a new entry.
-    VisualHandle next = visual_make(use_symbol, &params);
+    VisualHandle next = visual_make_appearance(use_symbol, &effective, bold,
+                                              anim->no_color, anim->use_xterm_colors);
     if (next == 0 || next == anim->current_visual) {
         return;
     }

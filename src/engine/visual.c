@@ -10,6 +10,7 @@
 
 #include "utils/strtab.h"
 #include "utils/ansi.h"
+#include "utils/hexterm.h"
 
 #if defined(__linux__)
 #include <sys/mman.h>
@@ -54,6 +55,13 @@ static char *g_hdr;          // scratch header being keyed
 static char *g_fmt;          // scratch formatted bytes
 static size_t g_fmt_cap;
 static bool g_ready;
+
+#define APPEARANCE_CACHE_SIZE 4096u
+typedef struct {
+    uint64_t key[VK_WORDS];
+    VisualHandle handle;
+} AppearanceEntry;
+static AppearanceEntry g_appearances[APPEARANCE_CACHE_SIZE];
 
 static void visual_table_alloc(uint32_t capacity);
 
@@ -108,6 +116,7 @@ void visual_free(void) {
     g_table_mask = 0;
     g_table_used = 0;
     g_pool_top = 0;
+    memset(g_appearances, 0, sizeof(g_appearances));
     g_ready = false;
 }
 
@@ -322,6 +331,49 @@ VisualHandle visual_make(const char *symbol, const struct VisualParams *p) {
         free(g_table);
         g_table = grown;
         g_table_mask = mask;
+    }
+    return handle;
+}
+
+VisualHandle visual_make_appearance(const char *symbol, const ColorPair *colors, bool bold,
+                                    bool no_color, bool xterm_colors) {
+    if (!g_ready) {
+        visual_init();
+    }
+    const char *interned = strtab_intern(symbol);
+    uint64_t key[VK_WORDS] = {0};
+    key[0] = (uint64_t)(uintptr_t)interned;
+    key[1] = (uint64_t)bold | ((uint64_t)no_color << 1) |
+             ((uint64_t)xterm_colors << 2) | ((uint64_t)colors->has_fg << 3) |
+             ((uint64_t)colors->has_bg << 4);
+    _Static_assert(sizeof(Color) <= 2 * sizeof(uint64_t), "appearance color key size");
+    if (colors->has_fg) memcpy(&key[2], &colors->fg, sizeof(Color));
+    if (colors->has_bg) memcpy(&key[4], &colors->bg, sizeof(Color));
+    AppearanceEntry *entry = &g_appearances[key_hash(key) & (APPEARANCE_CACHE_SIZE - 1u)];
+    if (entry->handle && memcmp(entry->key, key, sizeof(key)) == 0) {
+        return entry->handle;
+    }
+
+    VisualParams params = {0};
+    params.bold = bold;
+    params.has_colors = true;
+    params.colors = *colors;
+    if (!no_color && colors->has_fg) {
+        params.has_fg_code = true;
+        params.fg_code = xterm_colors
+            ? colorcode_xterm(colors->fg.is_xterm ? colors->fg.xterm : hex_to_xterm(colors->fg.hex))
+            : colorcode_rgb(colors->fg.hex);
+    }
+    if (!no_color && colors->has_bg) {
+        params.has_bg_code = true;
+        params.bg_code = xterm_colors
+            ? colorcode_xterm(colors->bg.is_xterm ? colors->bg.xterm : hex_to_xterm(colors->bg.hex))
+            : colorcode_rgb(colors->bg.hex);
+    }
+    VisualHandle handle = visual_make(interned, &params);
+    if (handle) {
+        memcpy(entry->key, key, sizeof(key));
+        entry->handle = handle;
     }
     return handle;
 }

@@ -56,6 +56,9 @@ void visual_free(void);
 // the previous vis_format produced for these params. Returns 0 when the pool is
 // exhausted or the symbol exceeds VISUAL_MAX bytes.
 VisualHandle visual_make(const char *symbol, const struct VisualParams *params);
+// Intern a restyle by its logical inputs before resolving terminal color codes.
+VisualHandle visual_make_appearance(const char *symbol, const ColorPair *colors, bool bold,
+                                    bool no_color, bool xterm_colors);
 
 // The visual's formatted bytes and length, from a handle. Never NULL for a
 // nonzero handle; the bytes are readable for VISUAL_SLACK bytes.

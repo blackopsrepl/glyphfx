@@ -4,6 +4,7 @@
 
 #include "engine/animation.h"
 #include "engine/visual.h"
+#include "utils/hexterm.h"
 #include "testutil.h"
 
 static void params_plain(VisualParams *p) {
@@ -32,6 +33,37 @@ static void params_fg_hex(VisualParams *p, const char *hex) {
     color_from_hex(hex, &p->colors.fg);
     p->has_fg_code = true;
     p->fg_code = colorcode_rgb(hex);
+}
+
+static void check_appearance_cache(void) {
+    for (unsigned mode = 0; mode < 3; mode++) {
+        for (unsigned flags = 0; flags < 8; flags++) {
+            VisualParams p = {0};
+            p.bold = (flags & 1u) != 0;
+            p.has_colors = true;
+            p.colors.has_fg = (flags & 2u) != 0;
+            p.colors.has_bg = (flags & 4u) != 0;
+            color_from_hex("aB34Ef", &p.colors.fg);
+            p.colors.bg = color_from_xterm(17);
+            bool no_color = mode == 1;
+            bool xterm = mode == 2;
+            p.has_fg_code = p.colors.has_fg && !no_color;
+            p.has_bg_code = p.colors.has_bg && !no_color;
+            if (p.has_fg_code) {
+                p.fg_code = xterm ? colorcode_xterm(hex_to_xterm(p.colors.fg.hex))
+                                  : colorcode_rgb(p.colors.fg.hex);
+            }
+            if (p.has_bg_code) {
+                p.bg_code = xterm ? colorcode_xterm(17) : colorcode_rgb(p.colors.bg.hex);
+            }
+            VisualHandle expected = visual_make("\xe2\x98\x83", &p);
+            CHECK(expected != 0);
+            for (unsigned repeat = 0; repeat < 2; repeat++) {
+                CHECK_EQ_INT(visual_make_appearance("\xe2\x98\x83", &p.colors, p.bold,
+                                                    no_color, xterm), expected);
+            }
+        }
+    }
 }
 
 int main(void) {
@@ -124,6 +156,11 @@ int main(void) {
     }
     CHECK(memcmp(visual_bytes(rgb), "\x1b[38;2;255;136;0mX\x1b[0m", visual_len(rgb)) == 0);
 
+    check_appearance_cache();
+    visual_free();
+    params_plain(&p);
+    CHECK(visual_make("pool restart", &p) != 0);
+    check_appearance_cache();
     visual_free();
     return test_summary("test_visual");
 }
