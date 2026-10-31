@@ -190,6 +190,9 @@ void engine_handle_event(EngineCtx *ctx, Effect *effect, CharId id, Event event,
                 break;
             case ACTION_CALLBACK:
                 if (effect->ops->dispatch_callback) {
+                    // A callback can deactivate anyone it can reach: conservatively
+                    // re-check every member in the update's pruning pass.
+                    ac_mark_all_candidates(&ctx->active_characters);
                     effect->ops->dispatch_callback(effect, ctx, id, &local.cb);
                 }
                 break;
@@ -703,8 +706,18 @@ void engine_update(EngineCtx *ctx, Effect *effect) {
             // Only a character without a path and with a scene can doze; the
             // test reads the character the tick just touched.
             const EffectCharacter *ch = &ctx->terminal.arena.items[id];
-            if (!ch->motion.active_path && ch->animation.active_scene) {
-                doze_try(d, id);
+            if (!ch->motion.active_path) {
+                // The tick may have completed the character: only characters
+                // that can have left the active set are re-checked, the others
+                // skip the per-member active-state test entirely.
+                const Scene *scene = ch->animation.active_scene_ref;
+                if (!ch->animation.active_scene || !scene || scene->is_looping ||
+                    scene->head >= scene->all_frames_len) {
+                    ac_mark_candidate(ac, id);
+                }
+                if (ch->animation.active_scene) {
+                    doze_try(d, id);
+                }
             }
             if (d->snapshot[w]) {
                 m |= d->snapshot[w];
@@ -716,7 +729,7 @@ void engine_update(EngineCtx *ctx, Effect *effect) {
     d->cursor = CHAR_ID_NONE;
     d->snapshot_words = 0;
     // Dozers stay: a doze only covers ticks that leave the character active.
-    ac_retain_except(ac, d->bits, d->nwords, retain_keep, ctx);
+    ac_retain_candidates(ac, d->bits, d->nwords, retain_keep, ctx);
 }
 
 const char *engine_frame(EngineCtx *ctx) {

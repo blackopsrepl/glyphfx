@@ -14,6 +14,7 @@ static bool doze_owns_set(const ActiveCharacters *ac) {
 
 void ac_init(ActiveCharacters *ac) {
     ac->bits = NULL;
+    ac->candidates = NULL;
     ac->nwords = 0;
     ac->len = 0;
     ac->lo = 0;
@@ -22,6 +23,7 @@ void ac_init(ActiveCharacters *ac) {
 
 void ac_free(ActiveCharacters *ac) {
     free(ac->bits);
+    free(ac->candidates);
     ac_init(ac);
 }
 
@@ -40,6 +42,7 @@ void ac_clear(ActiveCharacters *ac) {
     if (ac->bits) {
         memset(ac->bits, 0, ac->nwords * sizeof(uint64_t));
     }
+    if (ac->candidates) memset(ac->candidates, 0, ac->nwords * sizeof(uint64_t));
     ac->len = 0;
     ac->lo = 0;
     ac->hi = 0;
@@ -60,6 +63,22 @@ static void ac_ensure(ActiveCharacters *ac, CharId id) {
     }
     memset(grown + ac->nwords, 0, (cap - ac->nwords) * sizeof(uint64_t));
     ac->bits = grown;
+    bool had_candidates = ac->candidates != NULL;
+    uint64_t *candidates = realloc(ac->candidates, cap * sizeof(uint64_t));
+    if (candidates) {
+        // Without the old candidate allocation, every old member needs checking.
+        if (had_candidates) {
+            memset(candidates + ac->nwords, 0, (cap - ac->nwords) * sizeof(uint64_t));
+        } else {
+            memcpy(candidates, ac->bits, cap * sizeof(uint64_t));
+        }
+        ac->candidates = candidates;
+    } else {
+        // Candidate tracking is optional. Never retain an undersized bitmap;
+        // pruning falls back to checking all members if this allocation fails.
+        free(ac->candidates);
+        ac->candidates = NULL;
+    }
     ac->nwords = cap;
 }
 
@@ -82,6 +101,7 @@ bool ac_insert(ActiveCharacters *ac, CharId id) {
         return false;
     }
     ac->bits[word] |= mask;
+    if (ac->candidates) ac->candidates[word] |= mask;
     ac->len++;
     if (ac->hi <= ac->lo) {
         ac->lo = word;
@@ -110,6 +130,7 @@ bool ac_remove(ActiveCharacters *ac, CharId id) {
         return false;
     }
     ac->bits[word] &= ~mask;
+    if (ac->candidates) ac->candidates[word] &= ~mask;
     ac->len--;
     return true;
 }
@@ -117,11 +138,15 @@ bool ac_remove(ActiveCharacters *ac, CharId id) {
 // Drop the members `keep` rejects, skipping those set in `skip`, then narrow
 // the window to the words still holding members.
 static void retain_window(ActiveCharacters *ac, const uint64_t *skip, size_t skip_words,
-                          bool (*keep)(CharId id, void *ctx), void *ctx) {
+                          bool candidates_only, bool (*keep)(CharId id, void *ctx), void *ctx) {
     size_t lo = ac->lo;
     size_t hi = ac->hi < ac->nwords ? ac->hi : ac->nwords;
     for (size_t w = lo; w < hi; w++) {
         uint64_t bits = ac->bits[w];
+        if (candidates_only && ac->candidates) {
+            bits &= ac->candidates[w];
+            ac->candidates[w] = 0;
+        }
         if (w < skip_words) {
             bits &= ~skip[w];
         }
@@ -149,12 +174,30 @@ static void retain_window(ActiveCharacters *ac, const uint64_t *skip, size_t ski
 }
 
 void ac_retain(ActiveCharacters *ac, bool (*keep)(CharId id, void *ctx), void *ctx) {
-    retain_window(ac, NULL, 0, keep, ctx);
+    retain_window(ac, NULL, 0, false, keep, ctx);
 }
 
 void ac_retain_except(ActiveCharacters *ac, const uint64_t *skip, size_t skip_words,
                       bool (*keep)(CharId id, void *ctx), void *ctx) {
-    retain_window(ac, skip, skip_words, keep, ctx);
+    retain_window(ac, skip, skip_words, false, keep, ctx);
+}
+
+void ac_mark_candidate(ActiveCharacters *ac, CharId id) {
+    size_t word = (size_t)id >> 6;
+    if (ac->candidates && word < ac->nwords) {
+        ac->candidates[word] |= UINT64_C(1) << ((unsigned)id & 63u);
+    }
+}
+
+void ac_mark_all_candidates(ActiveCharacters *ac) {
+    if (ac->candidates) {
+        memcpy(ac->candidates, ac->bits, ac->nwords * sizeof(uint64_t));
+    }
+}
+
+void ac_retain_candidates(ActiveCharacters *ac, const uint64_t *skip, size_t skip_words,
+                          bool (*keep)(CharId id, void *ctx), void *ctx) {
+    retain_window(ac, skip, skip_words, true, keep, ctx);
 }
 
 void ac_snapshot_into(const ActiveCharacters *ac, CharId *dst) {
