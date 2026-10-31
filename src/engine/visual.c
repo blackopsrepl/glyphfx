@@ -56,12 +56,17 @@ static char *g_fmt;          // scratch formatted bytes
 static size_t g_fmt_cap;
 static bool g_ready;
 
-#define APPEARANCE_CACHE_SIZE 4096u
+#define APPEARANCE_INITIAL 4096u
+#define APPEARANCE_WORDS 3u
 typedef struct {
-    uint64_t key[VK_WORDS];
+    uint64_t key[APPEARANCE_WORDS];
     VisualHandle handle;
 } AppearanceEntry;
-static AppearanceEntry g_appearances[APPEARANCE_CACHE_SIZE];
+// Open-addressed and growable: a restyle hit never falls back to building
+// VisualParams because an unrelated appearance evicted it.
+static AppearanceEntry *g_appearances;
+static uint32_t g_appearance_mask;
+static uint32_t g_appearance_used;
 
 static void visual_table_alloc(uint32_t capacity);
 
@@ -96,6 +101,12 @@ void visual_init(void) {
     if (!g_hdr || !g_fmt) {
         visual_oom();
     }
+    g_appearances = calloc(APPEARANCE_INITIAL, sizeof(*g_appearances));
+    if (!g_appearances) {
+        visual_oom();
+    }
+    g_appearance_mask = APPEARANCE_INITIAL - 1;
+    g_appearance_used = 0;
     g_ready = true;
 }
 
@@ -116,7 +127,10 @@ void visual_free(void) {
     g_table_mask = 0;
     g_table_used = 0;
     g_pool_top = 0;
-    memset(g_appearances, 0, sizeof(g_appearances));
+    free(g_appearances);
+    g_appearances = NULL;
+    g_appearance_mask = 0;
+    g_appearance_used = 0;
     g_ready = false;
 }
 
@@ -155,12 +169,11 @@ static uint64_t key_hash(const uint64_t *w) {
     return h;
 }
 
-static void key_build(const struct VisualParams *p, const char *symbol) {
-    // Interned so that a symbol pointer identifies its string: the key stores
-    // the pointer, and equal keys must mean equal bytes.
-    const char *interned = strtab_intern(symbol ? symbol : "");
+static void key_build(const struct VisualParams *p, SymbolId symbol) {
+    // A symbol handle identifies its string for the process lifetime, so equal
+    // keys still mean equal bytes.
     uint64_t *w = (uint64_t *)g_hdr;
-    w[0] = (uint64_t)(uintptr_t)interned;
+    w[0] = (uint64_t)symbol;
     uint8_t attrs = 0;
     attrs |= p->bold ? VF_BOLD : 0;
     attrs |= p->italic ? VF_ITALIC : 0;
@@ -186,8 +199,7 @@ static void header_put_color(char *at, const Color *c) {
     memcpy(at + 3 + sizeof(c->hex), c->rgb, 3);
 }
 
-static void logical_build(const struct VisualParams *p, const char *symbol) {
-    const char *interned = strtab_intern(symbol ? symbol : "");  // stable, keyed by pointer
+static void logical_build(const struct VisualParams *p, const char *interned) {
     memcpy(g_hdr + VH_SYMBOL, &interned, sizeof(interned));
     g_hdr[VH_DIM] = p->dim ? 1 : 0;
     uint8_t attrs = 0;
@@ -216,7 +228,7 @@ static inline char *pool_header(uint32_t offset) {
 // Formats the visual's bytes into g_fmt and returns the length. The sequence is
 // the reference's: attributes, foreground code, background code, symbol, and a
 // reset only if anything preceded the symbol.
-static size_t format_bytes(const struct VisualParams *p, const char *symbol) {
+static size_t format_bytes(const struct VisualParams *p, const char *symbol, size_t symbol_len) {
     size_t n = 0;
 #define PUSH(s)                                                                          \
     do {                                                                                 \
@@ -249,7 +261,6 @@ static size_t format_bytes(const struct VisualParams *p, const char *symbol) {
     g_fmt = sb.data;
     g_fmt_cap = sb.cap;
     n = sb.len;
-    size_t symbol_len = strlen(symbol);
     if (n + symbol_len + sizeof(ANSI_RESET_ALL) > g_fmt_cap) {
         g_fmt_cap = n + symbol_len + sizeof(ANSI_RESET_ALL) + 1;
         g_fmt = realloc(g_fmt, g_fmt_cap);
@@ -266,11 +277,13 @@ static size_t format_bytes(const struct VisualParams *p, const char *symbol) {
     return n;
 }
 
-VisualHandle visual_make(const char *symbol, const struct VisualParams *p) {
+VisualHandle visual_make_symbol(SymbolId symbol, const struct VisualParams *p) {
     if (!g_ready) {
         visual_init();
     }
-    if (strlen(symbol) > VISUAL_MAX) {
+    const char *name = strtab_name(symbol);
+    size_t symbol_len = strtab_length(symbol);
+    if (!name || symbol_len > VISUAL_MAX) {
         return 0;
     }
     key_build(p, symbol);
@@ -286,7 +299,7 @@ VisualHandle visual_make(const char *symbol, const struct VisualParams *p) {
         }
         i = (i + 1) & g_table_mask;
     }
-    size_t len = format_bytes(p, symbol);
+    size_t len = format_bytes(p, name, symbol_len);
     if (len > VISUAL_MAX) {
         len = VISUAL_MAX;
     }
@@ -301,7 +314,7 @@ VisualHandle visual_make(const char *symbol, const struct VisualParams *p) {
     }
     char *rec = (char *)g_visual_pool + base;
     char *bytes = rec + VH_SIZE;
-    logical_build(p, symbol);          // only on a miss
+    logical_build(p, name);            // only on a miss
     memcpy(rec, g_hdr, VH_SIZE);
     memcpy(bytes, g_fmt, len);
     memset(bytes + len, 0, VISUAL_SLACK);
@@ -335,23 +348,74 @@ VisualHandle visual_make(const char *symbol, const struct VisualParams *p) {
     return handle;
 }
 
-VisualHandle visual_make_appearance(const char *symbol, const ColorPair *colors, bool bold,
-                                    bool no_color, bool xterm_colors) {
+VisualHandle visual_make(const char *symbol, const struct VisualParams *p) {
+    return visual_make_symbol(strtab_handle(symbol), p);
+}
+
+// A colour's identity is its argument (xterm code or hex digits); rgb derives
+// from it. The whole hex buffer is keyed: trailing bytes past hex_len can only
+// split equal colours into two entries, never merge different ones.
+static inline uint64_t appearance_color_key(const Color *color, uint64_t *head, unsigned shift) {
+    // hex_len never exceeds the 8-byte buffer, so four bits hold it exactly.
+    uint64_t meta = (uint64_t)color->is_xterm | ((uint64_t)color->xterm << 1) |
+                    ((uint64_t)(color->hex_len & 15u) << 9);
+    *head |= meta << shift;
+    uint64_t hex;
+    memcpy(&hex, color->hex, sizeof(hex));
+    return hex;
+}
+
+static uint64_t appearance_hash(const uint64_t *key) {
+    uint64_t h = 0xcbf29ce484222325ULL;
+    for (unsigned i = 0; i < APPEARANCE_WORDS; i++) {
+        h = (h ^ key[i]) * UINT64_C(0x9e3779b97f4a7c15);
+        h = (h >> 29) | (h << 35);
+    }
+    return h;
+}
+
+static void appearance_grow(void) {
+    uint32_t capacity = (g_appearance_mask + 1) * 2;
+    AppearanceEntry *grown = calloc(capacity, sizeof(*grown));
+    if (!grown) {
+        visual_oom();
+    }
+    uint32_t mask = capacity - 1;
+    for (uint32_t i = 0; i <= g_appearance_mask; i++) {
+        if (!g_appearances[i].handle) continue;
+        uint32_t slot = (uint32_t)appearance_hash(g_appearances[i].key) & mask;
+        while (grown[slot].handle) slot = (slot + 1) & mask;
+        grown[slot] = g_appearances[i];
+    }
+    free(g_appearances);
+    g_appearances = grown;
+    g_appearance_mask = mask;
+}
+
+VisualHandle visual_make_appearance_symbol(SymbolId symbol, const ColorPair *colors, bool bold,
+                                           bool no_color, bool xterm_colors) {
     if (!g_ready) {
         visual_init();
     }
-    const char *interned = strtab_intern(symbol);
-    uint64_t key[VK_WORDS] = {0};
-    key[0] = (uint64_t)(uintptr_t)interned;
-    key[1] = (uint64_t)bold | ((uint64_t)no_color << 1) |
-             ((uint64_t)xterm_colors << 2) | ((uint64_t)colors->has_fg << 3) |
-             ((uint64_t)colors->has_bg << 4);
-    _Static_assert(sizeof(Color) <= 2 * sizeof(uint64_t), "appearance color key size");
-    if (colors->has_fg) memcpy(&key[2], &colors->fg, sizeof(Color));
-    if (colors->has_bg) memcpy(&key[4], &colors->bg, sizeof(Color));
-    AppearanceEntry *entry = &g_appearances[key_hash(key) & (APPEARANCE_CACHE_SIZE - 1u)];
-    if (entry->handle && memcmp(entry->key, key, sizeof(key)) == 0) {
-        return entry->handle;
+    if (!symbol) {
+        return 0;
+    }
+    // Word 0: symbol (bits 0-31), output flags (32-36), fg meta (37-49), bg
+    // meta (50-62). Words 1 and 2: the fg and bg hex buffers.
+    uint64_t key[APPEARANCE_WORDS] = {symbol, 0, 0};
+    uint64_t flags = (uint64_t)bold | ((uint64_t)no_color << 1) |
+                     ((uint64_t)xterm_colors << 2) | ((uint64_t)colors->has_fg << 3) |
+                     ((uint64_t)colors->has_bg << 4);
+    key[0] |= flags << 32;
+    if (colors->has_fg) key[1] = appearance_color_key(&colors->fg, &key[0], 37);
+    if (colors->has_bg) key[2] = appearance_color_key(&colors->bg, &key[0], 50);
+    uint32_t slot = (uint32_t)appearance_hash(key) & g_appearance_mask;
+    while (g_appearances[slot].handle) {
+        const uint64_t *probe = g_appearances[slot].key;
+        if (probe[0] == key[0] && probe[1] == key[1] && probe[2] == key[2]) {
+            return g_appearances[slot].handle;
+        }
+        slot = (slot + 1) & g_appearance_mask;
     }
 
     VisualParams params = {0};
@@ -370,12 +434,21 @@ VisualHandle visual_make_appearance(const char *symbol, const ColorPair *colors,
             ? colorcode_xterm(colors->bg.is_xterm ? colors->bg.xterm : hex_to_xterm(colors->bg.hex))
             : colorcode_rgb(colors->bg.hex);
     }
-    VisualHandle handle = visual_make(interned, &params);
+    VisualHandle handle = visual_make_symbol(symbol, &params);
     if (handle) {
+        AppearanceEntry *entry = &g_appearances[slot];
         memcpy(entry->key, key, sizeof(key));
         entry->handle = handle;
+        if (++g_appearance_used * 2 >= g_appearance_mask + 1) {
+            appearance_grow();
+        }
     }
     return handle;
+}
+
+VisualHandle visual_make_appearance(const char *symbol, const ColorPair *colors, bool bold,
+                                    bool no_color, bool xterm_colors) {
+    return visual_make_appearance_symbol(strtab_handle(symbol), colors, bold, no_color, xterm_colors);
 }
 
 const char *visual_symbol(VisualHandle h) {

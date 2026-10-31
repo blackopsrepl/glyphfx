@@ -13,22 +13,22 @@ typedef struct {
 
 static StrTabSlot *g_tab;
 static size_t g_tab_cap;    // power of two
-static size_t g_tab_used;
+size_t g_strtab_used;
 static bool g_tab_atexit;
-static const char **g_names;
-static size_t g_names_cap;
+InternedName *g_strtab_names;
+static size_t g_strtab_names_cap;
 
 static void strtab_free(void) {
     for (size_t i = 0; i < g_tab_cap; i++) {
         free((void *)g_tab[i].s);
     }
     free(g_tab);
-    free(g_names);
-    g_names = NULL;
-    g_names_cap = 0;
+    free(g_strtab_names);
+    g_strtab_names = NULL;
+    g_strtab_names_cap = 0;
     g_tab = NULL;
     g_tab_cap = 0;
-    g_tab_used = 0;
+    g_strtab_used = 0;
 }
 
 static void strtab_grow(void) {
@@ -62,7 +62,7 @@ static StrTabSlot *intern_slot(const char *s) {
         atexit(strtab_free);
         g_tab_atexit = true;
     }
-    if ((g_tab_used + 1) * 2 >= g_tab_cap) {
+    if ((g_strtab_used + 1) * 2 >= g_tab_cap) {
         strtab_grow();
         if (!g_tab) {
             return NULL;
@@ -82,20 +82,20 @@ static StrTabSlot *intern_slot(const char *s) {
         return NULL;
     }
     memcpy(copy, s, len + 1);
-    if (g_tab_used == g_names_cap) {
-        size_t cap = g_names_cap ? g_names_cap * 2 : 64;
-        const char **grown = realloc(g_names, cap * sizeof(*grown));
+    if (g_strtab_used == g_strtab_names_cap) {
+        size_t cap = g_strtab_names_cap ? g_strtab_names_cap * 2 : 64;
+        InternedName *grown = realloc(g_strtab_names, cap * sizeof(*grown));
         if (!grown) {
             free(copy);
             return NULL;
         }
-        g_names = grown;
-        g_names_cap = cap;
+        g_strtab_names = grown;
+        g_strtab_names_cap = cap;
     }
     g_tab[i].s = copy;
-    g_tab[i].handle = (uint32_t)(g_tab_used + 1);
-    g_names[g_tab_used] = copy;
-    g_tab_used++;
+    g_tab[i].handle = (uint32_t)(g_strtab_used + 1);
+    g_strtab_names[g_strtab_used] = (InternedName){copy, len};
+    g_strtab_used++;
     return &g_tab[i];
 }
 
@@ -107,8 +107,4 @@ const char *strtab_intern(const char *s) {
 uint32_t strtab_handle(const char *s) {
     StrTabSlot *slot = intern_slot(s);
     return slot ? slot->handle : 0;
-}
-
-const char *strtab_name(uint32_t handle) {
-    return handle && handle <= g_tab_used ? g_names[handle - 1] : NULL;
 }

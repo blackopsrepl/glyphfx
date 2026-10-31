@@ -15,6 +15,21 @@ const char *strtab_intern(const char *s);
 // process lifetime; 0 means "no name". Event keys compare handles instead of
 // strings (plan 7.2), so a lookup is an integer compare.
 uint32_t strtab_handle(const char *s);
-const char *strtab_name(uint32_t handle);
+
+typedef struct {
+    const char *text;
+    size_t len;
+} InternedName;
+// Handle-indexed names (handle - 1); exposed so handle lookups inline.
+extern InternedName *g_strtab_names;
+extern size_t g_strtab_used;
+
+static inline const char *strtab_name(uint32_t handle) {
+    return handle && handle <= g_strtab_used ? g_strtab_names[handle - 1].text : NULL;
+}
+// Byte length recorded when the name was interned, without hashing or scanning.
+static inline size_t strtab_length(uint32_t handle) {
+    return handle && handle <= g_strtab_used ? g_strtab_names[handle - 1].len : 0;
+}
 
 #endif

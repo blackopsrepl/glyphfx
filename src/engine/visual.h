@@ -29,6 +29,8 @@
 struct VisualParams;
 
 typedef uint32_t VisualHandle;
+// Dense process-lifetime identity from the string table; zero is invalid.
+typedef uint32_t SymbolId;
 
 // Attribute bits, in VisualParams' order. `dim` is stored but never emitted, so
 // it has no bit; it is not part of the interning key.
@@ -56,6 +58,10 @@ void visual_free(void);
 // the previous vis_format produced for these params. Returns 0 when the pool is
 // exhausted or the symbol exceeds VISUAL_MAX bytes.
 VisualHandle visual_make(const char *symbol, const struct VisualParams *params);
+// Native handle entry points avoid string hashing and length scans on hits.
+VisualHandle visual_make_symbol(SymbolId symbol, const struct VisualParams *params);
+VisualHandle visual_make_appearance_symbol(SymbolId symbol, const ColorPair *colors, bool bold,
+                                           bool no_color, bool xterm_colors);
 // Intern a restyle by its logical inputs before resolving terminal color codes.
 VisualHandle visual_make_appearance(const char *symbol, const ColorPair *colors, bool bold,
                                     bool no_color, bool xterm_colors);
