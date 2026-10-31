@@ -18,6 +18,7 @@
 #include <stdint.h>
 
 #include "engine/character.h"
+#include "engine/terminal.h"
 #include "utils/geometry.h"
 
 enum {
@@ -40,6 +41,36 @@ typedef struct {
 } RenderLog;
 
 extern RenderLog g_rlog;
+
+// The bound terminal's render mirror slots (render_log_bind switches them
+// with the target). Mirror stores and log records share one discipline: the
+// mirror is kept whenever the record side would be usable.
+extern RenderMirror *g_rlog_mirror;
+extern size_t g_rlog_mirror_len;
+
+static inline void rlog_mirror_move(CharId id, Coord coord) {
+    if (g_rlog_mirror && (size_t)id < g_rlog_mirror_len) {
+        g_rlog_mirror[id].coord = coord;
+    }
+}
+
+static inline void rlog_mirror_handle(CharId id, VisualHandle version) {
+    if (g_rlog_mirror && (size_t)id < g_rlog_mirror_len) {
+        g_rlog_mirror[id].vis = version;
+    }
+}
+
+static inline void rlog_mirror_layer(CharId id, int64_t layer) {
+    if (g_rlog_mirror && (size_t)id < g_rlog_mirror_len) {
+        g_rlog_mirror[id].layer = layer;
+    }
+}
+
+static inline void rlog_mirror_visible(CharId id, bool visible) {
+    if (g_rlog_mirror && (size_t)id < g_rlog_mirror_len) {
+        g_rlog_mirror[id].visible = visible;
+    }
+}
 
 void render_log_grow(void);
 // Bind the terminal whose grid the renderer maintains. Moves need its canvas
@@ -73,18 +104,21 @@ void renderer_handle_impl(CharId id, uint32_t version);
 void renderer_layer_impl(CharId id, int64_t layer);
 
 static inline void renderer_move(CharId id, Coord coord) {
+    rlog_mirror_move(id, coord);
     if (g_rlog.on) {
         renderer_move_impl(id, coord);
     }
 }
 
 static inline void renderer_handle(CharId id, uint32_t version) {
+    rlog_mirror_handle(id, version);
     if (g_rlog.on) {
         renderer_handle_impl(id, version);
     }
 }
 
 static inline void renderer_layer(CharId id, int64_t layer) {
+    rlog_mirror_layer(id, layer);
     if (g_rlog.on) {
         renderer_layer_impl(id, layer);
     }

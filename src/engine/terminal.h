@@ -84,6 +84,18 @@ typedef struct {
     size_t len;
 } CharIdGrouping;
 
+// Compact per-character render record: the grid walk and the record replay
+// read this instead of dereferencing the arena's record per character, and
+// the hooks that feed the change log maintain it. Rebuilt from the arena when
+// the arena grows or the render geometry changes.
+typedef struct {
+    Coord coord;
+    int64_t layer;
+    uint32_t character_id;
+    VisualHandle vis;
+    bool visible;
+} RenderMirror;
+
 void charidgrouping_free(CharIdGrouping *g);
 
 CharacterFilter character_filter_default(void);
@@ -136,6 +148,8 @@ struct Terminal {
     size_t inner_fill_characters_len;
     CharId *outer_fill_characters;
     size_t outer_fill_characters_len;
+    RenderMirror *render_mirror;  // per arena slot; see RenderMirror
+    size_t render_mirror_len;
     CharId *visible_characters;
     size_t visible_characters_len;
     size_t *visible_positions;

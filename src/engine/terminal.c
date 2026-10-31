@@ -446,6 +446,9 @@ void terminal_free(Terminal *t) {
     free(t->cell_head);
     free(t->cell_next);
     free(t->cell_of_char);
+    free(t->render_mirror);
+    t->render_mirror = NULL;
+    t->render_mirror_len = 0;
     for (size_t i = 0; i < t->row_store_len; i++) {
         free(t->row_store[i]);
     }
@@ -484,6 +487,9 @@ void terminal_set_character_visibility(Terminal *t, CharId id, bool is_visible) 
         return;
     }
     t->arena.items[index].is_visible = is_visible;
+    if ((size_t)index < t->render_mirror_len) {
+        t->render_mirror[index].visible = is_visible;
+    }
     renderer_move(id, t->arena.items[index].motion.current_coord);
     if (t->arena.len > t->visible_positions_len) {
         size_t old = t->visible_positions_len;
@@ -539,11 +545,24 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height);
 
 // --- incremental grid -----------------------------------------------------
 
-// Painter order: (layer, character_id) maximum wins a contested cell.
+// Painter order: (layer, character_id) maximum wins a contested cell. The
+// mirror keeps both next to the coordinate.
 static inline bool grid_beats(const Terminal *t, CharId a, CharId b) {
-    int64_t la = t->arena.items[a].layer;
-    int64_t lb = t->arena.items[b].layer;
-    return la > lb || (la == lb && t->arena.items[a].character_id > t->arena.items[b].character_id);
+    const RenderMirror *ma = &t->render_mirror[a];
+    const RenderMirror *mb = &t->render_mirror[b];
+    return ma->layer > mb->layer ||
+           (ma->layer == mb->layer && ma->character_id > mb->character_id);
+}
+
+// Fill one slot's mirror from the arena record.
+static void mirror_fill(Terminal *t, CharId id) {
+    EffectCharacter *ch = &t->arena.items[id];
+    RenderMirror *m = &t->render_mirror[id];
+    m->coord = ch->motion.current_coord;
+    m->layer = ch->layer;
+    m->character_id = ch->character_id;
+    m->vis = ch->animation.current_visual;
+    m->visible = ch->is_visible;
 }
 
 // Re-picks a cell's owner among its occupants (one left, appeared, or changed
@@ -566,7 +585,7 @@ static void cell_rewin(Terminal *t, int64_t cell, size_t width) {
         t->painted_cells--;
     }
     t->render_cells[cell] = owner;
-    VisualHandle vis = owner == RENDER_EMPTY ? 0 : t->arena.items[owner].animation.current_visual;
+    VisualHandle vis = owner == RENDER_EMPTY ? 0 : t->render_mirror[owner].vis;
     if (t->cell_visual[cell] != vis) {
         t->cell_visual[cell] = vis;
         t->row_dirty[cell / (int64_t)width] = 1;
@@ -600,7 +619,7 @@ static void grid_move(Terminal *t, CharId id, int32_t new_cell, size_t width) {
                 t->painted_cells++;
             }
             *owner = (uint32_t)id;
-            VisualHandle vis = t->arena.items[id].animation.current_visual;
+            VisualHandle vis = t->render_mirror[id].vis;
             if (t->cell_visual[new_cell] != vis) {
                 t->cell_visual[new_cell] = vis;
                 t->row_dirty[new_cell / (int64_t)width] = 1;
@@ -626,7 +645,7 @@ static void grid_replay(Terminal *t, size_t width) {
         } else if (kind == RLOG_HANDLE) {
             int32_t cell = t->cell_of_char[id];
             if (cell >= 0 && t->render_cells[cell] == slot) {
-                VisualHandle vis = t->arena.items[id].animation.current_visual;
+                VisualHandle vis = t->render_mirror[id].vis;
                 if (t->cell_visual[cell] != vis) {
                     t->cell_visual[cell] = vis;
                     t->row_dirty[cell / (int64_t)width] = 1;
@@ -657,9 +676,9 @@ static void grid_walk(Terminal *t, size_t width, size_t height, bool lists) {
     }
     for (size_t i = 0; i < t->visible_characters_len; i++) {
         CharId id = t->visible_characters[i];
-        EffectCharacter *ch = &t->arena.items[id];
-        int64_t row = ch->motion.current_coord.row + t->canvas_row_offset;
-        int64_t column = ch->motion.current_coord.column + t->canvas_column_offset;
+        const RenderMirror *rec = &t->render_mirror[id];
+        int64_t row = rec->coord.row + t->canvas_row_offset;
+        int64_t column = rec->coord.column + t->canvas_column_offset;
         if (!(t->visible_bottom <= row && row <= t->visible_top && t->visible_left <= column &&
               column <= t->visible_right)) {
             continue;
@@ -679,7 +698,7 @@ static void grid_walk(Terminal *t, size_t width, size_t height, bool lists) {
             }
             *owner = (uint32_t)id;
         }
-        VisualHandle vis = ch->animation.current_visual;
+        VisualHandle vis = rec->vis;
         t->cell_visual[cell] = vis;
         // The version grid only feeds the row cache; skip its load and store
         // while the cache is off so a repaint costs what it always did.
@@ -711,9 +730,17 @@ static void grid_grow_chars(Terminal *t) {
         return;
     }
     t->cell_of_char = of;
+    RenderMirror *mrec = realloc(t->render_mirror, cap * sizeof(RenderMirror));
+    if (mrec) {
+        t->render_mirror = mrec;
+        t->render_mirror_len = cap;
+    }
     for (size_t id = t->grid_chars_len; id < cap; id++) {
         t->cell_next[id] = -1;
         t->cell_of_char[id] = -1;
+        if (id < t->arena.len) {
+            mirror_fill(t, (CharId)id);
+        }
     }
     t->grid_chars_len = cap;
     t->grid_ready = false;
@@ -883,6 +910,9 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
     free(t->cell_head);
     free(t->cell_next);
     free(t->cell_of_char);
+    free(t->render_mirror);
+    t->render_mirror = NULL;
+    t->render_mirror_len = 0;
 
     size_t cells = width * height;
     size_t blocks = (width + VISUAL_BLOCK - 1) / VISUAL_BLOCK;
@@ -899,6 +929,11 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
     t->cell_head = malloc((cells ? cells : 1) * sizeof(int32_t));
     t->cell_next = malloc((t->arena.len ? t->arena.len : 1) * sizeof(int32_t));
     t->cell_of_char = malloc((t->arena.len ? t->arena.len : 1) * sizeof(int32_t));
+    t->render_mirror_len = t->arena.len;
+    t->render_mirror = calloc(t->render_mirror_len ? t->render_mirror_len : 1, sizeof(RenderMirror));
+    for (size_t id = 0; id < t->arena.len; id++) {
+        mirror_fill(t, (CharId)id);
+    }
     t->grid_chars_len = t->arena.len;
     t->grid_ready = false;
     t->lists_valid = false;
