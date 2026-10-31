@@ -711,23 +711,20 @@ static const char *swarm_next_frame(Effect *self, EngineCtx *ctx) {
                 if (!active) {
                     continue;
                 }
-                char *path_id = malloc(strlen(active) + 1);
-                strcpy(path_id, active);
-                if (strcmp(path_id, st->active_swarm_area) != 0 && strstr(path_id, "swarm_area") != NULL &&
-                    first_char_digit(path_id) > first_char_digit(st->active_swarm_area)) {
+                // Compare in place; only an adopted area needs its own copy.
+                if (strcmp(active, st->active_swarm_area) != 0 && strstr(active, "swarm_area") != NULL &&
+                    first_char_digit(active) > first_char_digit(st->active_swarm_area)) {
                     free(st->active_swarm_area);
-                    st->active_swarm_area = malloc(strlen(path_id) + 1);
-                    strcpy(st->active_swarm_area, path_id);
+                    st->active_swarm_area = malloc(strlen(active) + 1);
+                    strcpy(st->active_swarm_area, active);
                     for (size_t j = 0; j < st->current_swarm.len; j++) {
                         CharId other = st->current_swarm.items[j];
                         if (other != id && rng_random(&ctx->rng) < st->config.swarm_coordination) {
                             engine_activate_path(ctx, self, other, st->active_swarm_area);
                         }
                     }
-                    free(path_id);
                     break;
                 }
-                free(path_id);
             }
         }
         engine_update(ctx, self);
