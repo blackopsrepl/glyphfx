@@ -52,6 +52,11 @@ void segment_copy(Segment *dst, const Segment *src) {
     dst->exit_event_triggered = src->exit_event_triggered;
 }
 
+// Like the engine's other global tables, path construction is serialized by
+// the Rust bridge. Identity outlives a particular malloc address: callbacks can
+// delete a path and allocate a different one at the same address.
+static uint64_t next_path_identity;
+
 Path *path_new(const char *path_id, double speed, bool has_ease, Easing ease, bool has_layer, int64_t layer,
                int64_t hold_time, bool loop_) {
     if (speed <= 0.0) {
@@ -61,6 +66,7 @@ Path *path_new(const char *path_id, double speed, bool has_ease, Easing ease, bo
     if (!p) {
         return NULL;
     }
+    p->identity = ++next_path_identity;
     p->path_id = dup_cstr(path_id);
     p->speed = speed;
     p->has_ease = has_ease;
@@ -119,6 +125,7 @@ static void path_push_segment(Path *p, Segment seg) {
 }
 
 static void add_waypoint_to_path(Path *p, Waypoint waypoint) {
+    p->geometry_revision++;
     path_push_waypoint(p, waypoint);
     if (p->waypoints_len < 2) {
         return;

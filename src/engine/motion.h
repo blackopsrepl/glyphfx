@@ -43,6 +43,8 @@ typedef struct {
     size_t waypoints_len;
     size_t waypoints_cap;
     double total_distance;
+    uint64_t identity;           // distinguishes reused allocator addresses
+    uint64_t geometry_revision;  // invalidates captured segment arithmetic
     int64_t current_step;
     int64_t max_steps;
     int64_t hold_time_remaining;
