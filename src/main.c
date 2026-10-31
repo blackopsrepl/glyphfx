@@ -277,6 +277,17 @@ int main(int argc, char **argv) {
         cli_print_completion(cfg.print_completion);
         return 0;
     }
+    // Run at a terminal with nothing to animate: say how to use it. A pipe,
+    // even an empty one, keeps ttfx's "NO INPUT." below.
+    if (!cfg.input_file && !cfg.m0_dump && !cfg.parity_dump && isatty(STDIN_FILENO)) {
+        bool effect_help = cfg.effect_entry && !cfg.random_effect;
+        int help_rc = print_help(&cfg, effect_help);
+        if (cfg.effect_entry && cfg.effect_config) {
+            ((const EffectEntry *)cfg.effect_entry)->free_config(cfg.effect_config);
+            free(cfg.effect_config);
+        }
+        return help_rc;
+    }
 
     char *input = NULL;
     size_t input_len = 0;
