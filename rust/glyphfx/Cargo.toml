@@ -1,6 +1,6 @@
 [package]
 name = "glyphfx"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 license = "MIT"
 description = "Frame-by-frame, UI-agnostic glyphfx text effects"
@@ -12,4 +12,4 @@ categories = ["visualization"]
 include = ["/src/**", "/tests/**", "/README.md", "/LICENSE", "/NOTICE"]
 
 [dependencies]
-glyphfx-sys = { path = "../..", version = "0.4.0" }
+glyphfx-sys = { path = "../..", version = "0.4.1" }

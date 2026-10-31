@@ -2,6 +2,28 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by csemver; do not edit by hand.
 
+## [0.4.1](https://github.com/blackopsrepl/glyphfx/compare/v0.4.0...v0.4.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* **perf:** gate on retired instructions instead of wall time ([4a2118b](https://github.com/blackopsrepl/glyphfx/commit/4a2118b39c413aa40a3136bc60fc01bda2f48e32))
+* **perf:** settle the gate's counters so its bars hold ([5c41299](https://github.com/blackopsrepl/glyphfx/commit/5c412994b3f39f5ce71bb4da80a138ca1355919e))
+* **perf:** settle the gate's counters so its bars hold ([11edee4](https://github.com/blackopsrepl/glyphfx/commit/11edee4c4da9218281a8026e8123ec71c3689fc5))
+
+
+### Performance
+
+* **engine:** intern the keys of a character's scene and path maps ([4074c28](https://github.com/blackopsrepl/glyphfx/commit/4074c28fd1a86661d359fcad2c553fc3f05e58a8))
+* **engine:** pool scene frames in one reserved region ([135a709](https://github.com/blackopsrepl/glyphfx/commit/135a709ba3fce4d2ffe570699f2ffd11f78833b1))
+* **engine:** remember each dozer's scene instead of resolving it on every wake ([fd28640](https://github.com/blackopsrepl/glyphfx/commit/fd28640aa66343794eb101fa077358aa5bfd04f8))
+
+
+### Build
+
+* **rust:** version both crates from the release ([fb0880d](https://github.com/blackopsrepl/glyphfx/commit/fb0880d0ad9587b010dfc015b7e6bc46b6d419b5))
+
+
 ## [0.4.0](https://github.com/blackopsrepl/glyphfx/compare/v0.3.4...v0.4.0) (2026-10-30)
 
 
