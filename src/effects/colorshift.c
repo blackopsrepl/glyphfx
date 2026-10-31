@@ -161,7 +161,9 @@ static int colorshift_build(Effect *self, EngineCtx *ctx) {
     Easing no_ease;
     memset(&no_ease, 0, sizeof(no_ease));
 
-    int rc = 0;
+    FrameMemo *gradient_runs = framemo_new();
+    Color run_key = {0};
+    int rc = gradient_runs ? 0 : -1;
     for (size_t i = 0; i < n && rc == 0; i++) {
         CharId id = characters[i];
         terminal_set_character_visibility(&ctx->terminal, id, true);
@@ -175,13 +177,9 @@ static int colorshift_build(Effect *self, EngineCtx *ctx) {
         char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
         strcpy(input_symbol, ch->input_symbol);
 
-        Color *colors = NULL;
-        size_t colors_len = 0;
-        bool colors_owned = false;
-        if (cfg->no_travel) {
-            colors = gradient.spectrum;
-            colors_len = gradient.len;
-        } else {
+        size_t shift = 0;
+        size_t colors_len = gradient.len;
+        if (!cfg->no_travel) {
             double direction_index;
             bool direction_ok = true;
             if (cfg->travel_direction == GRADIENT_HORIZONTAL) {
@@ -219,39 +217,61 @@ static int colorshift_build(Effect *self, EngineCtx *ctx) {
             } else {
                 k = shift_distance < len ? (size_t)shift_distance : (size_t)len;
             }
-            colors_len = gradient.len;
-            colors = malloc((colors_len ? colors_len : 1) * sizeof(Color));
-            for (size_t j = 0; j < colors_len; j++) {
-                colors[j] = gradient.spectrum[(k + j) % colors_len];
-            }
-            colors_owned = true;
+            shift = k;
         }
 
         ch = &ctx->terminal.arena.items[id];
         animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, no_ease, "gradient", uses_pre);
         Scene *gradient_scene = (Scene *)om_get(&ch->animation.scenes, "gradient");
-        for (size_t j = 0; j < colors_len; j++) {
-            VisualParams vp;
-            memset(&vp, 0, sizeof(vp));
-            vp.has_colors = true;
-            vp.colors.has_fg = true;
-            vp.colors.fg = colors[j];
-            if (scene_add_frame(gradient_scene, input_symbol, cfg->gradient_frames, &vp) != 0) {
-                rc = -1;
-                break;
+        if (!gradient_scene) {
+            free(input_symbol);
+            rc = -1;
+            break;
+        }
+        bool shareable = !gradient_scene->cold->has_preexisting_colors &&
+                         !gradient_scene->cold->preexisting_bold && colors_len > 0 &&
+                         colors_len <= (size_t)(INT64_MAX / 2) &&
+                         cfg->gradient_frames <= INT64_MAX / (2 * (int64_t)colors_len);
+        const FrameRun *run = shareable ? framemo_get_run(gradient_runs, input_symbol, run_key) : NULL;
+        if (!run) {
+            for (size_t j = 0; j < colors_len; j++) {
+                VisualParams vp = {0};
+                vp.has_colors = true;
+                vp.colors.has_fg = true;
+                // Shared runs are canonical; each character selects its own
+                // rotation below. Input-specific styles keep their own frames.
+                size_t at = shareable ? j : (shift + j) % colors_len;
+                vp.colors.fg = gradient.spectrum[at];
+                if (scene_add_frame(gradient_scene, input_symbol, cfg->gradient_frames, &vp) != 0) {
+                    rc = -1;
+                    break;
+                }
+            }
+            if (rc == 0 && shareable) {
+                // Two copies contain every rotation as one contiguous window.
+                // The memo captures the immutable span before this scene narrows
+                // to its own window and starts independent playback.
+                if (scene_append_frames(gradient_scene, gradient_scene) != 0 ||
+                    framemo_put(gradient_runs, input_symbol, run_key, gradient_scene) != 0) {
+                    rc = -1;
+                } else {
+                    run = framemo_get_run(gradient_runs, input_symbol, run_key);
+                }
             }
         }
+        if (rc == 0 && run) {
+            FrameRun rotated;
+            if (frame_run_slice(*run, shift, colors_len, &rotated) != 0 ||
+                scene_set_frame_run(gradient_scene, rotated) != 0) rc = -1;
+        }
         if (rc != 0) {
-            if (colors_owned) {
-                free(colors);
-            }
             free(input_symbol);
             break;
         }
 
         ch = &ctx->terminal.arena.items[id];
         animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, no_ease, "final_gradient", uses_pre);
-        Color last_color = colors[colors_len - 1];
+        Color last_color = gradient.spectrum[(shift + colors_len - 1) % colors_len];
 
         if (dynamic) {
             Gradient fg_grad;
@@ -322,9 +342,6 @@ static int colorshift_build(Effect *self, EngineCtx *ctx) {
                 gradient_free(&final_scene_gradient);
             }
         }
-        if (colors_owned) {
-            free(colors);
-        }
         if (rc != 0) {
             free(input_symbol);
             break;
@@ -349,6 +366,7 @@ static int colorshift_build(Effect *self, EngineCtx *ctx) {
         free(input_symbol);
     }
 
+    framemo_free(gradient_runs);
     free(characters);
     coordcolormap_free(&mapping);
     gradient_free(&gradient);

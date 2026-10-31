@@ -268,6 +268,37 @@ int scene_append_frames(Scene *dst, const Scene *src) {
     return 0;
 }
 
+FrameRun scene_frame_run(const Scene *scene) {
+    return (FrameRun){scene->all_frames, scene->all_frames_len, scene->cold->easing_total_steps};
+}
+
+int frame_run_slice(FrameRun run, size_t first, size_t count, FrameRun *out) {
+    if (first > run.len || count > run.len - first || (count && !run.frames)) return -1;
+    int64_t ticks = 0;
+    for (size_t i = 0; i < count; i++) {
+        int64_t duration = run.frames[first + i].duration;
+        if (duration < 1 || duration > INT64_MAX - ticks) return -1;
+        ticks += duration;
+    }
+    *out = (FrameRun){run.frames ? run.frames + first : NULL, count, ticks};
+    return 0;
+}
+
+int scene_set_frame_run(Scene *scene, FrameRun run) {
+    if (run.total_steps < 0 || (run.len && (!run.frames || run.total_steps < 1)) ||
+        (!run.len && run.total_steps)) return -1;
+    scene_wake(scene);
+    scene->all_frames = run.frames;
+    scene->all_frames_len = run.len;
+    scene->head = 0;
+    scene->ticks_elapsed = 0;
+    scene->easing_current_step = 0;
+    scene->cold->easing_total_steps = run.total_steps;
+    scene->cold->easing_shape_seq = NULL;
+    scene->cold->easing_shape_for_len = 0;
+    return 0;
+}
+
 // --- IndexDeque -----------------------------------------------------------
 
 void iq_init(IndexDeque *q) {
@@ -927,6 +958,7 @@ typedef struct {
     char *symbol;  // owned copy for value comparison
     Color fg;
     Scene *scene;  // borrowed: the template scene for this pair
+    FrameRun run;  // immutable description captured before the source can change
 } FrameMemoEntry;
 
 struct FrameMemo {
@@ -953,7 +985,7 @@ FrameMemo *framemo_new(void) {
     return calloc(1, sizeof(FrameMemo));
 }
 
-Scene *framemo_get(FrameMemo *m, const char *symbol, Color fg) {
+static FrameMemoEntry *framemo_find(FrameMemo *m, const char *symbol, Color fg) {
     FrameMemo *tab = m;
     if (!tab || tab->cap == 0) {
         return NULL;
@@ -962,11 +994,21 @@ Scene *framemo_get(FrameMemo *m, const char *symbol, Color fg) {
     size_t i = (size_t)framemo_hash(symbol, fg) & mask;
     while (tab->slots[i].scene) {
         if (framemo_key_eq(&tab->slots[i], symbol, fg)) {
-            return tab->slots[i].scene;
+            return &tab->slots[i];
         }
         i = (i + 1) & mask;
     }
     return NULL;
+}
+
+Scene *framemo_get(FrameMemo *m, const char *symbol, Color fg) {
+    FrameMemoEntry *entry = framemo_find(m, symbol, fg);
+    return entry ? entry->scene : NULL;
+}
+
+const FrameRun *framemo_get_run(FrameMemo *m, const char *symbol, Color fg) {
+    FrameMemoEntry *entry = framemo_find(m, symbol, fg);
+    return entry ? &entry->run : NULL;
 }
 
 static int framemo_rehash(FrameMemo *tab, size_t cap) {
@@ -1014,6 +1056,7 @@ int framemo_put(FrameMemo *m, const char *symbol, Color fg, Scene *scene) {
     tab->slots[i].symbol = copy;
     tab->slots[i].fg = fg;
     tab->slots[i].scene = scene;
+    tab->slots[i].run = scene_frame_run(scene);
     tab->used++;
     return 0;
 }

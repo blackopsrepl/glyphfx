@@ -166,6 +166,19 @@ int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const Vi
 // Subsequent appends to either scene do not modify their existing frame prefixes.
 int scene_append_frames(Scene *dst, const Scene *src);
 
+typedef struct {
+    const Frame *frames;
+    size_t len;
+    int64_t total_steps;
+} FrameRun;
+
+// Immutable frame descriptions, independent of their source scene's playback.
+FrameRun scene_frame_run(const Scene *scene);
+// A zero-copy subrange, with its own checked duration total.
+int frame_run_slice(FrameRun run, size_t first, size_t count, FrameRun *out);
+// Replace the description and reset playback; the pooled frames remain shared.
+int scene_set_frame_run(Scene *scene, FrameRun run);
+
 // Memo of template scenes keyed by (symbol, color): effects whose frame
 // content depends only on that pair build one scene and share it across
 // characters (the asm engine's visual_run_find/visual_run_keep).
@@ -173,6 +186,9 @@ typedef struct FrameMemo FrameMemo;
 FrameMemo *framemo_new(void);
 // The template scene recorded for (symbol, fg), or NULL.
 Scene *framemo_get(FrameMemo *m, const char *symbol, Color fg);
+// The immutable description captured at insertion, unaffected by later playback
+// or replacement of the source scene. Copy before inserting another memo entry.
+const FrameRun *framemo_get_run(FrameMemo *m, const char *symbol, Color fg);
 int framemo_put(FrameMemo *m, const char *symbol, Color fg, Scene *scene);
 void framemo_free(FrameMemo *m);
 // Returns 0 on success; sets the active frame's visual (borrowed) and its
