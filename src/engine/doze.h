@@ -49,9 +49,7 @@ typedef struct {
     uint64_t *snapshot;  // the running update's snapshot of the active set
     size_t nwords;       // words in bits and snapshot
     size_t snapshot_words;  // words of the running update's snapshot
-    uint32_t *from;      // the update whose tick started the doze
     uint32_t *until;     // the last update the doze covers
-    uint8_t *kind;       // DOZE_PLAIN or DOZE_EASED
     struct Scene **scene;  // the scene the doze counts down in (pooled, stable)
     size_t nslots;
     size_t live;         // dozing characters, so the wake check is one load when none
@@ -69,8 +67,8 @@ void doze_free(Doze *d);
 bool doze_grow(Doze *d, size_t slots);
 // Sleeping lanes whose inclusive deadline covers now. `until` has 64 entries.
 uint64_t doze_pending_word(const uint32_t *until, uint32_t now, uint64_t dozing);
-// After engine_update ticked `id`: park it through its pure ticks, if any.
-void doze_try(Doze *d, CharId id);
+// Schedule from the scene/visual already resolved by animation stepping.
+void doze_schedule(Doze *d, CharId id, struct Scene *scene, uint32_t shown);
 // Settle a doze: apply the owed pure ticks. engine_update calls this for a
 // character whose doze ran out; doze_wake for every other end.
 void doze_settle(Doze *d, CharId id);

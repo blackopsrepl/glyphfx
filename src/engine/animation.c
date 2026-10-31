@@ -388,22 +388,8 @@ int scene_activate(const Scene *scene, VisualHandle *out, size_t *frame_index) {
 }
 
 void scene_get_next_visual(Scene *scene, VisualHandle *out, size_t *frame_index) {
-    size_t head = scene->head;
-    if (head >= scene->all_frames_len) {
-        *out = 0;
-        *frame_index = 0;
-        return;
-    }
-    *out = scene->all_frames[head].visual;
-    *frame_index = head;
-    scene->ticks_elapsed += 1;
-    if (scene->ticks_elapsed == scene->all_frames[head].duration) {
-        scene->ticks_elapsed = 0;
-        scene->head = head + 1;
-        if (scene->is_looping && scene->head >= scene->all_frames_len) {
-            scene->head = 0;
-        }
-    }
+    *frame_index = scene->head < scene->all_frames_len ? scene->head : 0;
+    *out = scene_advance(scene);
 }
 
 bool scene_frame_at_tick(const Scene *scene, int64_t tick, size_t *frame, int64_t *start) {
@@ -749,6 +735,11 @@ static bool shape_extend(EasedShape *shape, size_t want, const Frame *frames) {
         if (!shape_walk_tick(frames, shape->frames_len, ticks[i], &frame)) return false;
         shape->steps[i] = frame;
     }
+    uint32_t *ends = (uint32_t *)(shape->steps + shape->total);
+    for (size_t i = want; i-- > 0;) {
+        ends[i] = i + 1 < want && shape->steps[i] == shape->steps[i + 1]
+                    ? ends[i + 1] : (uint32_t)(i + 1);
+    }
     shape->len = want;
     return true;
 }
@@ -771,7 +762,7 @@ const int32_t *shape_frames_by_step(const Easing *ease, int64_t total_steps, con
     }
     int64_t *durations = malloc(frames_len * sizeof(*durations));
     if (!durations) return NULL;
-    int32_t *steps = calloc((size_t)total_steps, sizeof(*steps));
+    int32_t *steps = calloc((size_t)total_steps * 2, sizeof(*steps));
     if (!steps) {
         free(durations);
         return NULL;
@@ -802,12 +793,14 @@ const int32_t *scene_easing_shape_seq(Scene *scene) {
         return cold->easing_shape_seq;
     }
     cold->easing_shape_seq = NULL;
+    cold->easing_span_ends = NULL;
     cold->easing_shape_for_len = 0;
     if (!scene->has_ease || !scene->all_frames_len) return NULL;
     const Frame *frames = (const Frame *)scene->all_frames;
     cold->easing_shape_seq =
         shape_frames_by_step(&cold->ease, cold->easing_total_steps, frames, scene->all_frames_len);
     if (!cold->easing_shape_seq) return NULL;
+    cold->easing_span_ends = (const uint32_t *)(cold->easing_shape_seq + cold->easing_total_steps);
     cold->easing_shape_for_len = scene->all_frames_len;
     cold->easing_shape_for_ease = cold->ease;
     return cold->easing_shape_seq;
@@ -839,9 +832,9 @@ const int32_t *eased_frame_seq(const Easing *ease, int64_t total_steps) {
 void animation_init(Animation *anim, const char *input_symbol) {
     memset(anim, 0, sizeof(*anim));
     om_init(&anim->scenes);
-    anim->input_symbol = dup_cstr(input_symbol);
+    anim->input_symbol = strtab_handle(input_symbol);
     anim->existing_color_handling = EXISTING_COLOR_IGNORE;
-    anim->current_visual = visual_make(input_symbol, &(VisualParams){0});
+    anim->current_visual = visual_make_symbol(anim->input_symbol, &(VisualParams){0});
 }
 
 void animation_free(Animation *anim) {
@@ -849,15 +842,23 @@ void animation_free(Animation *anim) {
         scene_free((Scene *)om_value_at(&anim->scenes, i));
     }
     om_free(&anim->scenes);
-    free(anim->input_symbol);
-    free(anim->active_scene);
     memset(anim, 0, sizeof(*anim));
 }
 
 void animation_set_appearance(Animation *anim, bool uses_input_preexisting_colors, const char *symbol,
                               const ColorPair *colors) {
+    SymbolId use_symbol = anim->input_symbol;
+    // Characters hold their input symbol interned, so the common restyle of
+    // the input glyph is a pointer compare; any other text resolves its handle.
+    if (symbol && symbol != strtab_name(use_symbol)) {
+        use_symbol = strtab_handle(symbol);
+    }
+    animation_set_appearance_symbol(anim, uses_input_preexisting_colors, use_symbol, colors);
+}
+
+void animation_set_appearance_symbol(Animation *anim, bool uses_input_preexisting_colors, SymbolId use_symbol,
+                                     const ColorPair *colors) {
     doze_wake((CharId)anim->render_id);
-    const char *use_symbol = symbol ? symbol : anim->input_symbol;
     ColorPair effective;
     if (colors) {
         effective = *colors;
@@ -873,7 +874,7 @@ void animation_set_appearance(Animation *anim, bool uses_input_preexisting_color
         bold = anim->input_bold;
     }
 
-    VisualHandle next = visual_make_appearance(use_symbol, &effective, bold,
+    VisualHandle next = visual_make_appearance_symbol(use_symbol, &effective, bold,
                                               anim->no_color, anim->use_xterm_colors);
     if (next == 0 || next == anim->current_visual) {
         return;
@@ -920,8 +921,7 @@ bool animation_active_scene_is_complete(const Animation *anim) {
     }
     const Scene *scene = anim->active_scene_ref;
     if (!scene) {
-        scene = anim->active_scene_slot_valid ? (const Scene *)om_value_at(&anim->scenes, anim->active_scene_slot)
-                                              : (const Scene *)om_get(&anim->scenes, anim->active_scene);
+        scene = (const Scene *)om_get(&anim->scenes, anim->active_scene);
     }
     if (!scene) {
         return true;
@@ -930,14 +930,12 @@ bool animation_active_scene_is_complete(const Animation *anim) {
 }
 
 Scene *animation_active_scene(Animation *anim) {
+    doze_wake((CharId)anim->render_id);
     if (anim->active_scene_ref) {
         return anim->active_scene_ref;
     }
     if (!anim->active_scene) {
         return NULL;
-    }
-    if (anim->active_scene_slot_valid) {
-        return (Scene *)om_value_at(&anim->scenes, anim->active_scene_slot);
     }
     return (Scene *)om_get(&anim->scenes, anim->active_scene);
 }
@@ -949,7 +947,6 @@ void animation_clear_scenes(Animation *anim) {
     }
     om_clear(&anim->scenes);
     anim->active_scene_ref = NULL;
-    anim->active_scene_slot_valid = false;
 }
 
 // --- frame memo -----------------------------------------------------------

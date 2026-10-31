@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "engine/doze.h"
+#include "utils/strtab.h"
 
 ParticleReset particle_reset_default(void) {
     ParticleReset r;
@@ -93,9 +94,7 @@ static void reset_particle(EngineCtx *ctx, CharId id, ParticleReset reset) {
         motion_deactivate_path(&ch->motion, NULL);
     }
     if (reset.deactivate_scene) {
-        free(ch->animation.active_scene);
         ch->animation.active_scene = NULL;
-        ch->animation.active_scene_slot_valid = false;
         ch->animation.active_scene_ref = NULL;
     }
     if (reset.clear_paths) {
@@ -147,10 +146,8 @@ CharId particle_pool_acquire(ParticlePool *pool, EngineCtx *ctx, const char *sym
         reset_particle(ctx, particle, reset);
         if (symbol) {
             EffectCharacter *ch = &ctx->terminal.arena.items[particle];
-            free(ch->input_symbol);
-            ch->input_symbol = malloc(strlen(symbol) + 1);
-            strcpy(ch->input_symbol, symbol);
-            animation_set_appearance(&ch->animation, ch->uses_input_preexisting_colors, symbol, NULL);
+            ch->input_symbol = strtab_intern(symbol);
+            animation_set_appearance(&ch->animation, ch->uses_input_preexisting_colors, ch->input_symbol, NULL);
         }
         return particle;
     }
@@ -186,9 +183,7 @@ void particle_pool_reclaim(ParticlePool *pool, EngineCtx *ctx, CharId id, bool h
     if (deactivate) {
         EffectCharacter *ch = &ctx->terminal.arena.items[id];
         motion_deactivate_path(&ch->motion, NULL);
-        free(ch->animation.active_scene);
         ch->animation.active_scene = NULL;
-        ch->animation.active_scene_slot_valid = false;
         ch->animation.active_scene_ref = NULL;
     }
     ac_remove(&ctx->active_characters, id);

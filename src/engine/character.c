@@ -3,20 +3,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-static char *dup_cstr(const char *s) {
-    size_t len = strlen(s);
-    char *out = malloc(len + 1);
-    if (!out) {
-        return NULL;
-    }
-    memcpy(out, s, len + 1);
-    return out;
-}
+#include "utils/strtab.h"
 
 void character_init(EffectCharacter *ch, uint32_t character_id, const char *symbol, int64_t column, int64_t row) {
     memset(ch, 0, sizeof(*ch));
     ch->character_id = character_id;
-    ch->input_symbol = dup_cstr(symbol);
+    ch->input_symbol = strtab_intern(symbol);
     ch->input_coord = coord_new(column, row);
     motion_init(&ch->motion, coord_new(column, row));
     ch->motion.render_id = (int32_t)character_id;
@@ -29,7 +21,6 @@ void character_init(EffectCharacter *ch, uint32_t character_id, const char *symb
 }
 
 void character_free(EffectCharacter *ch) {
-    free(ch->input_symbol);
     free(ch->input_ansi_fg_sequence);
     free(ch->input_ansi_bg_sequence);
     animation_free(&ch->animation);

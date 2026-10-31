@@ -17,7 +17,7 @@
 
 typedef struct {
     uint32_t character_id;  // Python-compatible allocation id; ordering key
-    char *input_symbol;     // owned
+    const char *input_symbol;  // interned (strtab), process lifetime
     Coord input_coord;
     Motion motion;
     bool is_visible;

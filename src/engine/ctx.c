@@ -1008,13 +1008,8 @@ void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char
     if (scene_activate(scene, &src, &fidx) != 0) {
         return;
     }
-    free(ch->animation.active_scene);
-    ch->animation.active_scene = malloc(strlen(scene_id) + 1);
-    strcpy(ch->animation.active_scene, scene_id);
-    ch->animation.active_scene_slot = (size_t)scene_slot;
-    ch->animation.active_scene_slot_valid = true;
+    ch->animation.active_scene = strtab_intern(scene_id);
     ch->animation.active_scene_ref = scene;
-    ch->animation.active_scene_current_step = 0;
     set_current_visual(ctx, id, src);
     if (observes_event(ctx, id, EVENT_SCENE_ACTIVATED)) {
         CallerKey key = scene_caller(scene);
@@ -1026,16 +1021,12 @@ void engine_deactivate_scene(EngineCtx *ctx, CharId id, const char *scene_id) {
     doze_wake(id);
     Animation *anim = &ctx->terminal.arena.items[id].animation;
     if (!scene_id) {
-        free(anim->active_scene);
         anim->active_scene = NULL;
-        anim->active_scene_slot_valid = false;
         anim->active_scene_ref = NULL;
         return;
     }
     if (anim->active_scene && strcmp(anim->active_scene, scene_id) == 0) {
-        free(anim->active_scene);
         anim->active_scene = NULL;
-        anim->active_scene_slot_valid = false;
         anim->active_scene_ref = NULL;
     }
 }
@@ -1047,9 +1038,7 @@ static void complete_scene_if_finished(EngineCtx *ctx, Effect *effect, CharId id
     Animation *anim = &ctx->terminal.arena.items[id].animation;
     if (!scene->is_looping) {
         scene_reset(scene);
-        free(anim->active_scene);
         anim->active_scene = NULL;
-        anim->active_scene_slot_valid = false;
         anim->active_scene_ref = NULL;
     }
     if (observes_event(ctx, id, EVENT_SCENE_COMPLETE)) {
@@ -1138,12 +1127,13 @@ static void step_eased_scene(EngineCtx *ctx, CharId id, Scene *scene) {
     }
 }
 
-static void step_animation_now(EngineCtx *ctx, Effect *effect, CharId id) {
+static void step_animation_now(EngineCtx *ctx, Effect *effect, CharId id, bool may_park) {
     Animation *anim = &ctx->terminal.arena.items[id].animation;
     if (!anim->active_scene) {
         return;
     }
-    Scene *scene = animation_active_scene(anim);
+    Scene *scene = anim->active_scene_ref;
+    if (!scene) scene = animation_active_scene(anim);
     if (!scene || scene->head >= scene->all_frames_len) {
         return;
     }
@@ -1152,18 +1142,24 @@ static void step_animation_now(EngineCtx *ctx, Effect *effect, CharId id) {
     } else if (scene->has_ease) {
         step_eased_scene(ctx, id, scene);
     } else {
-        VisualHandle src = 0;
-        size_t fidx = 0;
-        scene_get_next_visual(scene, &src, &fidx);
-        set_current_visual(ctx, id, src);
+        set_current_visual(ctx, id, scene_advance(scene));
     }
     complete_scene_if_finished(ctx, effect, id, scene);
+    if (may_park) {
+        // Completion callbacks can replace the active scene or create a path.
+        // Reacquire only after dispatch; the ordinary step uses the hot scene.
+        EffectCharacter *ch = &ctx->terminal.arena.items[id];
+        if (!ch->motion.active_path && ch->animation.active_scene) {
+            doze_schedule(&ctx->doze, id, ch->animation.active_scene_ref,
+                          ch->animation.current_visual);
+        }
+    }
 }
 
 __attribute__((always_inline))
 static inline void tick_now(EngineCtx *ctx, Effect *effect, CharId id) {
     motion_move_now(ctx, effect, id);
-    step_animation_now(ctx, effect, id);
+    step_animation_now(ctx, effect, id, false);
 }
 
 // The public tick entry points serve effects that tick characters themselves;
@@ -1175,7 +1171,7 @@ void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id) {
 
 void engine_step_animation(EngineCtx *ctx, Effect *effect, CharId id) {
     doze_wake(id);
-    step_animation_now(ctx, effect, id);
+    step_animation_now(ctx, effect, id, false);
 }
 
 void engine_tick(EngineCtx *ctx, Effect *effect, CharId id) {
@@ -1206,11 +1202,16 @@ static inline void update_slot(EngineCtx *ctx, Effect *effect, size_t w, unsigne
     if (mirrored && motion_take_batch(ctx, id, &animation_ready, &visual)) {
         if (animation_ready) {
             set_current_visual(ctx, id, visual);
+            const EffectCharacter *done = &ctx->terminal.arena.items[id];
+            if (!done->motion.active_path && done->animation.active_scene) {
+                doze_schedule(d, id, done->animation.active_scene_ref, visual);
+            }
         } else {
-            step_animation_now(ctx, effect, id);
+            step_animation_now(ctx, effect, id, true);
         }
     } else {
-        tick_now(ctx, effect, id);
+        motion_move_now(ctx, effect, id);
+        step_animation_now(ctx, effect, id, true);
     }
     const EffectCharacter *ch = &ctx->terminal.arena.items[id];
     if (!ch->motion.active_path) {
@@ -1226,7 +1227,6 @@ static inline void update_slot(EngineCtx *ctx, Effect *effect, size_t w, unsigne
             scene->head >= scene->all_frames_len) {
             ac_mark_candidate(&ctx->active_characters, id);
         }
-        if (ch->animation.active_scene) doze_try(d, id);
     }
     if (d->snapshot[w]) {
         *pending |= d->snapshot[w];

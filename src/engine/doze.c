@@ -10,8 +10,6 @@
 #include "engine/animation.h"
 #include "engine/ctx.h"
 
-enum { DOZE_PLAIN = 0, DOZE_EASED = 1 };
-
 // The longest doze computed at once. A doze re-arms on the tick that ends it,
 // so the cap only bounds the look-ahead walk, not the skipped work. Builds may
 // lower it (-DDOZE_MAX_TICKS=1) to exercise many more doze boundaries.
@@ -36,9 +34,7 @@ void doze_free(Doze *d) {
     }
     free(d->bits);
     free(d->snapshot);
-    free(d->from);
     free(d->until);
-    free(d->kind);
     free(d->scene);
     memset(d, 0, sizeof(*d));
     d->cursor = CHAR_ID_NONE;
@@ -63,9 +59,7 @@ bool doze_grow(Doze *d, size_t slots) {
         cap *= 2;
     }
     size_t words = (cap + 63) / 64;
-    if (!grow_array((void **)&d->from, sizeof(uint32_t), d->nslots, cap) ||
-        !grow_array((void **)&d->until, sizeof(uint32_t), d->nslots, cap) ||
-        !grow_array((void **)&d->kind, sizeof(uint8_t), d->nslots, cap) ||
+    if (!grow_array((void **)&d->until, sizeof(uint32_t), d->nslots, cap) ||
         !grow_array((void **)&d->scene, sizeof(Scene *), d->nslots, cap) ||
         !grow_array((void **)&d->bits, sizeof(uint64_t), d->nwords, words) ||
         !grow_array((void **)&d->snapshot, sizeof(uint64_t), d->nwords, words)) {
@@ -109,14 +103,6 @@ uint64_t doze_pending_word(const uint32_t *until, uint32_t now, uint64_t dozing)
     return pending;
 }
 
-static Scene *dozing_scene(EngineCtx *ctx, CharId id) {
-    Animation *anim = &ctx->terminal.arena.items[id].animation;
-    if (!anim->active_scene) {
-        return NULL;
-    }
-    return animation_active_scene(anim);
-}
-
 // Pure ticks ahead of a plain scene: the head frame's remaining ticks while
 // its visual is the one shown, across frame retirements, stopping before the
 // last frame's retiring tick (which completes the scene).
@@ -157,57 +143,41 @@ static uint32_t eased_pure_ticks(Scene *scene, VisualHandle shown) {
     const int32_t *shape = scene_easing_shape_seq(scene);
     if (!shape) return 0;
     uint32_t k = 0;
-    while (k < DOZE_MAX_TICKS && step + 1 < total) {
+    const uint32_t *ends = scene->cold->easing_span_ends;
+    int64_t limit = total - 1;
+    if (limit - step > DOZE_MAX_TICKS) limit = step + DOZE_MAX_TICKS;
+    while (step < limit) {
         int32_t frame = shape[step];
-        if (frame < 0 || (size_t)frame >= scene->all_frames_len) break;
-        if (scene->all_frames[frame].visual != shown) {
-            break;
-        }
-        k++;
-        step++;
+        if (frame < 0 || (size_t)frame >= scene->all_frames_len ||
+            scene->all_frames[frame].visual != shown) break;
+        int64_t end = ends[step];
+        if (end > limit) end = limit;
+        k += (uint32_t)(end - step);
+        step = end;
     }
     return k;
 }
 
-void doze_try(Doze *d, CharId id) {
-    EngineCtx *ctx = d->ctx;
-    if ((size_t)id >= d->nslots || !ac_contains(&ctx->active_characters, id)) {
+static void apply_pure_ticks(Scene *scene, uint32_t n);
+
+void doze_schedule(Doze *d, CharId id, Scene *scene, uint32_t shown) {
+    if ((size_t)id >= d->nslots || !ac_contains(&d->ctx->active_characters, id) ||
+        !scene || scene->is_looping || scene->has_sync || scene->head >= scene->all_frames_len) {
         return;
     }
-    EffectCharacter *ch = &ctx->terminal.arena.items[id];
-    if (ch->motion.active_path) {
-        return;
-    }
-    Scene *scene = dozing_scene(d->ctx, id);
-    if (!scene || scene->is_looping || scene->has_sync || scene->head >= scene->all_frames_len) {
-        return;
-    }
-    // Kept per character so settling never has to walk the arena back to the
-    // scene: that random access into a 552-byte record is a cache miss on every
-    // wake, and scenes are pooled so the pointer stays valid.
-    d->scene[id] = (struct Scene *)scene;
-    VisualHandle shown = ch->animation.current_visual;
-    uint32_t k;
-    uint8_t kind;
-    if (scene->has_ease) {
-        k = eased_pure_ticks(scene, shown);
-        kind = DOZE_EASED;
-    } else {
-        k = plain_pure_ticks(scene, shown);
-        kind = DOZE_PLAIN;
-    }
-    if (k < DOZE_MIN_TICKS) {
-        return;
-    }
-    d->bits[(size_t)id >> 6] |= 1ULL << (id & 63);
-    d->from[id] = d->count;
+    uint32_t k = scene->has_ease ? eased_pure_ticks(scene, shown) : plain_pure_ticks(scene, shown);
+    if (k < DOZE_MIN_TICKS) return;
+    // Advance while the scene is hot. Expiration only clears a bitmap bit;
+    // an early observer gives back precisely the updates not yet due.
+    apply_pure_ticks(scene, k);
+    d->scene[id] = scene;
+    d->bits[(size_t)id >> 6] |= UINT64_C(1) << (id & 63);
     d->until[id] = d->count + k;
-    d->kind[id] = kind;
     d->live++;
 }
 
-static void apply_pure_ticks(Scene *scene, uint8_t kind, uint32_t n) {
-    if (kind == DOZE_EASED) {
+static void apply_pure_ticks(Scene *scene, uint32_t n) {
+    if (scene->has_ease) {
         scene->easing_current_step += n;
         return;
     }
@@ -224,28 +194,26 @@ static void apply_pure_ticks(Scene *scene, uint8_t kind, uint32_t n) {
     }
 }
 
-// Apply the pure ticks the old engine would have run through update `last`.
-static void settle_through(Doze *d, CharId id, uint32_t last) {
-    d->bits[(size_t)id >> 6] &= ~(1ULL << (id & 63));
+void doze_settle(Doze *d, CharId id) {
+    d->bits[(size_t)id >> 6] &= ~(UINT64_C(1) << (id & 63));
     d->live--;
-    uint32_t end = last < d->until[id] ? last : d->until[id];
-    uint32_t owed = end - d->from[id];
-    if (owed == 0) {
-        return;
-    }
-    // The scene recorded when the doze began; the arena walk is the fallback
-    // for a character whose record predates it.
-    Scene *scene = (Scene *)d->scene[id];
-    if (!scene) {
-        scene = dozing_scene(d->ctx, id);
-    }
-    if (scene) {
-        apply_pure_ticks(scene, d->kind[id], owed);
-    }
 }
 
-void doze_settle(Doze *d, CharId id) {
-    settle_through(d, id, d->until[id]);
+static void settle_through(Doze *d, CharId id, uint32_t last) {
+    doze_settle(d, id);
+    uint32_t remaining = d->until[id] > last ? d->until[id] - last : 0;
+    if (!remaining) return;
+    Scene *scene = d->scene[id];
+    if (scene->has_ease) {
+        scene->easing_current_step -= remaining;
+        return;
+    }
+    while (remaining > (uint64_t)scene->ticks_elapsed) {
+        remaining -= (uint32_t)scene->ticks_elapsed;
+        scene->head--;
+        scene->ticks_elapsed = scene->all_frames[scene->head].duration;
+    }
+    scene->ticks_elapsed -= remaining;
 }
 
 void doze_wake_all(void) {

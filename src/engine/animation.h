@@ -93,6 +93,7 @@ typedef struct {
     // by shape and shared across identical scenes. Valid only when
     // easing_shape_for_len matches the frame count (appends rebuild it).
     const int32_t *easing_shape_seq;
+    const uint32_t *easing_span_ends;  // exclusive end of each equal-frame step run
     size_t easing_shape_for_len;
     // The easing the sequence was resolved for: thunderstorm rewrites a
     // scene's easing without touching its frames, so the frame count alone
@@ -107,7 +108,7 @@ typedef struct {
 
 // Only playback state lives in the hot pool. Cold records occupy a separate
 // contiguous region, so plain/synced ticks do not stream names, easing or colors.
-typedef struct {
+typedef struct Scene {
     const Frame *all_frames;  // shared immutable prefix in the engine's frame pool
     size_t all_frames_len;
     // Frames retire in order; reset and looping restore the queue's head.
@@ -125,20 +126,17 @@ struct Easing;
 
 typedef struct {
     OrdMap scenes;  // char* -> Scene*
-    char *active_scene;  // owned copy of the active scene id, or NULL
-    size_t active_scene_slot;  // cached OrdMap slot for the active scene
-    bool active_scene_slot_valid;
+    const char *active_scene;  // process-lifetime interned name, or NULL
     Scene *active_scene_ref;  // borrowed; the scene active_scene names, or NULL
     bool use_xterm_colors;
     bool no_color;
     ExistingColorHandling existing_color_handling;
-    char *input_symbol;  // owned
+    SymbolId input_symbol;
     bool has_input_fg;
     Color input_fg_color;
     bool has_input_bg;
     Color input_bg_color;
     bool input_bold;
-    int64_t active_scene_current_step;
     VisualHandle current_visual;
     int32_t render_id;  // arena index, for the renderer's change log
 } Animation;
@@ -147,6 +145,9 @@ void animation_init(Animation *anim, const char *input_symbol);
 void animation_free(Animation *anim);
 void animation_set_appearance(Animation *anim, bool uses_input_preexisting_colors, const char *symbol,
                               const ColorPair *colors);
+// Handle-native restyle: no string hashing or comparison on the hot path.
+void animation_set_appearance_symbol(Animation *anim, bool uses_input_preexisting_colors, SymbolId symbol,
+                                     const ColorPair *colors);
 // Returns a stable pointer to the interned scene id (NULL on failure).
 const char *animation_new_scene(Animation *anim, bool is_looping, bool has_sync, SyncMetric sync, bool has_ease,
                                 Easing ease, const char *scene_id, bool uses_input_preexisting_colors);
@@ -194,6 +195,19 @@ void framemo_free(FrameMemo *m);
 // Returns 0 on success; sets the active frame's visual (borrowed) and its
 // all_frames index.
 int scene_activate(const Scene *scene, VisualHandle *out, size_t *frame_index);
+static inline VisualHandle scene_advance(Scene *scene) {
+    size_t head = scene->head;
+    if (head >= scene->all_frames_len) return 0;
+    const Frame *frame = &scene->all_frames[head];
+    VisualHandle visual = frame->visual;
+    if (++scene->ticks_elapsed == frame->duration) {
+        scene->ticks_elapsed = 0;
+        scene->head = head + 1;
+        if (scene->is_looping && scene->head >= scene->all_frames_len) scene->head = 0;
+    }
+    return visual;
+}
+
 void scene_get_next_visual(Scene *scene, VisualHandle *out, size_t *frame_index);
 // Resolve a tick through immutable frame durations, independent of playback
 // state: the caller owns the cursor, look-ahead included.
