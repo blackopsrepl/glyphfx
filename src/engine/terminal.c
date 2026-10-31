@@ -16,6 +16,10 @@
 #include "utils/pycompat.h"
 #include "utils/signals.h"
 
+#if defined(__SSE2__)
+#include <emmintrin.h>
+#endif
+
 #define NOT_VISIBLE SIZE_MAX
 
 static void mirror_fill(Terminal *t, CharId id);
@@ -446,6 +450,9 @@ void terminal_free(Terminal *t) {
     free(t->cell_visual);
     free(t->previous_cell_visual);
     free(t->row_dirty);
+    free(t->cell_dirty);
+    free(t->row_offs);
+    free(t->block_bits);
     free(t->cell_head);
     free(t->cell_next);
     free(t->cell_of_char);
@@ -551,6 +558,49 @@ static bool g_render_verify;
 
 static void row_cache_ensure(Terminal *t, size_t width, size_t height);
 
+// A cell whose winning handle changed: its dirty byte, and its row's.
+static inline void mark_cell(Terminal *t, int64_t cell, size_t width) {
+    size_t row = (size_t)cell / width;
+    t->cell_dirty[row * t->dirty_stride + ((size_t)cell - row * width)] = 1;
+    t->row_dirty[row] = 1;
+}
+
+// Set the dirty byte of every cell whose handle differs between the grids,
+// 16 cells a compare; returns whether any did.
+static bool mark_changed(uint8_t *dirty, const VisualHandle *now, const VisualHandle *was, size_t n) {
+    size_t col = 0;
+    bool any = false;
+#if defined(__SSE2__)
+    const __m128i one = _mm_set1_epi8(1);
+    unsigned changed = 0;
+    for (; col + 16 <= n; col += 16) {
+        __m128i e[4];
+        for (int i = 0; i < 4; i++) {
+            __m128i a = _mm_loadu_si128((const __m128i *)(const void *)(now + col + 4 * i));
+            __m128i b = _mm_loadu_si128((const __m128i *)(const void *)(was + col + 4 * i));
+            e[i] = _mm_cmpeq_epi32(a, b);
+        }
+        // 0/-1 lanes pack to 0/-1 bytes: equal cells are 0xFF
+        __m128i eq = _mm_packs_epi16(_mm_packs_epi32(e[0], e[1]), _mm_packs_epi32(e[2], e[3]));
+        __m128i diff = _mm_andnot_si128(eq, one);
+        unsigned m = (unsigned)_mm_movemask_epi8(_mm_cmpeq_epi8(diff, one));
+        if (m) {
+            __m128i d = _mm_loadu_si128((const __m128i *)(const void *)(dirty + col));
+            _mm_storeu_si128((__m128i *)(void *)(dirty + col), _mm_or_si128(d, diff));
+            changed |= m;
+        }
+    }
+    any = changed != 0;
+#endif
+    for (; col < n; col++) {
+        if (now[col] != was[col]) {
+            dirty[col] = 1;
+            any = true;
+        }
+    }
+    return any;
+}
+
 // --- incremental grid -----------------------------------------------------
 
 // Painter order: (layer, character_id) maximum wins a contested cell. The
@@ -596,7 +646,7 @@ static void cell_rewin(Terminal *t, int64_t cell, size_t width) {
     VisualHandle vis = owner == RENDER_EMPTY ? 0 : t->render_mirror[owner].vis;
     if (t->cell_visual[cell] != vis) {
         t->cell_visual[cell] = vis;
-        t->row_dirty[cell / (int64_t)width] = 1;
+        mark_cell(t, cell, width);
     }
 }
 
@@ -630,7 +680,7 @@ static void grid_move(Terminal *t, CharId id, int32_t new_cell, size_t width) {
             VisualHandle vis = t->render_mirror[id].vis;
             if (t->cell_visual[new_cell] != vis) {
                 t->cell_visual[new_cell] = vis;
-                t->row_dirty[new_cell / (int64_t)width] = 1;
+                mark_cell(t, new_cell, width);
             }
         }
     }
@@ -656,7 +706,7 @@ static void grid_replay(Terminal *t, size_t width) {
                 VisualHandle vis = t->render_mirror[id].vis;
                 if (t->cell_visual[cell] != vis) {
                     t->cell_visual[cell] = vis;
-                    t->row_dirty[cell / (int64_t)width] = 1;
+                    mark_cell(t, cell, width);
                 }
             }
         } else {
@@ -712,10 +762,11 @@ static void grid_walk(Terminal *t, size_t width, size_t height, bool lists) {
         painted++;
     }
     // Repainting owners does not imply that their bytes changed. Compare
-    // contiguous visual rows, including cells that became empty.
+    // contiguous visual rows, including cells that became empty; a changed
+    // cell sets its dirty byte for block-level emission.
     for (size_t row = 0; row < height; row++) {
         size_t start = row * width;
-        if (memcmp(t->cell_visual + start, previous + start, width * sizeof(VisualHandle)) != 0) {
+        if (mark_changed(t->cell_dirty + row * t->dirty_stride, t->cell_visual + start, previous + start, width)) {
             t->row_dirty[row] = 1;
         }
     }
@@ -880,24 +931,136 @@ static void serialize_row(const Terminal *t, size_t row_index, size_t width, Str
 
 #define VISUAL_BLOCK 4
 #define VISUAL_MIN_GAP 4
+// Rows with more dirty runs than this are rebuilt, not patched in place.
+#define VISUAL_IN_PLACE_RUNS 1
+// Row buffer room past the longest content: emit_handle's fixed-size copies
+// overrun a cell by under 16 bytes, and in-place patching saves that much of
+// the tail beyond the run it rewrites.
+#define ROW_SLACK 64
 
 static void row_cache_ensure(Terminal *t, size_t width, size_t height);
 
-// Formats blocks [first, last) into `dst`, appending to *len, and records each
-// block's start offset in starts[].
-static void format_blocks(const Terminal *t, size_t row, size_t width, size_t first, size_t last, char *dst,
-                          size_t *len) {
+// Formats blocks [first, last) into `dst` from `len`, recording each block's
+// start offset in offs[]; returns the new length.
+static size_t format_blocks(const Terminal *t, size_t row, size_t width, size_t first, size_t last, char *dst,
+                            size_t len, uint32_t *offs) {
     const VisualHandle *handles = &t->cell_visual[row * width];
     const uint32_t *owners = &t->render_cells[row * width];
     size_t end = last * VISUAL_BLOCK;
     if (end > width) end = width;
     for (size_t col = first * VISUAL_BLOCK; col < end; col++) {
+        if (col % VISUAL_BLOCK == 0) {
+            offs[col / VISUAL_BLOCK] = (uint32_t)len;
+        }
         if (owners[col] == RENDER_EMPTY) {
-            dst[(*len)++] = ' ';
+            dst[len++] = ' ';
         } else {
-            *len += emit_handle(dst + *len, handles[col]);
+            len += emit_handle(dst + len, handles[col]);
         }
     }
+    return len;
+}
+
+// The bytes cells [first, end) format to.
+static size_t cells_length(const Terminal *t, size_t row, size_t width, size_t first, size_t end) {
+    const VisualHandle *handles = &t->cell_visual[row * width];
+    const uint32_t *owners = &t->render_cells[row * width];
+    size_t n = 0;
+    for (size_t col = first; col < end; col++) {
+        n += owners[col] == RENDER_EMPTY ? 1 : visual_len(handles[col]);
+    }
+    return n;
+}
+
+// Gather a row's dirty bytes into one bit per block and clear them; returns
+// the number of dirty blocks. `dirty` is whole 64-cell chunks.
+static size_t dirty_blocks(uint8_t *dirty, size_t chunks, uint64_t *bits) {
+    size_t count = 0;
+    size_t words = (chunks + 3) / 4;
+    for (size_t w = 0; w < words; w++) {
+        uint64_t word = 0;
+        for (size_t k = 0; k < 4 && w * 4 + k < chunks; k++) {
+            uint8_t *chunk = dirty + (w * 4 + k) * 64;
+            uint32_t m = 0;
+#if defined(__SSE2__)
+            const __m128i zero = _mm_setzero_si128();
+            uint32_t clean = 0;
+            for (int i = 0; i < 4; i++) {
+                __m128i v = _mm_loadu_si128((const __m128i *)(const void *)(chunk + 16 * i));
+                // a block is clean when its four bytes (one u32 lane) are zero
+                clean |= (uint32_t)_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(v, zero))) << (4 * i);
+                _mm_storeu_si128((__m128i *)(void *)(chunk + 16 * i), zero);
+            }
+            m = ~clean & 0xffffu;
+#else
+            for (int i = 0; i < 16; i++) {
+                uint32_t lane;
+                memcpy(&lane, chunk + 4 * i, 4);
+                m |= (uint32_t)(lane != 0) << i;
+            }
+            memset(chunk, 0, 64);
+#endif
+            word |= (uint64_t)m << (16 * k);
+        }
+        bits[w] = word;
+        count += (size_t)__builtin_popcountll(word);
+    }
+    bits[words] = 0;
+    return count;
+}
+
+// The first block >= b whose bit is set (a sentinel bit stops the scan).
+static inline size_t next_set(const uint64_t *bits, size_t b) {
+    size_t w = b >> 6;
+    uint64_t m = bits[w] & (~UINT64_C(0) << (b & 63));
+    while (m == 0) m = bits[++w];
+    return w << 6 | (size_t)__builtin_ctzll(m);
+}
+
+// The first block >= b whose bit is clear, at most limit.
+static inline size_t next_clear(const uint64_t *bits, size_t b, size_t limit) {
+    size_t w = b >> 6;
+    uint64_t m = ~bits[w] & (~UINT64_C(0) << (b & 63));
+    while (m == 0) m = ~bits[++w];
+    size_t at = w << 6 | (size_t)__builtin_ctzll(m);
+    return at < limit ? at : limit;
+}
+
+// The dirty runs of blocks [b, e) (with the sentinel at `blocks`); a clean
+// gap shorter than VISUAL_MIN_GAP joins the runs around it. Stops counting
+// past `max` runs: the caller only distinguishes few from many.
+static size_t dirty_runs(const uint64_t *bits, size_t blocks, size_t (*out)[2], size_t max) {
+    size_t n = 0;
+    size_t b = next_set(bits, 0);
+    while (b < blocks) {
+        size_t e = next_clear(bits, b, blocks);
+        while (e < blocks) {
+            size_t s = next_set(bits, e);
+            if (s >= e + VISUAL_MIN_GAP || s >= blocks) break;
+            e = next_clear(bits, s, blocks);
+        }
+        if (n == max) return n + 1;
+        out[n][0] = b;
+        out[n][1] = e;
+        n++;
+        if (e >= blocks) break;
+        b = next_set(bits, e);
+    }
+    return n;
+}
+
+// Copy the clean blocks [from, to) of the previous buffer to `len` of the
+// next, shifting their offsets; returns the new length.
+static size_t copy_clean(const char *prev, const uint32_t *prev_offs, char *next, uint32_t *next_offs, size_t from,
+                         size_t to, size_t len) {
+    if (from >= to) return len;
+    size_t start = prev_offs[from];
+    size_t run = prev_offs[to] - start;
+    for (size_t i = from; i < to; i++) {
+        next_offs[i] = (uint32_t)(prev_offs[i] - start + len);
+    }
+    memcpy(next + len, prev + start, run);
+    return len + run;
 }
 
 static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
@@ -915,6 +1078,9 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
     free(t->cell_visual);
     free(t->previous_cell_visual);
     free(t->row_dirty);
+    free(t->cell_dirty);
+    free(t->row_offs);
+    free(t->block_bits);
     free(t->cell_head);
     free(t->cell_next);
     free(t->cell_of_char);
@@ -925,6 +1091,15 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
     size_t cells = width * height;
     size_t blocks = (width + VISUAL_BLOCK - 1) / VISUAL_BLOCK;
     t->row_blocks = blocks;
+    t->dirty_stride = (width + 63) / 64 * 64;
+    size_t dirty_bytes = height * t->dirty_stride;
+    t->cell_dirty = calloc(dirty_bytes ? dirty_bytes : 1, 1);
+    t->row_offs = calloc(height ? height * 2 * (blocks + 1) : 1, sizeof(uint32_t));
+    t->block_bits = calloc(blocks / 64 + 2, sizeof(uint64_t));
+    if (!t->cell_dirty || !t->row_offs || !t->block_bits) {
+        fputs("glyphfx: out of memory (row cache)\n", stderr);
+        abort();
+    }
     t->row_store_len = height * 2;
     t->row_store = calloc(t->row_store_len ? t->row_store_len : 1, sizeof(char *));
     t->row_bytes = calloc(height ? height : 1, sizeof(char *));
@@ -980,8 +1155,10 @@ void terminal_render_rows(Terminal *t) {
         row_cache_ensure(t, width, height);
     }
     size_t blocks = t->row_blocks;
+    size_t chunks = t->dirty_stride / 64;
+    size_t ostride = blocks + 1;
+    size_t runs[VISUAL_IN_PLACE_RUNS][2];
     for (size_t row = height; row-- > 0;) {
-        (void)blocks;
         if (row_is_clean(t, row)) {
             if (g_render_verify) {
                 StrBuf check;
@@ -1000,26 +1177,118 @@ void terminal_render_rows(Terminal *t) {
             clean_rows++;
             continue;
         }
-        if (t->row_caps[row] < width * VISUAL_MAX + 2) {
-            size_t cap = width * VISUAL_MAX + 2;  // every cell as VISUAL_MAX bytes + newline
+        size_t cap = width * VISUAL_MAX + 2 + ROW_SLACK;  // every cell at its longest, newline, slack
+        if (t->row_caps[row] < cap) {
             t->row_store[row * 2] = realloc(t->row_store[row * 2], cap);
             t->row_store[row * 2 + 1] = realloc(t->row_store[row * 2 + 1], cap);
+            if (!t->row_store[row * 2] || !t->row_store[row * 2 + 1]) {
+                fputs("glyphfx: out of memory (row buffers)\n", stderr);
+                abort();
+            }
             t->row_caps[row] = cap;
+            t->row_bytes[row] = t->row_store[row * 2 + t->row_sel[row]];
         }
-        // Format the whole row. The row-level clean test above is the large
-        // win (an unchanged row costs nothing); block-level rebuild is a
-        // refinement kept for the profile to justify.
-        char *out = t->row_store[row * 2 + (t->row_sel[row] ^ 1)];
+        uint8_t *dirty = t->cell_dirty + row * t->dirty_stride;
+        t->row_dirty[row] = 0;
+        // fx's emission: a row never built, or mostly dirty, is formatted
+        // whole; a single dirty run of blocks is patched in place; more runs
+        // rebuild the row into its other buffer, copying the clean blocks.
+        bool full = t->all_rows_dirty || t->row_lens[row] == 0;
+        size_t n_runs = 0;
+        if (full) {
+            memset(dirty, 0, t->dirty_stride);
+        } else {
+            size_t count = dirty_blocks(dirty, chunks, t->block_bits);
+            if (count == 0) {
+                clean_rows++;
+                continue;
+            }
+            full = count * 4 >= blocks * 3;
+            t->block_bits[blocks >> 6] |= UINT64_C(1) << (blocks & 63);  // sentinel
+            if (!full) {
+                n_runs = dirty_runs(t->block_bits, blocks, runs, VISUAL_IN_PLACE_RUNS);
+            }
+        }
+        uint8_t sel = t->row_sel[row];
+        char *cur = t->row_store[row * 2 + sel];
+        uint32_t *cur_offs = t->row_offs + (row * 2 + sel) * ostride;
+        if (!full && n_runs <= VISUAL_IN_PLACE_RUNS) {
+            // Patch in place, right to left so the offsets of runs still
+            // ahead stay valid. The tail moves only when a run's length
+            // changed; emit_handle overruns its cell by under 16 bytes, so
+            // the tail's first bytes are saved and put back.
+            size_t len = t->row_lens[row];
+            for (size_t r = n_runs; r-- > 0;) {
+                size_t b = runs[r][0], e = runs[r][1];
+                size_t end = e * VISUAL_BLOCK < width ? e * VISUAL_BLOCK : width;
+                size_t n = cells_length(t, row, width, b * VISUAL_BLOCK, end);
+                size_t start = cur_offs[b], old_end = cur_offs[e];
+                size_t old = old_end - start;
+                if (n != old) {
+                    memmove(cur + start + n, cur + old_end, len - old_end);
+                    len = len + n - old;
+                    for (size_t i = e; i <= blocks; i++) {
+                        cur_offs[i] = (uint32_t)(cur_offs[i] + n - old);
+                    }
+                }
+                char saved[16];
+                memcpy(saved, cur + start + n, sizeof(saved));
+                (void)format_blocks(t, row, width, b, e, cur, start, cur_offs);
+                memcpy(cur + start + n, saved, sizeof(saved));
+            }
+            cur[len] = '\0';
+            t->row_lens[row] = len;
+            continue;
+        }
+        char *out = t->row_store[row * 2 + (sel ^ 1)];
+        uint32_t *out_offs = t->row_offs + (row * 2 + (sel ^ 1)) * ostride;
         size_t len = 0;
-        format_blocks(t, row, width, 0, blocks, out, &len);
+        if (full) {
+            len = format_blocks(t, row, width, 0, blocks, out, 0, out_offs);
+        } else {
+            // Rebuild: copy each clean stretch, format each dirty run.
+            size_t pos = 0;
+            size_t b = next_set(t->block_bits, 0);
+            while (b < blocks) {
+                size_t e = next_clear(t->block_bits, b, blocks);
+                while (e < blocks) {
+                    size_t s = next_set(t->block_bits, e);
+                    if (s >= e + VISUAL_MIN_GAP || s >= blocks) break;
+                    e = next_clear(t->block_bits, s, blocks);
+                }
+                len = copy_clean(cur, cur_offs, out, out_offs, pos, b, len);
+                len = format_blocks(t, row, width, b, e, out, len, out_offs);
+                pos = e;
+                if (e >= blocks) break;
+                b = next_set(t->block_bits, e);
+            }
+            len = copy_clean(cur, cur_offs, out, out_offs, pos, blocks, len);
+        }
+        out_offs[blocks] = (uint32_t)len;
         if (row != 0) {
             out[len++] = '\n';
         }
         out[len] = '\0';
-        t->row_sel[row] ^= 1;
+        t->row_sel[row] = sel ^ 1;
         t->row_bytes[row] = out;
         t->row_lens[row] = len;
-        t->row_dirty[row] = 0;
+    }
+    if (g_render_verify) {
+        // Every row, patched, rebuilt or kept, must equal a whole-row format.
+        for (size_t row = 0; row < height; row++) {
+            StrBuf check;
+            sb_init(&check);
+            serialize_row(t, row, width, &check);
+            if (row != 0) {
+                sb_push(&check, '\n');
+            }
+            if (check.len != t->row_lens[row] ||
+                (check.len && memcmp(check.data, t->row_bytes[row], check.len) != 0)) {
+                fprintf(stderr, "render-verify: row %zu emitted wrong bytes\n", row);
+                abort();
+            }
+            sb_free(&check);
+        }
     }
     t->all_rows_dirty = false;
     t->last_width = width;

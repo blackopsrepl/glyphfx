@@ -181,6 +181,13 @@ struct Terminal {
     // without copying or rescanning the grid (render.asm's dirty cells).
     uint8_t *row_dirty;
     bool all_rows_dirty;
+    // fx's emission state: a dirty byte per cell (rows padded to whole
+    // 64-cell chunks), each row buffer's block start offsets, and the
+    // scratch bitmap of a row's dirty blocks.
+    uint8_t *cell_dirty;
+    size_t dirty_stride;
+    uint32_t *row_offs;       // height*2 arrays of row_blocks+1 offsets
+    uint64_t *block_bits;
     uint8_t *row_sel;         // which of a row's two buffers is current
     size_t row_blocks;
     char **row_bytes;         // each row's current buffer
