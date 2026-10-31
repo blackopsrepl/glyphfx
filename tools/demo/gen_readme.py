@@ -86,8 +86,12 @@ def fx_vs_asm():
     if not pairs:
         return "no recorded run compares them here"
     faster = sum(x < s for s, x in pairs)
+    rest = len(pairs) - faster
+    if rest == 0:
+        return f"in the matrix below fx is faster on all {len(pairs)} effects"
+    tail = "the other one" if rest == 1 else f"the other {rest}"
     return (f"in the matrix below fx is faster on {faster} of the {len(pairs)} "
-            f"effects and asm on the other {len(pairs) - faster}")
+            f"effects and asm on {tail}")
 
 
 def matrix_table():
