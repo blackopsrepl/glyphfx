@@ -444,6 +444,7 @@ void terminal_free(Terminal *t) {
     free(t->visible_positions);
     free(t->render_cells);
     free(t->cell_visual);
+    free(t->previous_cell_visual);
     free(t->row_dirty);
     free(t->cell_head);
     free(t->cell_next);
@@ -672,8 +673,10 @@ static void grid_replay(Terminal *t, size_t width) {
 static void grid_walk(Terminal *t, size_t width, size_t height, bool lists) {
     size_t cell_count = width * height;
     memset(t->render_cells, 0xFF, cell_count * sizeof(uint32_t));
+    VisualHandle *previous = t->cell_visual;
+    t->cell_visual = t->previous_cell_visual;
+    t->previous_cell_visual = previous;
     memset(t->cell_visual, 0, cell_count * sizeof(VisualHandle));
-    t->all_rows_dirty = true;
     size_t painted = 0;
     if (lists) {
         memset(t->cell_head, 0xFF, cell_count * sizeof(int32_t));
@@ -705,13 +708,15 @@ static void grid_walk(Terminal *t, size_t width, size_t height, bool lists) {
             }
             *owner = (uint32_t)id;
         }
-        VisualHandle vis = rec->vis;
-        t->cell_visual[cell] = vis;
-        // The version grid only feeds the row cache; skip its load and store
-        // while the cache is off so a repaint costs what it always did.
-        if (t->cache_on) {
-            t->cell_visual[cell] = vis;
-            painted++;
+        t->cell_visual[cell] = rec->vis;
+        painted++;
+    }
+    // Repainting owners does not imply that their bytes changed. Compare
+    // contiguous visual rows, including cells that became empty.
+    for (size_t row = 0; row < height; row++) {
+        size_t start = row * width;
+        if (memcmp(t->cell_visual + start, previous + start, width * sizeof(VisualHandle)) != 0) {
+            t->row_dirty[row] = 1;
         }
     }
     t->painted_cells = painted;
@@ -908,6 +913,7 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
     free(t->row_caps);
     free(t->row_sel);
     free(t->cell_visual);
+    free(t->previous_cell_visual);
     free(t->row_dirty);
     free(t->cell_head);
     free(t->cell_next);
@@ -926,6 +932,11 @@ static void row_cache_ensure(Terminal *t, size_t width, size_t height) {
     t->row_caps = calloc(height ? height : 1, sizeof(size_t));
     t->row_sel = calloc(height ? height : 1, sizeof(uint8_t));
     t->cell_visual = calloc(cells ? cells : 1, sizeof(VisualHandle));
+    t->previous_cell_visual = calloc(cells ? cells : 1, sizeof(VisualHandle));
+    if (!t->cell_visual || !t->previous_cell_visual) {
+        fputs("glyphfx: out of memory (visual grids)\n", stderr);
+        abort();
+    }
     t->row_dirty = calloc(height ? height : 1, sizeof(uint8_t));
     t->all_rows_dirty = true;
     t->cell_head = malloc((cells ? cells : 1) * sizeof(int32_t));

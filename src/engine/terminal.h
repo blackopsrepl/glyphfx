@@ -175,6 +175,7 @@ struct Terminal {
     // (the asm renderer's row buffers). The version grid identifies rendered
     // byte content exactly, so no mutation hooks are needed.
     VisualHandle *cell_visual;  // winning visual per cell (a pool handle; 0 = empty)
+    VisualHandle *previous_cell_visual;  // scratch grid for full-walk row comparison
     // Rows whose bytes must be rebuilt this frame. A cell write that changes
     // the winning handle marks its row, so the renderer finds dirty rows
     // without copying or rescanning the grid (render.asm's dirty cells).
