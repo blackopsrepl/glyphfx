@@ -727,7 +727,8 @@ static bool mirror_step(EngineCtx *ctx, CharId id, Path *p, Coord *out) {
 // their repeated map resolution. Intermediate pure steps cannot hold, loop or
 // complete a path. Final steps and segment boundaries use the original walk.
 // No Path was changed during preparation: callbacks always see canonical order.
-static bool motion_take_batch(EngineCtx *ctx, CharId id, bool *animation_ready,
+__attribute__((always_inline))
+static inline bool motion_take_batch(EngineCtx *ctx, CharId id, bool *animation_ready,
                               VisualHandle *visual) {
     MotionBatch *batch = &ctx->motion_batch;
     unsigned lane = (unsigned)id & 63u;
@@ -772,6 +773,37 @@ static bool motion_take_batch(EngineCtx *ctx, CharId id, bool *animation_ready,
     // after another move within this frame.
     motion_set_coordinate(&ch->motion, next);
     return true;
+}
+
+// Retire counter-only lanes before the next observable tick, not during word
+// preparation. Callbacks therefore see earlier slots advanced and later slots
+// untouched, without speculative writes or a rollback pass. Failed validations
+// rejoin the scalar word; only intermediate, unchanged-coordinate steps qualify.
+static uint64_t motion_retire_idle(EngineCtx *ctx, uint64_t slots) {
+    MotionBatch *batch = &ctx->motion_batch;
+    MotionWord *input = &ctx->motion_words[batch->word];
+    uint64_t retry = 0;
+    while (slots) {
+        unsigned lane = (unsigned)__builtin_ctzll(slots);
+        uint64_t bit = UINT64_C(1) << lane;
+        slots &= slots - 1;
+        size_t id = (batch->word << 6) | lane;
+        MotionMirror *m = &ctx->mirrors[id];
+        if (!(ctx->motion_mirrored[batch->word] & bit) || !mirror_live(m) ||
+            m->step != batch->step[lane] || m->path->current_step != m->step) {
+            retry = bit | slots;
+            break;
+        }
+        Path *p = m->path;
+        p->current_step++;
+        p->last_distance_reached = batch->distance[lane];
+        m->step = p->current_step;
+        input->step[lane] = (double)m->step;
+        Motion *motion = &ctx->terminal.arena.items[id].motion;
+        motion->previous_coord = motion->current_coord;
+        batch->ready &= ~bit;
+    }
+    return retry;
 }
 
 static Coord path_step(EngineCtx *ctx, Effect *effect, CharId id, const char *path_id) {
@@ -887,7 +919,8 @@ static Coord path_step(EngineCtx *ctx, Effect *effect, CharId id, const char *pa
     return find_coord_on_line(seg->start.coord, seg->end.coord, t);
 }
 
-static void motion_move_now(EngineCtx *ctx, Effect *effect, CharId id) {
+__attribute__((always_inline))
+static inline void motion_move_now(EngineCtx *ctx, Effect *effect, CharId id) {
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
     ch->motion.previous_coord = ch->motion.current_coord;
     if (!ch->motion.active_path) {
@@ -1127,7 +1160,8 @@ static void step_animation_now(EngineCtx *ctx, Effect *effect, CharId id) {
     complete_scene_if_finished(ctx, effect, id, scene);
 }
 
-static void tick_now(EngineCtx *ctx, Effect *effect, CharId id) {
+__attribute__((always_inline))
+static inline void tick_now(EngineCtx *ctx, Effect *effect, CharId id) {
     motion_move_now(ctx, effect, id);
     step_animation_now(ctx, effect, id);
 }
@@ -1156,6 +1190,73 @@ static bool retain_keep(CharId id, void *ctxp) {
 
 void engine_bind(EngineCtx *ctx) {
     g_doze = ctx ? &ctx->doze : NULL;
+}
+
+__attribute__((always_inline))
+static inline void update_slot(EngineCtx *ctx, Effect *effect, size_t w, unsigned b,
+                                uint64_t mirrored, uint64_t *pending) {
+    Doze *d = &ctx->doze;
+    CharId id = (CharId)((w << 6) | b);
+    d->cursor = id;
+    if (d->bits[w] & (UINT64_C(1) << b)) {
+        doze_settle(d, id);
+    }
+    bool animation_ready = false;
+    VisualHandle visual = 0;
+    if (mirrored && motion_take_batch(ctx, id, &animation_ready, &visual)) {
+        if (animation_ready) {
+            set_current_visual(ctx, id, visual);
+        } else {
+            step_animation_now(ctx, effect, id);
+        }
+    } else {
+        tick_now(ctx, effect, id);
+    }
+    const EffectCharacter *ch = &ctx->terminal.arena.items[id];
+    if (!ch->motion.active_path) {
+        if (mirrored) {
+            uint64_t bit = UINT64_C(1) << b;
+            if (ctx->motion_mirrored[w] & bit) {
+                ctx->motion_mirrored[w] &= ~bit;
+                ctx->mirrors[id].valid = false;
+            }
+        }
+        const Scene *scene = ch->animation.active_scene_ref;
+        if (!ch->animation.active_scene || !scene || scene->is_looping ||
+            scene->head >= scene->all_frames_len) {
+            ac_mark_candidate(&ctx->active_characters, id);
+        }
+        if (ch->animation.active_scene) doze_try(d, id);
+    }
+    if (d->snapshot[w]) {
+        *pending |= d->snapshot[w];
+        d->snapshot[w] = 0;
+    }
+}
+
+// Keep the idle-word specialization out of the scalar word's inlining budget.
+__attribute__((noinline))
+static void update_idle_word(EngineCtx *ctx, Effect *effect, size_t w, uint64_t m,
+                              uint64_t mirrored, uint64_t idle) {
+    m &= ~idle;
+    while (m || idle) {
+        // A dispatch invalidates remaining prepared lanes, including idle ones.
+        if (idle && ctx->motion_batch.epoch != ctx->motion_epoch) {
+            m |= idle;
+            idle = 0;
+        }
+        if (idle) {
+            uint64_t before = m ? idle & ((m & -m) - 1) : idle;
+            idle &= ~before;
+            uint64_t retry = motion_retire_idle(ctx, before);
+            m |= retry;
+            if (retry) continue;
+        }
+        if (!m) break;
+        unsigned b = (unsigned)__builtin_ctzll(m);
+        m &= m - 1;
+        update_slot(ctx, effect, w, b, mirrored, &m);
+    }
 }
 
 void engine_update(EngineCtx *ctx, Effect *effect) {
@@ -1208,50 +1309,15 @@ void engine_update(EngineCtx *ctx, Effect *effect) {
         } else {
             ctx->motion_batch.ready = 0;
         }
+        uint64_t idle = mirrored ? ctx->motion_batch.idle : 0;
+        if (idle) {
+            update_idle_word(ctx, effect, w, m, mirrored, idle);
+            continue;
+        }
         while (m) {
             unsigned b = (unsigned)__builtin_ctzll(m);
             m &= m - 1;
-            CharId id = (CharId)((w << 6) | b);
-            d->cursor = id;
-            if (d->bits[w] & (1ULL << b)) {
-                doze_settle(d, id);  // its doze ran out with the last update
-            }
-            bool animation_ready = false;
-            VisualHandle visual = 0;
-            if (mirrored && motion_take_batch(ctx, id, &animation_ready, &visual)) {
-                if (animation_ready) {
-                    set_current_visual(ctx, id, visual);
-                } else {
-                    step_animation_now(ctx, effect, id);
-                }
-            } else {
-                tick_now(ctx, effect, id);
-            }
-            // Only a character without a path and with a scene can doze; the
-            // test reads the character the tick just touched.
-            const EffectCharacter *ch = &ctx->terminal.arena.items[id];
-            if (!ch->motion.active_path) {
-                // A word without prepared lanes may only hold mirror bits from
-                // before their retirement; anything captured during the word
-                // left the character with a path. Only a claimed bit retires.
-                if (mirrored) {
-                    uint64_t lane_bit = UINT64_C(1) << b;
-                    if (ctx->motion_mirrored[w] & lane_bit) {
-                        ctx->motion_mirrored[w] &= ~lane_bit;
-                        ctx->mirrors[id].valid = false;
-                    }
-                }
-                const Scene *scene = ch->animation.active_scene_ref;
-                if (!ch->animation.active_scene || !scene || scene->is_looping ||
-                    scene->head >= scene->all_frames_len) {
-                    ac_mark_candidate(ac, id);
-                }
-                if (ch->animation.active_scene) doze_try(d, id);
-            }
-            if (d->snapshot[w]) {
-                m |= d->snapshot[w];
-                d->snapshot[w] = 0;
-            }
+            update_slot(ctx, effect, w, b, mirrored, &m);
         }
     }
     ctx->motion_batch.ready = 0;
