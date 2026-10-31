@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__)
 #include <sys/mman.h>
 #endif
 
@@ -53,17 +53,20 @@ static size_t g_scenes_cap;
 
 static Scene *scene_pool_alloc(void) {
     if (!g_scenes) {
-#if defined(__linux__) || defined(__APPLE__)
-        void *p = mmap(NULL, SCENE_POOL_RESERVE, PROT_READ | PROT_WRITE,
-                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        size_t bytes = SCENE_POOL_RESERVE;
+#if defined(__linux__)
+        void *p = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if (p == MAP_FAILED) {
             return NULL;
         }
         g_scenes = (Scene *)p;
-        g_scenes_cap = SCENE_POOL_RESERVE / sizeof(Scene);
 #else
-        return NULL;
+        g_scenes = (Scene *)malloc(bytes);
+        if (!g_scenes) {
+            return NULL;
+        }
 #endif
+        g_scenes_cap = bytes / sizeof(Scene);
     }
     if (g_scenes_len == g_scenes_cap) {
         return NULL;
@@ -122,25 +125,33 @@ static bool frame_pool_init(void) {
     if (g_frames) {
         return true;
     }
-#if defined(__linux__) || defined(__APPLE__)
-    void *p = mmap(NULL, FRAME_POOL_RESERVE, PROT_READ | PROT_WRITE,
-                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    // A reservation that never moves: mmap on Linux (the Makefile's
+    // _POSIX_C_SOURCE hides MAP_ANONYMOUS elsewhere), one malloc elsewhere. The
+    // pool is never reallocated, so a scene's pointer into it stays valid.
+    size_t bytes = FRAME_POOL_RESERVE;
+#if defined(__linux__)
+    void *p = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (p == MAP_FAILED) {
         return false;
     }
     g_frames = (Frame *)p;
-    g_frames_cap = FRAME_POOL_RESERVE / sizeof(Frame);
-    return true;
 #else
-    return false;
+    g_frames = (Frame *)malloc(bytes);
+    if (!g_frames) {
+        return false;
+    }
 #endif
+    g_frames_cap = bytes / sizeof(Frame);
+    return true;
 }
 
 void frame_pool_free(void) {
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__)
     if (g_frames) {
         munmap(g_frames, FRAME_POOL_RESERVE);
     }
+#else
+    free(g_frames);
 #endif
     g_frames = NULL;
     g_frames_len = 0;
