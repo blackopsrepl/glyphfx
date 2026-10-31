@@ -751,7 +751,14 @@ const int32_t *shape_frames_by_step(const Easing *ease, int64_t total_steps, con
 
 const int32_t *scene_easing_shape_seq(Scene *scene) {
     SceneCold *cold = scene->cold;
-    if (cold->easing_shape_for_len == scene->all_frames_len) return cold->easing_shape_seq;
+    if (cold->easing_shape_for_len == scene->all_frames_len &&
+        cold->easing_shape_for_ease.kind == cold->ease.kind &&
+        cold->easing_shape_for_ease.x1 == cold->ease.x1 &&
+        cold->easing_shape_for_ease.y1 == cold->ease.y1 &&
+        cold->easing_shape_for_ease.x2 == cold->ease.x2 &&
+        cold->easing_shape_for_ease.y2 == cold->ease.y2) {
+        return cold->easing_shape_seq;
+    }
     cold->easing_shape_seq = NULL;
     cold->easing_shape_for_len = 0;
     if (!scene->has_ease || !scene->all_frames_len) return NULL;
@@ -760,6 +767,7 @@ const int32_t *scene_easing_shape_seq(Scene *scene) {
         shape_frames_by_step(&cold->ease, cold->easing_total_steps, frames, scene->all_frames_len);
     if (!cold->easing_shape_seq) return NULL;
     cold->easing_shape_for_len = scene->all_frames_len;
+    cold->easing_shape_for_ease = cold->ease;
     return cold->easing_shape_seq;
 }
 

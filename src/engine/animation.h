@@ -94,6 +94,10 @@ typedef struct {
     // easing_shape_for_len matches the frame count (appends rebuild it).
     const int32_t *easing_shape_seq;
     size_t easing_shape_for_len;
+    // The easing the sequence was resolved for: thunderstorm rewrites a
+    // scene's easing without touching its frames, so the frame count alone
+    // cannot say whether the resolved steps still answer this scene.
+    Easing easing_shape_for_ease;
     int32_t owner;  // arena slot of the character that owns the scene, or -1
     bool no_color;
     bool use_xterm_colors;
