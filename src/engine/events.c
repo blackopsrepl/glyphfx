@@ -161,14 +161,46 @@ bool event_handler_subscribes(const EventHandler *h, Event event) {
     return (h->subscribed & (1u << (unsigned)event)) != 0;
 }
 
-static RegisteredEvent *find_entry(EventHandler *h, Event event, const CallerKey *caller) {
-    CallerKey q = *caller;
-    for (size_t i = 0; i < h->len; i++) {
-        if (h->entries[i].event == event && caller_key_matches(&h->entries[i].caller, &q)) {
-            return &h->entries[i];
+static uint32_t caller_handle(const CallerKey *caller) {
+    return caller->kind == CALLER_WAYPOINT ? caller->waypoint.waypoint_handle : caller->id_handle;
+}
+
+static size_t event_slot(Event event, const CallerKey *caller, size_t mask) {
+    uint64_t key = ((uint64_t)caller_handle(caller) << 5) |
+                   ((uint64_t)caller->kind << 3) | (uint64_t)event;
+    key *= UINT64_C(0x9e3779b97f4a7c15);
+    return (size_t)(key ^ (key >> 32)) & mask;
+}
+
+// The index follows the capacity-sized ordered array in the same allocation;
+// event-heavy characters do not enlarge the hot character record for everyone.
+static size_t *event_index(const EventHandler *h) {
+    return (size_t *)(void *)(h->entries + h->cap);
+}
+
+static void index_entry(EventHandler *h, size_t entry) {
+    if (h->len < 8) return;
+    size_t *index = event_index(h);
+    size_t capacity = h->cap * 2;
+    if (h->len == 8 || h->len == h->cap / 2 + 1) {
+        // The table moves when entries grow. Rebuild it from stable indices,
+        // including the new entry, without changing dispatch order.
+        memset(index, 0, capacity * sizeof(*index));
+        for (size_t i = 0; i < h->len; i++) {
+            size_t slot = event_slot(h->entries[i].event, &h->entries[i].caller, capacity - 1);
+            while (index[slot]) slot = (slot + 1) & (capacity - 1);
+            index[slot] = i + 1;
         }
+    } else {
+        size_t slot = event_slot(h->entries[entry].event, &h->entries[entry].caller, capacity - 1);
+        while (index[slot]) slot = (slot + 1) & (capacity - 1);
+        index[slot] = entry + 1;
     }
-    return NULL;
+}
+
+static RegisteredEvent *find_entry(EventHandler *h, Event event, const CallerKey *caller) {
+    long index = event_handler_actions_index(h, event, caller);
+    return index < 0 ? NULL : &h->entries[(size_t)index];
 }
 
 static bool action_equal(const EventAction *a, const EventAction *b) {
@@ -217,7 +249,7 @@ int event_handler_push(EventHandler *h, Event event, const CallerKey *caller, co
     } else {
         if (h->len == h->cap) {
             size_t cap = h->cap ? h->cap * 2 : 8;
-            RegisteredEvent *grown = realloc(h->entries, cap * sizeof(RegisteredEvent));
+            RegisteredEvent *grown = realloc(h->entries, cap * (sizeof(RegisteredEvent) + 2 * sizeof(size_t)));
             if (!grown) {
                 return -1;
             }
@@ -232,6 +264,7 @@ int event_handler_push(EventHandler *h, Event event, const CallerKey *caller, co
         e->actions_cap = 4;
         e->actions_len = 0;
         event_action_copy(&e->actions[e->actions_len++], action);
+        index_entry(h, h->len - 1);
     }
     h->subscribed |= (uint8_t)(1u << (unsigned)event);
     return 0;
@@ -241,9 +274,21 @@ long event_handler_actions_index(const EventHandler *h, Event event, const Calle
     if (!event_handler_subscribes(h, event)) {
         return -1;
     }
-    CallerKey q = *caller;
+    if (h->len >= 8 && caller_handle(caller)) {
+        const size_t *index = event_index(h);
+        size_t mask = h->cap * 2 - 1;
+        size_t slot = event_slot(event, caller, mask);
+        while (index[slot]) {
+            size_t i = index[slot] - 1;
+            if (h->entries[i].event == event && caller_key_matches(&h->entries[i].caller, caller)) {
+                return (long)i;
+            }
+            slot = (slot + 1) & mask;
+        }
+        return -1;
+    }
     for (size_t i = 0; i < h->len; i++) {
-        if (h->entries[i].event == event && caller_key_matches(&h->entries[i].caller, &q)) {
+        if (h->entries[i].event == event && caller_key_matches(&h->entries[i].caller, caller)) {
             return (long)i;
         }
     }
