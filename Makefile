@@ -40,7 +40,7 @@ EFFECT_CASES := $(wildcard tools/parity/cases/*.txt)
 
 # ============== Phony Targets ==============
 .PHONY: all build help banner check test parity effects release static install debug clean version \
-        bump-patch bump-minor bump-major bump-dry perf perf-update release-check originals
+        bump-patch bump-minor bump-major bump-dry perf perf-update release-check originals cli-help
 
 # ============== Default Target ==============
 .DEFAULT_GOAL := build
@@ -70,6 +70,7 @@ help: banner
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "parity" "byte-exact M0 option matrix vs the ttfx oracle"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "effects" "byte-exact frame parity for every effect"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "originals" "determinism and golden checks for the glyphfx originals"
+	@printf "  $(CYAN)%-24s$(RESET) %s\n" "cli-help" "glyphfx's own help: no-input default, wordmark, generated table"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "perf" "fail on any benchmark slower than the committed baseline"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "perf-update" "tighten the perf baseline to this run (improvements only)"
 	@printf "  $(CYAN)%-24s$(RESET) %s\n" "debug" "ASan/UBSan build"
@@ -143,6 +144,12 @@ originals: banner $(BUILD)/glyphfx
 	@python3 tools/tests/originals.py && printf "$(GREEN)$(CHECK) originals deterministic and on golden$(RESET)\n" \
 		|| (printf "$(RED)$(CROSS) originals failed$(RESET)\n" && exit 1)
 
+# glyphfx's own help has no oracle either: behaviour, and src/cli_help.c fresh.
+cli-help: banner $(BUILD)/glyphfx
+	$(call section,Help)
+	@python3 tools/tests/cli_help.py && printf "$(GREEN)$(CHECK) help current and drawn right$(RESET)\n" \
+		|| (printf "$(RED)$(CROSS) help failed$(RESET)\n" && exit 1)
+
 # ============== Performance ==============
 perf: banner $(BUILD)/glyphfx
 	$(call section,Performance Regression Gate)
@@ -158,6 +165,7 @@ release-check: banner $(BUILD)/glyphfx
 	@$(MAKE) --no-print-directory check
 	@$(MAKE) --no-print-directory effects
 	@$(MAKE) --no-print-directory originals
+	@$(MAKE) --no-print-directory cli-help
 	@$(MAKE) --no-print-directory perf
 
 # ============== Release Builds ==============

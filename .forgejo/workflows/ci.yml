@@ -25,6 +25,8 @@ jobs:
         run: make originals
       - name: CLI corpus
         run: tools/tests/cli_corpus.sh
+      - name: Help (no-input default, wordmark, generated table)
+        run: make cli-help
       - name: PTY byte stream
         run: python3 tools/tests/tty_compare.py
       - name: PTY runtime behavior
