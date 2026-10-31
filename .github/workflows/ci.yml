@@ -37,6 +37,12 @@ jobs:
         run: python3 tools/tests/tty_compare.py
       - name: PTY runtime behavior
         run: python3 tools/tests/tty_signals.py
+      # A resize frees the engine and builds a new one; ASan sees any write
+      # into the old one's memory that a plain build survives by luck.
+      - name: PTY runtime behavior under ASan/UBSan
+        run: |
+          make debug
+          ASAN_OPTIONS=detect_leaks=0 GLYPHFX_BIN=build/glyphfx-debug python3 tools/tests/tty_signals.py
 
   macos-build:
     runs-on: macos-latest
