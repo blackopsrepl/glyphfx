@@ -2,6 +2,79 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by csemver; do not edit by hand.
 
+## [0.5.0](https://github.com/blackopsrepl/glyphfx/compare/v0.4.2...v0.5.0) (2026-10-31)
+
+
+### Features
+
+* **cli:** describe every option and effect in the help ([3d3f55a](https://github.com/blackopsrepl/glyphfx/commit/3d3f55aa9efa916538c650b57fde3ec8346f5bf9))
+* **cli:** open the help with the glyphfx wordmark, drawn by highlight ([e6fad8e](https://github.com/blackopsrepl/glyphfx/commit/e6fad8ecbb7227a2964ee6ac6d137e40eeaa6543))
+* **cli:** print the help when run at a terminal with no input ([a191f8f](https://github.com/blackopsrepl/glyphfx/commit/a191f8f8f2d574f9ba52de24b42f0bc0dc46965d))
+
+
+### Bug Fixes
+
+* **animation:** invalidate resolved shapes when easing changes ([05894a5](https://github.com/blackopsrepl/glyphfx/commit/05894a50dc4102fd5d6f6e7a6762135e95da88b8))
+* **build:** let make debug build from a clean tree ([79efa6a](https://github.com/blackopsrepl/glyphfx/commit/79efa6acd05355b10bc39e9e4d230a04552a0228))
+* **build:** never fuse a*b+c into FMA, whatever the compiler and target ([7dd2913](https://github.com/blackopsrepl/glyphfx/commit/7dd2913bc449ca5d8be9679fef9a19f9c72af09c))
+* **engine:** build the AVX2 motion kernel when -march already has FMA ([4c9b2b3](https://github.com/blackopsrepl/glyphfx/commit/4c9b2b38b401a273e6148ecfb8db45415ce47221))
+* **engine:** unbind the render log from a terminal when it is freed ([992c4d9](https://github.com/blackopsrepl/glyphfx/commit/992c4d91d1dffba1933dce7e36cb806d8fb3922d))
+* **graphics:** zero the hex tail of constructed colours ([422b004](https://github.com/blackopsrepl/glyphfx/commit/422b004c2d545d126b62a6096a52a00f7485a8fa))
+* **renderer:** initialize added characters within mirror capacity ([042b980](https://github.com/blackopsrepl/glyphfx/commit/042b9809c3b6200c6c2be37cb3a70bc133772a3a))
+
+
+### Performance
+
+* **animation:** cache restyles before color-code conversion ([fc5944a](https://github.com/blackopsrepl/glyphfx/commit/fc5944a00d447a5e706a3a8c90a3292557d967a1))
+* **animation:** intern plain-color scene frames through the appearance cache ([ef329fb](https://github.com/blackopsrepl/glyphfx/commit/ef329fb0f3d4b1167131cf85e4479bef4725a473))
+* **cli:** intern string-list option values ([01bde42](https://github.com/blackopsrepl/glyphfx/commit/01bde42962d4c5baff16abb8ebb1ecf551f83b61))
+* **colorshift:** share cyclic gradients through immutable frame windows ([b8eedde](https://github.com/blackopsrepl/glyphfx/commit/b8eedde41f7d28e8a0747843cbb58a7b5cdb9243))
+* **decrypt:** build cipher frames from interned symbol handles ([36530e8](https://github.com/blackopsrepl/glyphfx/commit/36530e8a906e08fca1b2863e054da5be05e84953))
+* **effects:** borrow interned input symbols instead of copying them ([b6e1ba3](https://github.com/blackopsrepl/glyphfx/commit/b6e1ba37639342f9f2e4ef91f681437556c26958))
+* **engine:** batch pure path steps through speculative mirrors ([9054b94](https://github.com/blackopsrepl/glyphfx/commit/9054b94de5d406dee0c199b64f0bbe5b4bab1406))
+* **engine:** carry interned names through scenes, paths and events ([6d863ac](https://github.com/blackopsrepl/glyphfx/commit/6d863ac9c82a507c0970b4715603c4844ce171b2))
+* **engine:** filter sleeping characters with word wake masks ([45d8b98](https://github.com/blackopsrepl/glyphfx/commit/45d8b98a7be893dfe62f0ca180da70e0f1e9ea55))
+* **engine:** flatten scene playback; share frames and eased shapes ([ba3f5d1](https://github.com/blackopsrepl/glyphfx/commit/ba3f5d14df0d4707a5fe50e92ac88ff262f382ff))
+* **engine:** hand out interned path and scene ids ([48036ee](https://github.com/blackopsrepl/glyphfx/commit/48036ee8f560338dfd91b700e2cdb671933cff5b))
+* **engine:** pre-apply dozing ticks while the scene is hot ([aa7736b](https://github.com/blackopsrepl/glyphfx/commit/aa7736bae2bb7152235adceb9c78ee65253d9fa4))
+* **engine:** prune completed characters from the retain pass ([b1d3adf](https://github.com/blackopsrepl/glyphfx/commit/b1d3adfc0d81b8404c17eddfdb343219e763df44))
+* **engine:** retire idle motion lanes outside scalar ticks ([a914990](https://github.com/blackopsrepl/glyphfx/commit/a91499053375c0f6a556f37b9a36cdafde251895))
+* **engine:** skip the generated waypoint id's existence scan until a custom id joins ([588c395](https://github.com/blackopsrepl/glyphfx/commit/588c395c407126702816ea9978e1be7d96574fa8))
+* **engine:** stamp paths with an identity and trace geometry revisions ([f96f2f1](https://github.com/blackopsrepl/glyphfx/commit/f96f2f1adb9432db73d4cc6a744774ff4915697d))
+* **events:** index caller registrations without growing characters ([5440bf7](https://github.com/blackopsrepl/glyphfx/commit/5440bf73e0cf5d753cbada3468f563b81333bec7))
+* **originals:** restyle original effects through symbol handles ([318d927](https://github.com/blackopsrepl/glyphfx/commit/318d927777b3acd151969101a1900dd0b0fe11a8))
+* **renderer:** maintain a compact render mirror per character ([13e4330](https://github.com/blackopsrepl/glyphfx/commit/13e43300a9a84f67a812ad393b3c28b78d04382e))
+* **renderer:** patch dirty rows by 4-cell blocks ([e2c767f](https://github.com/blackopsrepl/glyphfx/commit/e2c767fcca1a250bd94e8f6a9476195afa46d866))
+* **renderer:** preserve clean rows across full ownership walks ([b954792](https://github.com/blackopsrepl/glyphfx/commit/b95479295eb8dc8dbac96ae198bbedbc9e1f2644))
+* **renderer:** serialize dirty rows in one cell pass ([ae5bd9b](https://github.com/blackopsrepl/glyphfx/commit/ae5bd9bc01e54b53c102605241c15e8e7ca150af))
+* **strtab:** recognise interned names and literals without hashing ([0ac7794](https://github.com/blackopsrepl/glyphfx/commit/0ac77940b8909c76caa7a0f5d0256fba57a7ccc7))
+* **swarm:** compare the active path name in place ([4322380](https://github.com/blackopsrepl/glyphfx/commit/4322380f5f551815e083e61deef4d2e25786a57c))
+* **visual:** key appearances by interned symbol handles in a growable table ([1b32728](https://github.com/blackopsrepl/glyphfx/commit/1b327282ec90b60459beeff4d8e48849542d98c7))
+* **waves:** share the run's template scenes between characters ([67ab46e](https://github.com/blackopsrepl/glyphfx/commit/67ab46e882129621b080a6f28adc82a2da1578f9))
+
+
+### Refactoring
+
+* **main:** run an effect through one play() loop ([85b7461](https://github.com/blackopsrepl/glyphfx/commit/85b74612efe0896dd2ece731c6f33cab37814b23))
+
+
+### Tests
+
+* **cli:** check the help's behaviour and freshness in CI ([ffa6897](https://github.com/blackopsrepl/glyphfx/commit/ffa6897478ca6733178df880fa1994c0c6bd8c1a))
+
+
+### CI
+
+* run the PTY signal and resize tests under ASan/UBSan ([52cbacd](https://github.com/blackopsrepl/glyphfx/commit/52cbacd06b34c193b1810007ea19edb699e7701c))
+
+
+### Documentation
+
+* re-record the benchmark matrix after the interned-name work ([ebacf88](https://github.com/blackopsrepl/glyphfx/commit/ebacf88a3cb73b8a1a72d3e0c5578fb7ac10e6dd))
+* **readme:** document the no-input help and the wordmark ([98caa8f](https://github.com/blackopsrepl/glyphfx/commit/98caa8f6a948e9b775b90d98e3ed68a1c46420dc))
+* **readme:** word the fx/asm summary correctly for any count ([f086193](https://github.com/blackopsrepl/glyphfx/commit/f08619334a7ac06e3db6327eebcca0be2591568f))
+
+
 ## [0.4.2](https://github.com/blackopsrepl/glyphfx/compare/v0.4.1...v0.4.2) (2026-10-31)
 
 
