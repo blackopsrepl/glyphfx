@@ -52,8 +52,10 @@ Color color_from_xterm(uint8_t code) {
     c.xterm = code;
     const char *h = xterm_to_hex(code);
     size_t len = strlen(h);
+    // Caches key on all 8 hex bytes, so the tail past the digits is zeroed:
+    // otherwise equal colours hash apart on stack residue.
+    memset(c.hex, 0, sizeof(c.hex));
     memcpy(c.hex, h, len);
-    c.hex[len] = '\0';
     c.hex_len = (uint8_t)len;
     parse_rgb6(h, c.rgb);
     return c;
@@ -73,16 +75,15 @@ int color_from_hex(const char *hex, Color *out) {
     if (len >= sizeof(stripped)) {
         return -1;
     }
+    memset(stripped, 0, sizeof(stripped));  // zero hex tail; see color_from_xterm
     memcpy(stripped, p, len);
-    stripped[len] = '\0';
     if (!is_valid_hex_color(stripped)) {
         return -1;
     }
     Color c;
     c.is_xterm = false;
     c.xterm = 0;
-    memcpy(c.hex, stripped, len);
-    c.hex[len] = '\0';
+    memcpy(c.hex, stripped, sizeof(c.hex));
     c.hex_len = (uint8_t)len;
     parse_rgb6(stripped, c.rgb);
     *out = c;
@@ -101,6 +102,7 @@ Color color_from_rgb(uint8_t r, uint8_t g, uint8_t b) {
     c.hex[4] = digits[(b >> 4) & 0xF];
     c.hex[5] = digits[b & 0xF];
     c.hex[6] = '\0';
+    c.hex[7] = '\0';  // zero hex tail; see color_from_xterm
     c.hex_len = 6;
     c.rgb[0] = r;
     c.rgb[1] = g;
