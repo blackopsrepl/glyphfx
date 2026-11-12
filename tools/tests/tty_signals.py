@@ -5,6 +5,7 @@ import errno
 import fcntl
 import os
 import pty
+import select
 import signal
 import struct
 import subprocess
@@ -45,6 +46,21 @@ def spawn_pipe(args):
                             stderr=subprocess.DEVNULL, env=child_env())
 
 
+def wait_ready(fd, timeout=10.0):
+    """Block until the run's first output: main installs its signal handlers
+    before the effect writes anything, so output means a signal now lands on
+    them. A fixed sleep races a slow start (sanitizer builds, loaded runners)
+    and lets the default action kill the process before teardown exists."""
+    os.set_blocking(fd, True)
+    ready, _, _ = select.select([fd], [], [], timeout)
+    if not ready:
+        return b""
+    try:
+        return os.read(fd, 65536)
+    except OSError:
+        return b""
+
+
 def drain(fd, seconds):
     os.set_blocking(fd, False)
     end = time.time() + seconds
@@ -73,9 +89,9 @@ def check(name, cond, detail=""):
 
 # 1. SIGTERM on a tty: process dies from the signal, teardown (show cursor) ran.
 proc, master = spawn_pty(LONG)
-time.sleep(0.3)
+head = wait_ready(master)
 proc.send_signal(signal.SIGTERM)
-out = drain(master, 0.5)
+out = head + drain(master, 0.5)
 proc.wait()
 try:
     os.close(master)
@@ -86,17 +102,18 @@ check("SIGTERM tty runs teardown", SHOW_CURSOR in out, f"bytes={len(out)}")
 
 # 2. SIGTERM redirected: no teardown bytes may be added.
 proc = spawn_pipe(LONG)
-time.sleep(0.3)
+head = wait_ready(proc.stdout.fileno())
 proc.send_signal(signal.SIGTERM)
-out, _ = proc.communicate(timeout=5)
+rest, _ = proc.communicate(timeout=5)
+out = head + rest
 check("SIGTERM redirected dies from signal", proc.returncode == -signal.SIGTERM, f"rc={proc.returncode}")
 check("SIGTERM redirected adds no teardown", SHOW_CURSOR not in out, f"bytes={len(out)}")
 
 # 3. SIGINT on a tty: normal control flow, teardown, exit 1.
 proc, master = spawn_pty(LONG)
-time.sleep(0.3)
+head = wait_ready(master)
 proc.send_signal(signal.SIGINT)
-out = drain(master, 0.5)
+out = head + drain(master, 0.5)
 proc.wait()
 try:
     os.close(master)
@@ -107,7 +124,7 @@ check("SIGINT tty runs teardown", SHOW_CURSOR in out, f"bytes={len(out)}")
 
 # 4. Terminal close: closing the master ends the run without a crash.
 proc, master = spawn_pty(LONG)
-time.sleep(0.3)
+wait_ready(master)
 os.close(master)
 try:
     proc.wait(timeout=5)
@@ -121,7 +138,7 @@ check("closed terminal ends the run", proc.returncode == 0, f"rc={proc.returncod
 LONG0 = ["--seed", "1", "--input-file", INPUT_FILE, "--canvas-width", "0", "--canvas-height", "0",
          "matrix", "--rain-time", "300"]
 proc, master = spawn_pty(LONG0, cols=40, rows=12)
-time.sleep(0.3)
+wait_ready(master)
 drain(master, 0.1)
 fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 16, 52, 0, 0))
 proc.send_signal(signal.SIGWINCH)
