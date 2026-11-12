@@ -2,6 +2,14 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by csemver; do not edit by hand.
 
+## [0.6.0](https://github.com/blackopsrepl/glyphfx/compare/v0.5.0...v0.6.0) (2026-11-12)
+
+
+### Features
+
+* **effects:** add rotozoom ([df33e08](https://github.com/blackopsrepl/glyphfx/commit/df33e086477b5dd67efe4df03c2183b689c9569a))
+
+
 ## [0.5.0](https://github.com/blackopsrepl/glyphfx/compare/v0.4.2...v0.5.0) (2026-10-31)
 
 
