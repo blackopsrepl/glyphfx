@@ -496,6 +496,16 @@ static const CliOptHelp OPTS_copper[] = {
     {"final-gradient-direction", 0, "FINAL_GRADIENT_DIRECTION", false, "Direction of the final gradient", "horizontal"},
 };
 
+static const CliOptHelp OPTS_rotozoom[] = {
+    {"roto-frames", 0, "ROTO_FRAMES", false, "Frames from the first turn until the plane locks onto the text", "180"},
+    {"turns", 0, "TURNS", false, "Turns the plane makes", "1.5"},
+    {"zoom-depth", 0, "ZOOM_DEPTH", false, "Farthest zoom (1 is full size); the zoom swings as far past full size on its way in", "0.4"},
+    {"pan-radius", 0, "PAN_RADIUS", false, "Radius of the circular pan, as a share of the text's size", "0.2"},
+    {"final-gradient-stops", 0, "FINAL_GRADIENT_STOPS", true, "Space separated, unquoted, list of colors for the final gradient", "82fb9c 7cf8f7 8a7cf8"},
+    {"final-gradient-steps", 0, "FINAL_GRADIENT_STEPS", true, "Number of gradient steps to use", "12"},
+    {"final-gradient-direction", 0, "FINAL_GRADIENT_DIRECTION", false, "Direction of the final gradient", "horizontal"},
+};
+
 const CliEffectHelp CLI_EFFECT_HELP[] = {
     {"beams", "Create beams which travel over the canvas illuminating the characters behind them", OPTS_beams, sizeof(OPTS_beams) / sizeof(OPTS_beams[0])},
     {"binarypath", "Binary representations of each character move towards the home coordinate of the character", OPTS_binarypath, sizeof(OPTS_binarypath) / sizeof(OPTS_binarypath[0])},
@@ -538,6 +548,7 @@ const CliEffectHelp CLI_EFFECT_HELP[] = {
     {"burnout", "Exit effect: the text holds, then burns away through ember colours, shades and rising sparks", OPTS_burnout, sizeof(OPTS_burnout) / sizeof(OPTS_burnout[0])},
     {"comet", "Characters fly arcs from the bottom of the canvas on fading trails, land bright and cool into place", OPTS_comet, sizeof(OPTS_comet) / sizeof(OPTS_comet[0])},
     {"copper", "Copper bars bounce behind dimmed text, lighting whole rows, then a sweep settles the final colours", OPTS_copper, sizeof(OPTS_copper) / sizeof(OPTS_copper[0])},
+    {"rotozoom", "The demoscene rotozoomer: the text, tiled endlessly, spins while the zoom breathes, then locks into place", OPTS_rotozoom, sizeof(OPTS_rotozoom) / sizeof(OPTS_rotozoom[0])},
 };
 const size_t CLI_EFFECT_HELP_COUNT = sizeof(CLI_EFFECT_HELP) / sizeof(CLI_EFFECT_HELP[0]);
 

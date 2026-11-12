@@ -54,6 +54,7 @@ ORIGINALS = [
     ("burnout", "Exit effect: the text holds, then burns away through ember colours, shades and rising sparks."),
     ("comet", "Characters fly arcs from the bottom of the canvas on fading trails, land bright and cool into place."),
     ("copper", "Copper bars bounce behind dimmed text, lighting whole rows, then a sweep settles the final colours."),
+    ("rotozoom", "The demoscene rotozoomer: the text, tiled endlessly, spins while the zoom breathes, then locks into place."),
 ]
 
 
@@ -202,9 +203,10 @@ All 37, each with a full option surface (`glyphfx <effect> --help`).
 
 ## glyphfx originals
 
-Four effects that ttfx does not have, from the SolverForge demoscene
-productions. They follow the same contract (text in, the text in place at the
-end; `burnout` is the one exit effect) but sit outside byte parity:
+Five effects that ttfx does not have: four from the SolverForge demoscene
+productions, and `rotozoom`, written for glyphfx in the same tradition. They
+follow the same contract (text in, the text in place at the end; `burnout` is
+the one exit effect) but sit outside byte parity:
 `--random-effect` draws them only when they are named in `--include-effects`,
 and `make originals` holds them to determinism, golden streams and a
 final-frame check instead. Details in [docs/ORIGINALS.md](docs/ORIGINALS.md).
@@ -270,7 +272,7 @@ tools/tests/tty_compare.py   # the full pty prep+frames+teardown stream
 tools/tests/tty_signals.py   # SIGINT/SIGTERM/close/resize behavior
 ```
 
-The four originals have no oracle to match; `make originals` checks that they
+The five originals have no oracle to match; `make originals` checks that they
 are deterministic, match their recorded golden streams, and end on the right
 final frame.
 

@@ -4,8 +4,8 @@
 `glyphfx-sys` builds the existing repository sources using `cc`; there is no
 vendored engine copy. A C17 compiler and a POSIX platform with libm are required
 (verified on Linux). No executable, subprocess, terminal writer, signal handler,
-or wall-clock pacing is used. `EFFECTS` lists all 41 engine effects (the 37 ttfx
-effects, then the four glyphfx originals in `ORIGINALS`); each runs with its
+or wall-clock pacing is used. `EFFECTS` lists all 42 engine effects (the 37 ttfx
+effects, then the five glyphfx originals in `ORIGINALS`); each runs with its
 finite engine defaults. `burnout` is an exit effect: its text burns away.
 
 ```rust

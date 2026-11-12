@@ -5,16 +5,18 @@
 #include "effects/burnout.h"
 #include "effects/comet.h"
 #include "effects/copper.h"
+#include "effects/rotozoom.h"
 #include "effects/originals.h"
 #include "effects/registry.h"
 #include "testutil.h"
 
 // The registry declares entries weak, and a weak reference does not pull an
-// object out of libglyphfx.a; these strong references link the four effects
+// object out of libglyphfx.a; these strong references link the five effects
 // (volatile, so the optimiser cannot fold the references away).
-static Effect *(*volatile LINKED[])(const void *) = {bannerwave_make, burnout_make, comet_make, copper_make};
+static Effect *(*volatile LINKED[])(const void *) = {bannerwave_make, burnout_make, comet_make, copper_make,
+                                                         rotozoom_make};
 
-static const char *const ORIGINALS[] = {"bannerwave", "burnout", "comet", "copper"};
+static const char *const ORIGINALS[] = {"bannerwave", "burnout", "comet", "copper", "rotozoom"};
 
 static Color hex(const char *h) {
     Color c;
@@ -29,15 +31,15 @@ static int rgb_eq(const Color *c, int r, int g, int b) {
 }
 
 int main(void) {
-    CHECK(LINKED[0] && LINKED[1] && LINKED[2] && LINKED[3]);
+    CHECK(LINKED[0] && LINKED[1] && LINKED[2] && LINKED[3] && LINKED[4]);
     // The ttfx set keeps its 37 slots ahead of the originals. Only the
     // originals are linked into this binary, so the ttfx slots read as NULL.
     CHECK_EQ_INT(effect_parity_count(), 37);
-    CHECK_EQ_INT(effect_entry_count(), 37 + 4);
+    CHECK_EQ_INT(effect_entry_count(), 37 + 5);
     for (size_t i = 0; i < effect_parity_count(); i++) {
         CHECK(!effect_is_original(effect_entry_at(i)));
     }
-    for (size_t i = 0; i < 4; i++) {
+    for (size_t i = 0; i < 5; i++) {
         const EffectEntry *e = effect_find(ORIGINALS[i]);
         CHECK(e != NULL);
         CHECK(effect_is_original(e));

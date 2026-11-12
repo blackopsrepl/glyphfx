@@ -73,7 +73,8 @@ typedef struct {
     X(bannerwave)                        \
     X(burnout)                           \
     X(comet)                             \
-    X(copper)
+    X(copper)                            \
+    X(rotozoom)
 
 #define GLYPHFX_DECLARE_ENTRY(name) extern const EffectEntry name##_entry GLYPHFX_WEAK;
 GLYPHFX_EFFECT_NAMES(GLYPHFX_DECLARE_ENTRY)

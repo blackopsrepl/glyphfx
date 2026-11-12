@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Behaviour and golden suite for the glyphfx originals (comet, copper, bannerwave, burnout).
+"""Behaviour and golden suite for the glyphfx originals (comet, copper, bannerwave, burnout,
+rotozoom).
 
 The originals have no ttfx counterpart, so `make effects` cannot vouch for them.
 This suite holds them to the same standard by other means:
@@ -27,7 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 BIN = os.environ.get("GLYPHFX_BIN", str(ROOT / "build/glyphfx"))
 GOLDENS = ROOT / "tests/fixtures/originals_goldens.tsv"
-ENTRANCE = ["bannerwave", "comet", "copper"]
+ENTRANCE = ["bannerwave", "comet", "copper", "rotozoom"]
 EXIT = ["burnout"]
 CSI = re.compile(rb"\x1b\[[0-9;?]*[A-Za-z]")
 
@@ -64,6 +65,9 @@ CASES += [
                                             "--burn-jitter", "0", "--hold-frames", "0"]),
     ("burnout", "prose", (80, 10), 9, [], ["--spark-ratio", "0", "--ember-colors", "ffffff",
                                            "--burn-symbols", "#"]),
+    ("rotozoom", "banner", (63, 14), 1, [], ["--turns", "0", "--zoom-depth", "1", "--pan-radius", "0"]),
+    ("rotozoom", "prose", (80, 10), 5, [], ["--turns", "3.5", "--zoom-depth", "0.05", "--pan-radius", "2",
+                                            "--roto-frames", "1"]),
 ]
 
 # (args, expected exit code): the CLI's usage-error contract.
@@ -75,6 +79,10 @@ BAD = [
     (["bannerwave", "--wave-amplitude", "-1"], 2),
     (["burnout", "--spark-ratio", "1.5"], 2),
     (["burnout", "--burn-direction", "sideways"], 2),
+    (["rotozoom", "--roto-frames", "0"], 2),
+    (["rotozoom", "--zoom-depth", "0"], 2),
+    (["rotozoom", "--zoom-depth", "1.5"], 2),
+    (["rotozoom", "--turns", "-1"], 2),
 ]
 
 

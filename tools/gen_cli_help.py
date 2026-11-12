@@ -77,6 +77,8 @@ ORIGINALS = [
     ("burnout", "Exit effect: the text holds, then burns away through ember colours, shades and rising sparks"),
     ("comet", "Characters fly arcs from the bottom of the canvas on fading trails, land bright and cool into place"),
     ("copper", "Copper bars bounce behind dimmed text, lighting whole rows, then a sweep settles the final colours"),
+    ("rotozoom", "The demoscene rotozoomer: the text, tiled endlessly, spins while the zoom breathes, then locks "
+                 "into place"),
 ]
 # Option kinds that take several values, for the "..." suffix.
 ORIGINALS_MULTI = {"trail-symbols", "bar-colors", "burn-symbols", "ember-colors",

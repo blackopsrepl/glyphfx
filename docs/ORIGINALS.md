@@ -2,12 +2,13 @@
 
 glyphfx is a byte-exact port of ttfx, and `docs/PORTING.md` governs the 37
 effects that make up that port. The originals are effects that glyphfx ships
-and ttfx does not. They come from the SolverForge demoscene productions, where
-they were first written as textmode demo effects, and they obey the same
+and ttfx does not. Four come from the SolverForge demoscene productions, where
+they were first written as textmode demo effects; `rotozoom` was written for
+glyphfx in the same tradition. All of them obey the same
 contract as every other effect: text goes in, an animation plays, and the
 entrance effects end with the text in its home position and final colours.
 
-Four effects make up the set:
+Five effects make up the set:
 
 | effect | kind | what it does |
 |---|---|---|
@@ -15,6 +16,7 @@ Four effects make up the set:
 | `copper` | entrance | Amiga-style copper bars bounce behind dimmed text, lighting whole rows of the canvas background, then a sweep settles the text into its final colours. |
 | `bannerwave` | entrance | A bright front reveals the text while every column rides a travelling sine like a flag in wind, and the wave dies away until the text lies flat. |
 | `burnout` | exit | The text holds in its final colours, then every character ignites, decays through ember colours and block shades, and throws off sparks until the canvas is empty. |
+| `rotozoom` | entrance | The demoscene rotozoomer with the text as its texture. The text is tiled endlessly across a plane; every cell maps back through the inverse rotation and zoom and shows the character it lands on, nearest neighbour, in its own colour, so the picture has no holes at any angle. The plane spins, its zoom breathes out and in, the view pans in a slow circle, and all three ease away together until the plane locks exactly onto the text. |
 
 ## Where they differ from the port
 
@@ -94,6 +96,15 @@ counts are frames, not seconds, which is the convention across glyphfx.
 | `--spark-ratio` | `0.35` | share of characters that throw a spark |
 | `--spark-frames` | `54` | frames a spark rises before it dies |
 
+**rotozoom**
+
+| option | default | meaning |
+|---|---|---|
+| `--roto-frames` | `180` | frames from the first turn until the plane locks onto the text |
+| `--turns` | `1.5` | turns the plane makes |
+| `--zoom-depth` | `0.4` | farthest zoom (1 is full size); the zoom swings as far past full size on its way in |
+| `--pan-radius` | `0.2` | radius of the circular pan, as a share of the text's size |
+
 Every effect also takes `--final-gradient-stops` (default
 `82fb9c 7cf8f7 8a7cf8`), `--final-gradient-steps` (`12`) and
 `--final-gradient-direction` (`horizontal`). For `burnout` the gradient colours
@@ -117,6 +128,6 @@ checks each effect another way:
   exit 2 with the message on stderr.
 
 `tests/test_originals.c` covers the registry placement and the colour helpers.
-`make perf` gates all four effects for speed and output alongside the port.
+`make perf` gates all five effects for speed and output alongside the port.
 After an intended change to an original, refresh the goldens with
 `tools/tests/originals.py --update` and say why in the commit.

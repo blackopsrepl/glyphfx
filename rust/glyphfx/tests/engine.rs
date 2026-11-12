@@ -15,7 +15,7 @@ fn frames(effect: &str) -> Vec<String> {
 
 #[test]
 fn all_effects_complete_deterministically_and_interleave() {
-    assert_eq!(EFFECTS.len(), 41);
+    assert_eq!(EFFECTS.len(), 42);
     assert_eq!(&EFFECTS[37..], ORIGINALS);
     for &effect in EFFECTS {
         let expected = frames(effect);

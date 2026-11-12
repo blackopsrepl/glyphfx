@@ -80,9 +80,10 @@ All 37, each with a full option surface (`glyphfx <effect> --help`).
 
 ## glyphfx originals
 
-Four effects that ttfx does not have, from the SolverForge demoscene
-productions. They follow the same contract (text in, the text in place at the
-end; `burnout` is the one exit effect) but sit outside byte parity:
+Five effects that ttfx does not have: four from the SolverForge demoscene
+productions, and `rotozoom`, written for glyphfx in the same tradition. They
+follow the same contract (text in, the text in place at the end; `burnout` is
+the one exit effect) but sit outside byte parity:
 `--random-effect` draws them only when they are named in `--include-effects`,
 and `make originals` holds them to determinism, golden streams and a
 final-frame check instead. Details in [docs/ORIGINALS.md](docs/ORIGINALS.md).
@@ -91,6 +92,7 @@ final-frame check instead. Details in [docs/ORIGINALS.md](docs/ORIGINALS.md).
 |:---:|:---:|
 | <b>bannerwave</b><br><img src="docs/effects/bannerwave.gif" width="400" alt="bannerwave"><br><sub>A bright front reveals the text while every column rides a travelling sine, then the text lies flat.</sub> | <b>burnout</b><br><img src="docs/effects/burnout.gif" width="400" alt="burnout"><br><sub>Exit effect: the text holds, then burns away through ember colours, shades and rising sparks.</sub> |
 | <b>comet</b><br><img src="docs/effects/comet.gif" width="400" alt="comet"><br><sub>Characters fly arcs from the bottom of the canvas on fading trails, land bright and cool into place.</sub> | <b>copper</b><br><img src="docs/effects/copper.gif" width="400" alt="copper"><br><sub>Copper bars bounce behind dimmed text, lighting whole rows, then a sweep settles the final colours.</sub> |
+| <b>rotozoom</b><br><img src="docs/effects/rotozoom.gif" width="400" alt="rotozoom"><br><sub>The demoscene rotozoomer: the text, tiled endlessly, spins while the zoom breathes, then locks into place.</sub> | |
 
 ## Benchmarks
 
@@ -191,7 +193,7 @@ tools/tests/tty_compare.py   # the full pty prep+frames+teardown stream
 tools/tests/tty_signals.py   # SIGINT/SIGTERM/close/resize behavior
 ```
 
-The four originals have no oracle to match; `make originals` checks that they
+The five originals have no oracle to match; `make originals` checks that they
 are deterministic, match their recorded golden streams, and end on the right
 final frame.
 
