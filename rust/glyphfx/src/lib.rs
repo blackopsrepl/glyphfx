@@ -53,7 +53,14 @@ pub const EFFECTS: &[&str] = &[
 
 /// The glyphfx originals: effects with no ttfx counterpart, outside the
 /// byte-parity contract. `burnout` is the one exit effect (the text burns away).
-pub const ORIGINALS: &[&str] = &["bannerwave", "burnout", "comet", "copper", "rotozoom", "stack"];
+pub const ORIGINALS: &[&str] = &[
+    "bannerwave",
+    "burnout",
+    "comet",
+    "copper",
+    "rotozoom",
+    "stack",
+];
 
 /// Where the input text block settles inside the canvas.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
