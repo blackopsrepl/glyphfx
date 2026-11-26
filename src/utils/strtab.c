@@ -268,9 +268,20 @@ static bool lit_grow(void) {
 const char *strtab_literal(const char *p) {
     size_t mask = g_strtab_lit_cap - 1;
     if (g_strtab_lit_cap) {
-        for (size_t i = strtab_lit_index(p, g_strtab_lit_cap);; i = (i + 1) & mask) {
+        size_t home = strtab_lit_index(p, g_strtab_lit_cap);
+        for (size_t i = home;; i = (i + 1) & mask) {
             if (g_strtab_lit[i].lit == p) {
-                return g_strtab_lit[i].interned;
+                // Found down a collision chain: swap it into its home slot,
+                // so a literal used every frame costs the inlined first probe
+                // however the linker laid the literals out. The entry it
+                // displaces stays in the same unbroken run past its own home,
+                // so its probe still reaches it (nothing is ever removed).
+                if (i != home) {
+                    LitEntry t = g_strtab_lit[home];
+                    g_strtab_lit[home] = g_strtab_lit[i];
+                    g_strtab_lit[i] = t;
+                }
+                return g_strtab_lit[home].interned;
             }
             if (!g_strtab_lit[i].lit) {
                 break;

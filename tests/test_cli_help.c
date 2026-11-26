@@ -12,7 +12,7 @@
 
 // The registry declares entries weak, so a weak reference alone does not
 // pull an effect out of libglyphfx.a. A strong reference to each
-// constructor links all 42 (volatile, so the references are not folded away).
+// constructor links all 43 (volatile, so the references are not folded away).
 #define DECLARE_MAKE(name) Effect *name##_make(const void *cfg);
 GLYPHFX_EFFECT_NAMES(DECLARE_MAKE)
 GLYPHFX_ORIGINAL_EFFECT_NAMES(DECLARE_MAKE)
@@ -21,7 +21,7 @@ static Effect *(*volatile LINKED[])(const void *) = {
     GLYPHFX_EFFECT_NAMES(REF_MAKE) GLYPHFX_ORIGINAL_EFFECT_NAMES(REF_MAKE)};
 
 int main(void) {
-    CHECK_EQ_INT(sizeof(LINKED) / sizeof(LINKED[0]), 42);
+    CHECK_EQ_INT(sizeof(LINKED) / sizeof(LINKED[0]), 43);
     for (size_t i = 0; i < effect_entry_count(); i++) {
         CHECK(effect_entry_at(i) != NULL);
     }

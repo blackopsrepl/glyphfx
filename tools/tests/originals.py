@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Behaviour and golden suite for the glyphfx originals (comet, copper, bannerwave, burnout,
-rotozoom).
+rotozoom, stack).
 
 The originals have no ttfx counterpart, so `make effects` cannot vouch for them.
 This suite holds them to the same standard by other means:
@@ -28,7 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 BIN = os.environ.get("GLYPHFX_BIN", str(ROOT / "build/glyphfx"))
 GOLDENS = ROOT / "tests/fixtures/originals_goldens.tsv"
-ENTRANCE = ["bannerwave", "comet", "copper", "rotozoom"]
+ENTRANCE = ["bannerwave", "comet", "copper", "rotozoom", "stack"]
 EXIT = ["burnout"]
 CSI = re.compile(rb"\x1b\[[0-9;?]*[A-Za-z]")
 
@@ -68,6 +68,10 @@ CASES += [
     ("rotozoom", "banner", (63, 14), 1, [], ["--turns", "0", "--zoom-depth", "1", "--pan-radius", "0"]),
     ("rotozoom", "prose", (80, 10), 5, [], ["--turns", "3.5", "--zoom-depth", "0.05", "--pan-radius", "2",
                                             "--roto-frames", "1"]),
+    ("stack", "banner", (63, 14), 1, [], ["--max-moves", "0", "--stack-frames", "0", "--gravity-frames", "1",
+                                         "--clear-frames", "1"]),
+    ("stack", "prose", (80, 10), 5, [], ["--max-moves", "8", "--gravity-frames", "7", "--piece-colors", "ff00ff",
+                                        "--flash-color", "00ffff"]),
 ]
 
 # (args, expected exit code): the CLI's usage-error contract.
@@ -83,6 +87,10 @@ BAD = [
     (["rotozoom", "--zoom-depth", "0"], 2),
     (["rotozoom", "--zoom-depth", "1.5"], 2),
     (["rotozoom", "--turns", "-1"], 2),
+    (["stack", "--gravity-frames", "0"], 2),
+    (["stack", "--clear-frames", "0"], 2),
+    (["stack", "--max-moves", "-1"], 2),
+    (["stack", "--piece-colors", "nothex"], 2),
 ]
 
 

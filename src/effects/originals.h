@@ -1,5 +1,5 @@
 // Shared helpers for glyphfx's original effects (comet, copper, bannerwave,
-// burnout, rotozoom). These effects have no counterpart in ttfx, so they are outside the
+// burnout, rotozoom, stack). These effects have no counterpart in ttfx, so they are outside the
 // byte-parity set: each computes every character's appearance and position as
 // a pure function of the frame number and drives the engine directly, which
 // keeps them deterministic for a given input, option set and seed.

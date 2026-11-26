@@ -80,8 +80,8 @@ All 37, each with a full option surface (`glyphfx <effect> --help`).
 
 ## glyphfx originals
 
-Five effects that ttfx does not have: four from the SolverForge demoscene
-productions, and `rotozoom`, written for glyphfx in the same tradition. They
+Six effects that ttfx does not have: four from the SolverForge demoscene
+productions, and `rotozoom` and `stack`, written for glyphfx in the same spirit. They
 follow the same contract (text in, the text in place at the end; `burnout` is
 the one exit effect) but sit outside byte parity:
 `--random-effect` draws them only when they are named in `--include-effects`,
@@ -92,7 +92,7 @@ final-frame check instead. Details in [docs/ORIGINALS.md](docs/ORIGINALS.md).
 |:---:|:---:|
 | <b>bannerwave</b><br><img src="docs/effects/bannerwave.gif" width="400" alt="bannerwave"><br><sub>A bright front reveals the text while every column rides a travelling sine, then the text lies flat.</sub> | <b>burnout</b><br><img src="docs/effects/burnout.gif" width="400" alt="burnout"><br><sub>Exit effect: the text holds, then burns away through ember colours, shades and rising sparks.</sub> |
 | <b>comet</b><br><img src="docs/effects/comet.gif" width="400" alt="comet"><br><sub>Characters fly arcs from the bottom of the canvas on fading trails, land bright and cool into place.</sub> | <b>copper</b><br><img src="docs/effects/copper.gif" width="400" alt="copper"><br><sub>Copper bars bounce behind dimmed text, lighting whole rows, then a sweep settles the final colours.</sub> |
-| <b>rotozoom</b><br><img src="docs/effects/rotozoom.gif" width="400" alt="rotozoom"><br><sub>The demoscene rotozoomer: the text, tiled endlessly, spins while the zoom breathes, then locks into place.</sub> | |
+| <b>rotozoom</b><br><img src="docs/effects/rotozoom.gif" width="400" alt="rotozoom"><br><sub>The demoscene rotozoomer: the text, tiled endlessly, spins while the zoom breathes, then locks into place.</sub> | <b>stack</b><br><img src="docs/effects/stack.gif" width="400" alt="stack"><br><sub>Falling tetrominoes turn and lock into letters. A highlight sweeps out from the centre of each completed row, leaving its final gradient.</sub> |
 
 ## Benchmarks
 
@@ -150,7 +150,7 @@ Reproduce with `python3 tools/tests/matrix.py` (`GLYPHFX_TTFX_FX` names a ttfx >
 ```
 <producer> | glyphfx [terminal options] <effect> [effect options]
 
-glyphfx --help                 # the 37 effects, the 4 originals, and the terminal options
+glyphfx --help                 # the 37 effects, the 6 originals, and the terminal options
 glyphfx                        # the same, when nothing is piped in
 glyphfx <effect> --help        # options for one effect
 glyphfx --random-effect        # surprise me (--include-effects / --exclude-effects to filter)
@@ -193,7 +193,7 @@ tools/tests/tty_compare.py   # the full pty prep+frames+teardown stream
 tools/tests/tty_signals.py   # SIGINT/SIGTERM/close/resize behavior
 ```
 
-The five originals have no oracle to match; `make originals` checks that they
+The six originals have no oracle to match; `make originals` checks that they
 are deterministic, match their recorded golden streams, and end on the right
 final frame.
 

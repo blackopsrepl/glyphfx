@@ -79,10 +79,11 @@ ORIGINALS = [
     ("copper", "Copper bars bounce behind dimmed text, lighting whole rows, then a sweep settles the final colours"),
     ("rotozoom", "The demoscene rotozoomer: the text, tiled endlessly, spins while the zoom breathes, then locks "
                  "into place"),
+    ("stack", "Falling tetrominoes turn and lock into letters. A highlight sweeps out from the centre of each completed row"),
 ]
 # Option kinds that take several values, for the "..." suffix.
 ORIGINALS_MULTI = {"trail-symbols", "bar-colors", "burn-symbols", "ember-colors",
-                   "final-gradient-stops", "final-gradient-steps"}
+                   "piece-colors", "final-gradient-stops", "final-gradient-steps"}
 
 OPT_RE = re.compile(r"^\s+(?:-(\w), )?--([a-z0-9-]+)(?: <([A-Z0-9_]+)>)?(\.\.\.)?\s*$")
 DEFAULT_RE = re.compile(r"\s*\[default: ([^\]]*)\]\s*$")

@@ -506,6 +506,18 @@ static const CliOptHelp OPTS_rotozoom[] = {
     {"final-gradient-direction", 0, "FINAL_GRADIENT_DIRECTION", false, "Direction of the final gradient", "horizontal"},
 };
 
+static const CliOptHelp OPTS_stack[] = {
+    {"gravity-frames", 0, "GRAVITY_FRAMES", false, "Frames a piece takes to fall one row", "2"},
+    {"stack-frames", 0, "STACK_FRAMES", false, "Frames from the first piece landing to the last", "220"},
+    {"max-moves", 0, "MAX_MOVES", false, "Turns and shifts each piece makes while it falls (0 drops them straight)", "3"},
+    {"clear-frames", 0, "CLEAR_FRAMES", false, "Frames a line clear takes at each cell", "24"},
+    {"piece-colors", 0, "PIECE_COLORS", true, "Colours of the I, O, T, S, Z, J and L pieces", "5ee7f0 f5e15b b57cf8 82fb9c f8727c 6f8cf8 f8a95c"},
+    {"flash-color", 0, "FLASH_COLOR", false, "Colour of the lock flash and the line clear", "ffffff"},
+    {"final-gradient-stops", 0, "FINAL_GRADIENT_STOPS", true, "Space separated, unquoted, list of colors for the final gradient", "82fb9c 7cf8f7 8a7cf8"},
+    {"final-gradient-steps", 0, "FINAL_GRADIENT_STEPS", true, "Number of gradient steps to use", "12"},
+    {"final-gradient-direction", 0, "FINAL_GRADIENT_DIRECTION", false, "Direction of the final gradient", "horizontal"},
+};
+
 const CliEffectHelp CLI_EFFECT_HELP[] = {
     {"beams", "Create beams which travel over the canvas illuminating the characters behind them", OPTS_beams, sizeof(OPTS_beams) / sizeof(OPTS_beams[0])},
     {"binarypath", "Binary representations of each character move towards the home coordinate of the character", OPTS_binarypath, sizeof(OPTS_binarypath) / sizeof(OPTS_binarypath[0])},
@@ -549,6 +561,7 @@ const CliEffectHelp CLI_EFFECT_HELP[] = {
     {"comet", "Characters fly arcs from the bottom of the canvas on fading trails, land bright and cool into place", OPTS_comet, sizeof(OPTS_comet) / sizeof(OPTS_comet[0])},
     {"copper", "Copper bars bounce behind dimmed text, lighting whole rows, then a sweep settles the final colours", OPTS_copper, sizeof(OPTS_copper) / sizeof(OPTS_copper[0])},
     {"rotozoom", "The demoscene rotozoomer: the text, tiled endlessly, spins while the zoom breathes, then locks into place", OPTS_rotozoom, sizeof(OPTS_rotozoom) / sizeof(OPTS_rotozoom[0])},
+    {"stack", "Falling tetrominoes turn and lock into letters. A highlight sweeps out from the centre of each completed row", OPTS_stack, sizeof(OPTS_stack) / sizeof(OPTS_stack[0])},
 };
 const size_t CLI_EFFECT_HELP_COUNT = sizeof(CLI_EFFECT_HELP) / sizeof(CLI_EFFECT_HELP[0]);
 
