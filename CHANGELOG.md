@@ -2,6 +2,19 @@
 
 All notable changes to glyphfx are documented here. This file is generated from conventional commits by csemver; do not edit by hand.
 
+## [0.7.0](https://github.com/blackopsrepl/glyphfx/compare/v0.6.0...v0.7.0) (2026-11-26)
+
+
+### Features
+
+* **effects:** add stack, a falling tetromino text reveal ([84e10b8](https://github.com/blackopsrepl/glyphfx/commit/84e10b84f833e362aa355ee562aa7155c62e977e))
+
+
+### Tests
+
+* **tty:** signal the run only once it has started ([9c17788](https://github.com/blackopsrepl/glyphfx/commit/9c17788f0067d8ba119ce542805860d36ca3a53b))
+
+
 ## [0.6.0](https://github.com/blackopsrepl/glyphfx/compare/v0.5.0...v0.6.0) (2026-11-12)
 
 
